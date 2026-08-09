@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "databridge-wrappers"
+version = "0.1.0"
+description = "Wrapper-Module der DataBridge Mediator-Wrapper-Architektur (je eine Datenquelle pro Modul)."
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+]
+
+# Jedes Unterverzeichnis (z. B. gdc/) ist ein eigenständiges Wrapper-Modul für
+# genau eine Datenquelle. Neue Quellen werden als neues Unterpaket ergänzt,
+# ohne bestehende Wrapper oder den Mediator anzufassen.
+[tool.setuptools.packages.find]
+where = ["."]

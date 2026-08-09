@@ -1,0 +1,20 @@
+# Umgebungsvariablen (lokal, nicht versionieren)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Conda
+*.conda-meta/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

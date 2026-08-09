@@ -1,0 +1,24 @@
+# Conda/Mamba-Environment für den Mediator-Service.
+# Enthält die wissenschaftlichen Kernpakete (anndata, scanpy) für das
+# Zielformat der Datenintegration sowie das Web-Framework für den Service.
+#
+# Aufbau lokal:   mamba env create -f environment.yml
+# Aktualisieren:  mamba env update -f environment.yml --prune
+name: databridge-mediator
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - fastapi
+  - uvicorn
+  - pydantic
+  - python-dotenv
+  - requests
+  - anndata
+  - scanpy
+  - pip
+  - pip:
+      # Lokales Wrapper-Package (Mediator-Wrapper-Muster, siehe /wrappers).
+      # Pfad ist relativ zum Docker-Build-Context (Repo-Root), siehe Dockerfile.
+      - -e ./wrappers

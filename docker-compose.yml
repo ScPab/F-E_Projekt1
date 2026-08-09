@@ -1,0 +1,51 @@
+# DataBridge – Orchestrierung der Systemarchitektur (Mediator-Wrapper-Muster).
+#
+# Bewusst austauschbare Stellen sind unten mit "AUSTAUSCHBAR" markiert.
+version: "3.9"
+
+services:
+
+  # Zentraler Mediator-Service (Python/FastAPI). Nimmt Anfragen entgegen und
+  # delegiert sie an Wrapper-Module (aktuell: /wrappers/gdc, als Package
+  # innerhalb dieses Containers installiert statt eigener Service – siehe
+  # /wrappers/gdc/README.md und docs/adr/0001-wrapper-als-python-package.md).
+  mediator:
+    build:
+      context: .
+      dockerfile: mediator/Dockerfile
+    ports:
+      - "${MEDIATOR_PORT:-8000}:8000"
+    env_file:
+      - .env
+    depends_on:
+      - graph-db
+    healthcheck:
+      test: ["CMD", "mamba", "run", "-n", "databridge-mediator", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # AUSTAUSCHBAR: Graph-Speicherung. Aktuell Platzhalter mit Apache Jena
+  # Fuseki/TDB2 (RDF-Triple-Store). Alternative: Property-Graph-DB wie
+  # JanusGraph oder Memgraph – dazu Image, Ports und Volumes unten anpassen
+  # und die GRAPH_DB_*-Variablen in .env entsprechend setzen. Siehe
+  # graph-db/README.md und docs/adr/0002-graph-db-wahl-offen.md.
+  graph-db:
+    image: stain/jena-fuseki:latest
+    environment:
+      - ADMIN_PASSWORD=admin
+      - TDB=2
+    ports:
+      - "${GRAPH_DB_PORT:-3030}:3030"
+    volumes:
+      - graph-db-data:/fuseki
+      - ./graph-db/init:/init:ro
+
+  # frontend: bewusst noch kein Service. Die Visualisierungsschicht ist noch
+  # nicht final entschieden (siehe /frontend/README.md). Sobald die
+  # Technologie feststeht, hier ergänzen.
+
+volumes:
+  graph-db-data:
