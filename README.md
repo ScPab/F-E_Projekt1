@@ -49,3 +49,35 @@ Datenintegrationslogik. Diese folgt in späteren Schritten.
 
 Der Graph-DB-Platzhalter (Jena Fuseki) ist danach unter
 `http://localhost:3030` erreichbar.
+
+### Beispielaufrufe: GDC-Wrapper über den Mediator
+
+Testfall: `TCGA-BRCA`, `RNA-Seq`, `files.access = open`.
+
+```bash
+# Metadaten-Suche (Metadaten-Tier, paginiert über size/from)
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{
+        "endpoint": "files",
+        "project_id": "TCGA-BRCA",
+        "experimental_strategy": "RNA-Seq",
+        "fields": ["file_name", "file_id", "access"],
+        "size": 5
+      }'
+
+# Verfügbare Felder eines Endpunkts (Schema-Introspektion via _mapping)
+curl http://localhost:8000/schema/files
+
+# Manifest für gdc-client erzeugen (Bulk-Tier)
+curl -X POST http://localhost:8000/manifest \
+  -H "Content-Type: application/json" \
+  -d '{
+        "project_id": "TCGA-BRCA",
+        "experimental_strategy": "RNA-Seq",
+        "size": 10
+      }'
+```
+
+Details zur Wrapper-Implementierung (Filter-Aufbau, Cache-Tiers,
+`gdc-client`-Anbindung): [`wrappers/gdc/README.md`](wrappers/gdc/README.md).
