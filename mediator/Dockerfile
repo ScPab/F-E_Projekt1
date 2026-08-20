@@ -14,6 +14,13 @@ RUN mamba env create -f /app/environment.yml && mamba clean --all --yes
 
 COPY mediator/app /app/app
 
+# Basis-Ontologie/Alignment-Tabellen (Wissensnetz-Teilbereich, siehe
+# wissensnetz/ontology/README.md) für app/semantic/paths.py bzw. GET /ontology.
+# In docker-compose.yml zusätzlich als Bind-Mount überlagert, damit Änderungen
+# an der Ontologie ohne Rebuild wirksam werden.
+COPY wissensnetz/ontology /ontology
+ENV DATABRIDGE_ONTOLOGY_DIR=/ontology
+
 # Aktiviert das Conda-Environment für nachfolgende RUN/CMD-Befehle.
 SHELL ["mamba", "run", "-n", "databridge-mediator", "/bin/bash", "-c"]
 

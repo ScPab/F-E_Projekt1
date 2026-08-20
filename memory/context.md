@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-08-09
+Stand: 2026-08-20
 
 ## Ziel
 
@@ -17,41 +17,64 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   (`/wrappers`, erste Quelle: `gdc`).
 - **Wrapper-Platzierung:** als Python-Package im Mediator-Container, nicht
   als eigener Docker-Service — siehe [ADR-0001](../docs/adr/0001-wrapper-als-python-package.md).
-- **Zielformat der Ausgabe:** anndata (`.h5ad`).
+- **Zielformat der Ausgabe:** anndata (`.h5ad`) für Messmatrizen, RDF/OWL
+  (Turtle) für die semantische Schicht (Wissensnetz).
 - **Graph-Speicherung:** entschieden für RDF-Triple-Store mit OWL (Apache
   Jena Fuseki/TDB2), Kanten-Metadaten via RDF-star; Property-Graph und
   hybrides Modell verworfen — siehe
   [ADR-0002](../docs/adr/0002-graph-db-wahl-offen.md) (Status: Angenommen,
   2026-08-15).
+- **Wissensnetz/Semantic ETL:** Teilbereich von Marcel, siehe
+  `wissensnetz/Wissensnetz_Konzept-Entwurf` (übergeordnetes Konzept) und
+  `wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL` (konkretes GDC→RDF-Mapping).
+  Ontologie unter `wissensnetz/ontology/`, Mapping-Code unter
+  `mediator/app/semantic/`.
 - **Frontend/Visualisierung:** noch nicht entschieden, aktuell nur leerer
   Platzhalter-Ordner `/frontend`, kein Compose-Service.
 - **Orchestrierung:** Docker Compose; Python-Service intern über
   Conda/Mamba (`mediator/environment.yml`) für wissenschaftliche Pakete
-  (anndata, scanpy).
+  (anndata, scanpy, rdflib).
 
 ## Offene Punkte
 
 - Wahl der Frontend-/Visualisierungstechnologie.
-<<<<<<< HEAD
-- Ontologie-/Schema-Design des Wissensnetzes (Konzepte, Relationen,
-  Wiederverwendung von Bio-Ontologien wie GO/NCIt/DO/SO).
-- Semantic-ETL-Mapping GDC-Schema (YAML/JSON) → RDF/OWL sowie Übergabeformat
-  zwischen GDC-Wrapper (API-Teil) und Wissensnetz.
-- Konkrete Abfrage-/Transformationslogik im GDC-Wrapper (`wrappers/gdc`)
-  sowie Anbindung Mediator ↔ graph-db (bislang nicht implementiert, nur
-  Grundgerüst).
-=======
-- Anbindung Mediator ↔ graph-db (bislang nicht implementiert).
-- Ontologie-/Mapping-Schicht: `GDCWrapper.get_schema()` liefert GDC-Rohfelder,
-  `query`/`search` geben Ergebnisse noch mit GDC-Originalfeldnamen zurück —
-  Übersetzung in ein einheitliches internes Schema ist noch offen (siehe
-  Docstring in `wrappers/gdc/client.py`).
+- Ontologie-/Schema-Design des Wissensnetzes über den jetzigen Kern-Ausschnitt
+  hinaus (weitere GDC-Nodes, Wiederverwendung von GO/SO neben NCIt/DO).
+- Alignment-Tabellen (`wissensnetz/ontology/alignment/`) sind noch leer —
+  Befüllung mit verifizierten NCIt-/DO-Codes ist offener nächster Schritt
+  (Wissensnetz-Teilbereich, Marcel).
+- Anbindung Mediator ↔ graph-db per SPARQL/SPARQL-Update (bislang nicht
+  implementiert; `POST /transform` liefert aktuell nur Turtle-Text als
+  Datei-/Text-Senke, kein direkter Fuseki-Import).
 - Cache-Tiers 2 (materialisierte anndata-Objekte) und 3 (transiente
   Rohdaten) haben nur ein Datei-Grundgerüst (`wrappers/gdc/cache.py`); echte
   Nutzung folgt erst mit der anndata-Transformation bzw. dem
   `gdc-client`-Bulk-Download.
+- Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
+  Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
 
-## Umgesetzt seit letztem Stand (2026-08-19)
+## Umgesetzt seit letztem Stand (2026-08-20)
+
+- Semantische Mapping-Ebene GDC → RDF/OWL für den Kern-Ausschnitt
+  case/project/demographic/diagnosis, aufbauend auf Marcels
+  Wissensnetz-Konzept (`wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL`,
+  `wissensnetz/Wissensnetz_Konzept-Entwurf`): Pro-Node-Klassen
+  (`db:Case`/`db:Project`/`db:Demographic`/`db:Diagnosis`, Namespace
+  `http://databridge.hka/onto#`) statt abstrahierter Klassen, RDF-star für
+  Provenienz/Konfidenz von Alignment-Aussagen (passend zu ADR-0002).
+- Basis-Ontologie (TBox) unter `wissensnetz/ontology/databridge-core.ttl`,
+  Alignment-Gerüst unter `wissensnetz/ontology/alignment/` (bewusst leer,
+  keine ungeprüften NCIt-Codes committet).
+- Mapping-Code als reines Python/`rdflib` (`mediator/app/semantic/mapping.py`)
+  — kein RML/Java-Unterbau, passt zum bestehenden Conda/Mamba-Stack.
+- Mediator exponiert dies über `POST /transform` (GDC-Cases → Turtle) und
+  `GET /ontology` (TBox-Inspektion), `mediator/app/main.py`.
+- End-to-End-Beispiel mit TCGA-BRCA-Beispieldaten:
+  `mediator/sample_data/cases_brca_sample.json`,
+  `mediator/scripts/example_gdc_to_rdf.py`.
+- Anleitung für neue Quellen: `docs/adding_new_sources.md`.
+
+## Umgesetzt seit vorletztem Stand (2026-08-19)
 
 - Abfrage-/Schema-Introspektionslogik im GDC-Wrapper implementiert
   (`GDCWrapper.query/search/get_schema/build_manifest`,
@@ -62,7 +85,6 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   Mediator-Container gemäß ADR-0001, kein eigener `wrapper-gdc`-Service.
 - Datei-basiertes Cache-Grundgerüst für die drei Cache-Tiers
   (`wrappers/gdc/cache.py`, Verzeichnis über `DATABRIDGE_CACHE_DIR`).
->>>>>>> 7c7a87c1384af8888f1272294a697d20faf5613f
 
 ## Verweise
 

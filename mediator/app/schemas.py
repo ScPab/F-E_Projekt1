@@ -35,3 +35,23 @@ class ManifestRequest(BaseModel):
     experimental_strategy: Optional[StrOrList] = None
     access: Optional[StrOrList] = "open"
     size: int = Field(10000, ge=1, le=100000)
+
+
+class TransformRequest(BaseModel):
+    """Anfrage für POST /transform (GDC-JSON -> RDF/OWL, siehe app/semantic/mapping.py).
+
+    Entweder werden rohe `cases`-Treffer übergeben (z. B. aus einer
+    vorherigen POST /query-Antwort), oder sie werden — falls `cases` leer
+    ist — live über den GDC-Wrapper geholt.
+    """
+
+    source: str = Field("gdc", description="Aktuell nur 'gdc' unterstützt.")
+    cases: Optional[list[dict]] = Field(
+        None,
+        description="Rohe GDC-cases-Treffer (case_id, project.project_id, demographic.gender, "
+        "diagnoses[].primary_diagnosis, diagnoses[].age_at_diagnosis). Wenn nicht gesetzt, "
+        "wird live über GDCWrapper.search('cases', ...) geholt.",
+    )
+    project_id: Optional[StrOrList] = Field(None, description='z. B. "TCGA-BRCA" (nur relevant ohne "cases")')
+    access: Optional[StrOrList] = Field("open", description="Access-Level für den Live-Abruf")
+    size: int = Field(20, ge=1, le=2000, description="Trefferanzahl für den Live-Abruf")

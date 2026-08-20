@@ -15,6 +15,9 @@ dist/
 # Cache-Verzeichnis der Wrapper (siehe wrappers/gdc/cache.py), lokal generiert
 .cache/
 
+# Generierte Ausgabe von mediator/scripts/example_gdc_to_rdf.py (regenerierbar)
+mediator/scripts/output/
+
 # Docker
 *.log
 

@@ -17,10 +17,14 @@ Datenintegrationslogik. Diese folgt in späteren Schritten.
   Erste Quelle: `wrappers/gdc` (GDC Developer API / TCGA). Liegt als
   Python-Package im Mediator-Container, siehe
   [ADR-0001](docs/adr/0001-wrapper-als-python-package.md).
-- `graph-db/` – Austauschbarer Platzhalter für die Graph-Speicherung
-  (aktuell Apache Jena Fuseki/TDB2; Wahl zwischen RDF-Triple-Store und
-  Property-Graph noch offen, siehe
-  [ADR-0002](docs/adr/0002-graph-db-wahl-offen.md)).
+- `graph-db/` – Graph-Speicherung: Apache Jena Fuseki/TDB2 (RDF-Triple-Store
+  mit OWL, RDF-star für Kanten-Metadaten), Entscheidung getroffen, siehe
+  [ADR-0002](docs/adr/0002-graph-db-wahl-offen.md).
+- `wissensnetz/` – Semantische Schicht (Ontologie, Mapping-Konzept GDC→RDF/OWL).
+  Basis-Ontologie unter `wissensnetz/ontology/`, Mapping-Code im Mediator
+  unter `mediator/app/semantic/`, siehe
+  [`wissensnetz/ontology/README.md`](wissensnetz/ontology/README.md) und
+  [`docs/adding_new_sources.md`](docs/adding_new_sources.md).
 - `frontend/` – Leerer Platzhalter-Ordner; Visualisierungsschicht noch
   nicht entschieden, aktuell kein Compose-Service.
 - `docs/adr/` – Architecture Decision Records (inkl. Template unter
@@ -81,3 +85,24 @@ curl -X POST http://localhost:8000/manifest \
 
 Details zur Wrapper-Implementierung (Filter-Aufbau, Cache-Tiers,
 `gdc-client`-Anbindung): [`wrappers/gdc/README.md`](wrappers/gdc/README.md).
+
+### Beispielaufrufe: semantische Schicht (GDC → RDF/OWL)
+
+Testfall: TCGA-BRCA-Cases → RDF/OWL-Tripel (Turtle), Kern-Ausschnitt
+case/project/demographic/diagnosis. Konzept: [`wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL`](wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL%20-%20Kopie.pdf);
+Ontologie: [`wissensnetz/ontology/`](wissensnetz/ontology/).
+
+```bash
+# Basis-Ontologie (TBox) zur Inspektion
+curl http://localhost:8000/ontology
+
+# GDC-Cases live abrufen und nach RDF/OWL transformieren
+curl -X POST http://localhost:8000/transform \
+  -H "Content-Type: application/json" \
+  -d '{"source": "gdc", "project_id": "TCGA-BRCA", "size": 5}'
+```
+
+Ein vollständiges, lokal ausführbares Beispiel mit TCGA-BRCA-Beispieldaten
+(ohne laufenden Service) liegt unter
+[`mediator/scripts/example_gdc_to_rdf.py`](mediator/scripts/example_gdc_to_rdf.py).
+Neue Quellen anbinden: [`docs/adding_new_sources.md`](docs/adding_new_sources.md).

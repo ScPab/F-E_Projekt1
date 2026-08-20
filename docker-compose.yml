@@ -19,6 +19,11 @@ services:
       - .env
     depends_on:
       - graph-db
+    volumes:
+      # Basis-Ontologie/Alignment-Tabellen (Wissensnetz-Teilbereich) als
+      # Bind-Mount, damit Änderungen ohne Rebuild wirksam werden. Überlagert
+      # das COPY aus dem Dockerfile. Siehe wissensnetz/ontology/README.md.
+      - ./wissensnetz/ontology:/ontology:ro
     healthcheck:
       test: ["CMD", "mamba", "run", "-n", "databridge-mediator", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

@@ -12,17 +12,33 @@ bilden die Schnittstelle, über die spätere Aufrufer (Frontend, andere
 Services) auf den GDC-Wrapper zugreifen — ohne dass der GDC-Wrapper selbst
 ein eigener Netzwerk-Service sein muss.
 
-Die eigentliche Transformationslogik (Export nach anndata/.h5ad, Anbindung
-an graph-db) folgt in späteren Schritten.
+Die eigentliche Transformationslogik nach anndata/.h5ad (Messmatrizen) folgt
+in späteren Schritten. Die semantische Transformation (GDC-JSON -> RDF/OWL)
+für den Kern-Ausschnitt case/project/demographic/diagnosis ist über
+POST /transform bereits angebunden (siehe app/semantic/mapping.py sowie
+wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL für das zugrundeliegende Konzept).
 """
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from gdc import GDCWrapper, build_filters
 from requests import RequestException
 
-from .schemas import ManifestRequest, QueryRequest
+from .schemas import ManifestRequest, QueryRequest, TransformRequest
+from .semantic import mapping as semantic_mapping
+from .semantic.paths import alignment_path, ontology_path
+
+# Felder für den Live-Abruf von POST /transform (Kern-Ausschnitt
+# case/project/demographic/diagnosis, siehe app/semantic/mapping.py).
+TRANSFORM_CASE_FIELDS = [
+    "case_id",
+    "submitter_id",
+    "project.project_id",
+    "demographic.gender",
+    "diagnoses.primary_diagnosis",
+    "diagnoses.age_at_diagnosis",
+]
 
 app = FastAPI(
     title="DataBridge Mediator",
@@ -105,3 +121,50 @@ async def manifest(request: ManifestRequest) -> dict:
     except RequestException as exc:
         raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
     return {"manifest": content}
+
+
+@app.post("/transform")
+async def transform(request: TransformRequest) -> dict:
+    """GDC-Cases -> RDF/OWL-Tripel (Turtle), gemäß wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL.
+
+    Nimmt entweder rohe `cases`-Treffer entgegen oder holt sie live über den
+    GDC-Wrapper. Ausgabe ist reiner Turtle-Text (Datei-/Text-Senke für den
+    Prototyp) — ein direkter Import in graph-db ist noch nicht Teil dieses
+    Schritts (SPARQL-Update-Anbindung laut ADR-0002 weiterhin offen).
+    """
+    if request.source != "gdc":
+        raise HTTPException(status_code=400, detail=f"Unbekannte Quelle: {request.source!r} (aktuell nur 'gdc')")
+
+    if request.cases is not None:
+        cases = request.cases
+    else:
+        wrapper = get_gdc_wrapper()
+        try:
+            result = wrapper.search(
+                "cases",
+                project_id=request.project_id,
+                access=request.access,
+                fields=TRANSFORM_CASE_FIELDS,
+                size=request.size,
+            )
+        except RequestException as exc:
+            raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
+        cases = result["results"]
+
+    alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
+    graph, star_annotations = semantic_mapping.cases_to_graph(cases, alignment=alignment)
+    turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
+    return {"format": "turtle", "triple_count": len(graph), "turtle": turtle}
+
+
+@app.get("/ontology")
+async def ontology() -> Response:
+    """Liefert die aktuelle Basis-Ontologie (TBox) zur Inspektion.
+
+    Quelle: wissensnetz/ontology/databridge-core.ttl (siehe app/semantic/paths.py
+    für die Pfad-Auflösung über DATABRIDGE_ONTOLOGY_DIR).
+    """
+    path = ontology_path()
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Ontologie-Datei nicht gefunden: {path}")
+    return Response(content=path.read_text(encoding="utf-8"), media_type="text/turtle")

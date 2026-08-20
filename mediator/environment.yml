@@ -17,6 +17,9 @@ dependencies:
   - requests
   - anndata
   - scanpy
+  # Semantische Schicht: GDC-JSON -> RDF/OWL (app/semantic/mapping.py), siehe
+  # wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL.
+  - rdflib
   - pip
   - pip:
       # Lokales Wrapper-Package (Mediator-Wrapper-Muster, siehe /wrappers).
