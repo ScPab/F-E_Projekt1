@@ -1,7 +1,7 @@
 # DataBridge – Orchestrierung der Systemarchitektur (Mediator-Wrapper-Muster).
 #
 # Bewusst austauschbare Stellen sind unten mit "AUSTAUSCHBAR" markiert.
-version: "3.9"
+
 
 services:
 
