@@ -12,6 +12,9 @@ dist/
 # Conda
 *.conda-meta/
 
+# Cache-Verzeichnis der Wrapper (siehe wrappers/gdc/cache.py), lokal generiert
+.cache/
+
 # Docker
 *.log
 

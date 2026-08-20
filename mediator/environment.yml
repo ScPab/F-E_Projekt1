@@ -20,5 +20,10 @@ dependencies:
   - pip
   - pip:
       # Lokales Wrapper-Package (Mediator-Wrapper-Muster, siehe /wrappers).
-      # Pfad ist relativ zum Docker-Build-Context (Repo-Root), siehe Dockerfile.
-      - -e ./wrappers
+      # Absoluter Pfad: pip löst relative editable-Pfade relativ zum
+      # Verzeichnis auf, in dem `mamba env create` läuft (WORKDIR /app,
+      # siehe Dockerfile), NICHT relativ zum Docker-Build-Context. Das
+      # Wrapper-Package liegt im Container unter /wrappers (siehe COPY im
+      # Dockerfile) — ein relativer Pfad "./wrappers" würde also
+      # fälschlich /app/wrappers suchen und fehlschlagen.
+      - -e /wrappers
