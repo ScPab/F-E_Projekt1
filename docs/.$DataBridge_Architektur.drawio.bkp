@@ -1,0 +1,152 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram id="databridge-arch" name="DataBridge Architektur">
+    <mxGraphModel dx="1394" dy="779" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;fontSize=18;fontStyle=1;align=left;verticalAlign=middle;" value="DataBridge — Komponenten &amp; Zusammenspiel" vertex="1">
+          <mxGeometry height="30" width="760" x="40" y="8" as="geometry" />
+        </mxCell>
+        <mxCell id="lgA" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;" value="Kollege A · Wrapper" vertex="1">
+          <mxGeometry height="32" width="170" x="40" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lgB" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;" value="Kollege B · Mediator + Konvertierung" vertex="1">
+          <mxGeometry height="32" width="250" x="222" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lgM" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" value="Marcel · Wissensnetz + graph-db" vertex="1">
+          <mxGeometry height="32" width="240" x="484" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lgX" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEEEEE;strokeColor=#666666;fontSize=11;" value="Extern (GDC, Oviedo)" vertex="1">
+          <mxGeometry height="32" width="160" x="736" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lgP" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#999999;dashed=1;fontSize=11;" value="- - -  geplant / Ausbaustufe" vertex="1">
+          <mxGeometry height="32" width="180" x="908" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lgDir" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;" value="Drei Richtungen des Wissensnetzes:  ① Mapping/ETL (hinein)   ② SPARQL (lesen / anreichern)   ③ Rückkanal (zurück)" vertex="1">
+          <mxGeometry height="32" width="620" x="1120" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="dbx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FBFBFB;strokeColor=#9E9E9E;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;" value="DataBridge  (Docker Compose)" vertex="1">
+          <mxGeometry height="800" width="1210" x="250" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="medbox" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F8F0;strokeColor=#82B366;verticalAlign=top;fontStyle=1;fontSize=12;" value="Mediator  (FastAPI)  —  Kollege B" vertex="1">
+          <mxGeometry height="430" width="250" x="505" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="wnbox" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8F0;strokeColor=#D79B00;verticalAlign=top;fontStyle=1;fontSize=12;" value="Wissensnetz  (Python-Paket)  —  Marcel" vertex="1">
+          <mxGeometry height="560" width="300" x="860" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="gdc" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#EEEEEE;strokeColor=#666666;fontSize=11;" value="GDC / TCGA API&#xa;(Genomic Data Commons)&#xa;YAML/JSON-Schema + Daten" vertex="1">
+          <mxGeometry height="120" width="220" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="oviedo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEEEEE;strokeColor=#666666;fontSize=11;" value="Oviedo-Tools&#xa;MP-Cancer · GEM-i · dual iDR&#xa;(Visual Analytics / Frontend)" vertex="1">
+          <mxGeometry height="155" width="190" x="1500" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="wrapper" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;align=left;spacingLeft=8;verticalAlign=top;spacingTop=8;" value="Wrapper  (wrappers/gdc)  —  Kollege A&#xa;&#xa;GDCWrapper: query / search /&#xa;get_schema / manifest / download&#xa;Cache: Recipes / Materialized / Raw" vertex="1">
+          <mxGeometry height="160" width="185" x="280" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="mnote" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;fontStyle=2;fontColor=#666666;fillColor=#FFFFFF;strokeColor=#DDDDDD;dashed=1;" value="Hinweis: Ontologie wird als /ontology (ro) in den Mediator gemountet (docker-compose)." vertex="1">
+          <mxGeometry height="40" width="280" x="280" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="med_ep" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;" value="REST-Endpunkte&#xa;/health /query /schema&#xa;/manifest /transform /ontology" vertex="1">
+          <mxGeometry height="70" width="220" x="520" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="med_sem" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;" value="semantic/mapping.py&#xa;GDC-JSON → RDF/Turtle&#xa;(RDF-star, enum→Alignment)" vertex="1">
+          <mxGeometry height="90" width="220" x="520" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="med_ann" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;dashed=1;fontSize=11;fontStyle=2;" value="anndata (.h5ad)&#xa;Messmatrizen-Konvertierung&#xa;— geplant" vertex="1">
+          <mxGeometry height="70" width="220" x="520" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="wn_gs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" value="graphstore.py — load_turtle / query / update  (Aufg. 2)" vertex="1">
+          <mxGeometry height="48" width="270" x="875" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="wn_enr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" value="enrichment.py — SPARQL: Hierarchie (subClassOf*), Kontext  ② (Aufg. 3)" vertex="1">
+          <mxGeometry height="58" width="270" x="875" y="365" as="geometry" />
+        </mxCell>
+        <mxCell id="wn_fb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;dashed=1;fontSize=11;fontStyle=2;" value="feedback.py — Rückkanal ③ (Selektion→RDF) — geplant" vertex="1">
+          <mxGeometry height="50" width="270" x="875" y="435" as="geometry" />
+        </mxCell>
+        <mxCell id="wn_cli" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" value="cli.py — status / init / load / query / hierarchy / context" vertex="1">
+          <mxGeometry height="45" width="270" x="875" y="497" as="geometry" />
+        </mxCell>
+        <mxCell id="wn_init" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" value="init.py — Dataset + TBox laden (idempotent, Aufg. 1)" vertex="1">
+          <mxGeometry height="48" width="270" x="875" y="554" as="geometry" />
+        </mxCell>
+        <mxCell id="wn_onto" parent="1" style="shape=note;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=11;" value="Ontologie&#xa;databridge-core.ttl (TBox)&#xa;+ alignment/ (enum → NCIt)" vertex="1">
+          <mxGeometry height="90" width="270" x="875" y="614" as="geometry" />
+        </mxCell>
+        <mxCell id="graphdb" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=14;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" value="graph-db&#xa;Apache Jena Fuseki / TDB2&#xa;Dataset: databridge&#xa;TBox + ABox (+ Named Graphs)" vertex="1">
+          <mxGeometry height="210" width="195" x="1200" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="txt_store" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fillColor=#FFFFFF;strokeColor=none;" value="SPARQL Query/Update + GSP (HTTP)" vertex="1">
+          <mxGeometry height="22" width="220" x="1150" y="286" as="geometry" />
+        </mxCell>
+        <mxCell id="txtA" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fontStyle=2;fontColor=#666666;fillColor=#FFFFFF;strokeColor=none;" value="Messmatrizen (.h5ad) — geplant" vertex="1">
+          <mxGeometry height="22" width="230" x="1120" y="184" as="geometry" />
+        </mxCell>
+        <mxCell id="txt3" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fontStyle=1;fontColor=#C0504D;fillColor=#FFFFFF;strokeColor=none;" value="③ Rückkanal: Selektion → RDF (geplant)" vertex="1">
+          <mxGeometry height="22" width="240" x="1210" y="574" as="geometry" />
+        </mxCell>
+        <mxCell id="txt2" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fontStyle=1;fontColor=#2E74B5;fillColor=#FFFFFF;strokeColor=none;" value="② SPARQL-Anreicherung / Kontext" vertex="1">
+          <mxGeometry height="22" width="240" x="1210" y="646" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="wrapper" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;fontSize=10;" target="gdc" value="HTTPS REST">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="med_ep" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;fontSize=10;" target="wrapper" value="Python-Import (ADR-0001)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="367" y="340" />
+              <mxPoint x="367" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="med_sem" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeWidth=2;strokeColor=#1F7A34;fontColor=#1F7A34;fontStyle=1;fontSize=10;" target="wn_gs" value="① Turtle">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="805" y="435" />
+              <mxPoint x="805" y="329" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="estore" edge="1" parent="1" source="wn_gs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;endArrow=classic;strokeColor=#333333;" target="graphdb" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1175" y="329" />
+              <mxPoint x="1175" y="345" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="wn_enr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeWidth=2;strokeColor=#2E74B5;" target="oviedo" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1175" y="394" />
+              <mxPoint x="1175" y="700" />
+              <mxPoint x="1595" y="700" />
+              <mxPoint x="1595" y="715" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="oviedo" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;dashed=1;strokeColor=#C0504D;" target="wn_fb" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1188" y="600" />
+              <mxPoint x="1188" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="med_ann" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;dashed=1;strokeColor=#666666;" target="oviedo" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="778" y="535" />
+              <mxPoint x="778" y="205" />
+              <mxPoint x="1595" y="205" />
+              <mxPoint x="1595" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="wn_onto" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;fontSize=9;" target="wn_init" value="lädt TBox">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
