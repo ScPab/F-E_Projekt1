@@ -17,7 +17,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from .config import PREFIXES, Settings
+from . import enrichment
+from .config import INSTANCE, PREFIXES, Settings
 from .graphstore import GraphStore, GraphStoreError
 from .init import initialize, tbox_loaded
 
@@ -44,6 +45,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--raw",
         action="store_true",
         help="Abfrage unverändert senden (keine PREFIXE voranstellen)",
+    )
+
+    # --- Aufgabe 3: Anreicherung (Lesen) ---
+    p_hier = sub.add_parser("hierarchy", help="Unter-/Oberklassen via rdfs:subClassOf*")
+    p_hier.add_argument("klasse", help="Klasse als CURIE (db:Case) oder volle IRI")
+    p_hier.add_argument("--up", action="store_true", help="Oberklassen statt Unterklassen")
+    p_hier.add_argument("--no-self", action="store_true", help="die Klasse selbst ausschließen")
+
+    p_ctx = sub.add_parser("context", help="Kontext zu einem Case oder einer Diagnose")
+    p_ctx.add_argument(
+        "ref",
+        help="Case (submitterId oder IRI) oder Diagnose (IRI oder Kennung wie d-11111111)",
     )
 
     return parser
@@ -109,6 +122,67 @@ def _cmd_query(store: GraphStore, sparql: str, raw: bool) -> int:
     return 0
 
 
+def _cmd_hierarchy(store: GraphStore, klasse: str, up: bool, no_self: bool) -> int:
+    fn = enrichment.superclasses if up else enrichment.subclasses
+    result = fn(store, klasse, include_self=not no_self)
+    richtung = "Oberklassen" if up else "Unterklassen"
+    print(f"{richtung} von {klasse} (rdfs:subClassOf*):")
+    if not result:
+        print("  (keine)")
+        return 0
+    for iri in result:
+        print(f"  {iri}")
+    print(f"\n{len(result)} Klasse(n)")
+    return 0
+
+
+def _detect_kind(store: GraphStore, ref: str) -> str | None:
+    """'case' | 'diagnosis' | None — anhand des Store-Inhalts bestimmt."""
+    if enrichment._is_iri(ref):
+        term = enrichment._term(ref)
+        if store.ask(PREFIXES + f"ASK {{ {term} a db:Case }}"):
+            return "case"
+        if store.ask(PREFIXES + f"ASK {{ {term} a db:Diagnosis }}"):
+            return "diagnosis"
+        return None
+    lit = enrichment._escape_literal(ref)
+    if store.ask(PREFIXES + f'ASK {{ ?c a db:Case ; db:submitterId "{lit}" }}'):
+        return "case"
+    if store.ask(PREFIXES + f"ASK {{ <{INSTANCE}diagnosis/{ref}> a db:Diagnosis }}"):
+        return "diagnosis"
+    return None
+
+
+def _cmd_context(store: GraphStore, ref: str) -> int:
+    kind = _detect_kind(store, ref)
+    if kind == "case":
+        ctx = enrichment.case_context(store, ref)
+        print(f"Case:        {ctx['case_iri']}")
+        print(f"submitterId: {ctx.get('submitter_id') or '—'}")
+        print(f"Projekt:     {ctx.get('project_id') or '—'}")
+        print(f"Geschlecht:  {ctx.get('gender') or '—'}")
+        diagnoses = ctx.get("diagnoses") or []
+        print(f"Diagnosen:   {len(diagnoses)}")
+        for d in diagnoses:
+            aligned = d.get("aligned_concept") or "— (kein NCIt-Alignment)"
+            print(f"  - {d.get('label') or '—'}  "
+                  f"(Alter: {d.get('age_at_diagnosis')}, NCIt: {aligned})")
+            print(f"    {d['iri']}")
+        return 0
+    if kind == "diagnosis":
+        ctx = enrichment.diagnosis_context(store, ref)
+        aligned = ctx.get("aligned_concept") or "— (kein NCIt-Alignment)"
+        print(f"Diagnose:    {ctx['diagnosis_iri']}")
+        print(f"Label:       {ctx.get('label') or '—'}")
+        print(f"Alter:       {ctx.get('age_at_diagnosis')}")
+        print(f"NCIt:        {aligned}")
+        print(f"Case:        {ctx.get('case_iri') or '—'}")
+        print(f"submitterId: {ctx.get('submitter_id') or '—'}")
+        return 0
+    print(f"Kein Case und keine Diagnose zu '{ref}' gefunden.", file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     store = GraphStore(Settings.from_env())
@@ -121,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_load(store, args.source, args.graph)
         if args.command == "query":
             return _cmd_query(store, args.sparql, args.raw)
+        if args.command == "hierarchy":
+            return _cmd_hierarchy(store, args.klasse, args.up, args.no_self)
+        if args.command == "context":
+            return _cmd_context(store, args.ref)
     except (GraphStoreError, FileNotFoundError) as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 1
