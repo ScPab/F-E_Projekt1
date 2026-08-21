@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wissensnetz"
+version = "0.1.0"
+description = "RDF-Store-, SPARQL- und Rückkanal-Schicht des DataBridge-Wissensnetzes (Fuseki/Jena)."
+requires-python = ">=3.11"
+dependencies = [
+    "rdflib>=7",
+    "requests>=2.28",
+]
+
+# Eigenständiges, installierbares Paket (Muster wie wrappers/pyproject.toml).
+# Der Mediator kann es später optional per `pip install -e ./wissensnetz`
+# nutzen — Abhängigkeitsrichtung bleibt Mediator -> Wissensnetz.
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+wissensnetz = "wissensnetz.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
