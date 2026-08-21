@@ -42,6 +42,12 @@ services:
     environment:
       - ADMIN_PASSWORD=admin
       - TDB=2
+      # Legt beim Container-Start ein persistentes TDB2-Dataset an (Feature des
+      # stain/jena-fuseki-Images: FUSEKI_DATASET_N -> Assembler-Config unter
+      # /fuseki/configuration, im Volume persistiert). Name aus .env, Default
+      # "databridge". Die TBox lädt anschließend `wissensnetz init` (SPARQL/GSP)
+      # — siehe graph-db/README.md und wissensnetz/README.md.
+      - FUSEKI_DATASET_1=${GRAPH_DB_DATASET:-databridge}
     ports:
       - "${GRAPH_DB_PORT:-3030}:3030"
     volumes:
