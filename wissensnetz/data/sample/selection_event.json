@@ -1,0 +1,22 @@
+{
+  "_hinweis": "Simuliertes MP-Selektions-Event für den Rückkanal (Aufgabe 4). Fallstudie 1 aus recherche/Rueckkanal-Konzept_MP-zu-RDF: sechs gemeinsam driftende PAAD-Proben, die der Experte als moegliche Fehlklassifikation markiert (Hypothese: eigentlich PanNET). Keine echten Patientendaten; Proben-Barcodes illustrativ.",
+  "user": "nvaldes",
+  "samples": [
+    "TCGA-2J-AAB1",
+    "TCGA-3A-AAL5",
+    "TCGA-HZ-A4BH",
+    "TCGA-IB-AAUO",
+    "TCGA-YB-A89D",
+    "TCGA-US-A77E"
+  ],
+  "hypothesis": {
+    "from": "ncit:PAAD",
+    "to": "ncit:PanNET",
+    "note": "Common fate: driften gemeinsam zum PCPG-Cluster",
+    "tag": "reclassification"
+  },
+  "view": "gene-tSNE <-> miRNA-tSNE",
+  "morph_param": 1.0,
+  "confidence": 0.7,
+  "timestamp": "2026-08-20T14:12:00"
+}

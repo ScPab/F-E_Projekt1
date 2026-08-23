@@ -1,0 +1,72 @@
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix db:   <http://databridge.hka/onto#> .
+
+# Rückkanal-Vokabular (Aufgabe 4) — Terme für Experten-Erkenntnisse aus
+# Morphing Projections. Bewusst getrennt von databridge-core.ttl gehalten
+# (Kern-TBox bleibt sauber; der Mediator liest nur databridge-core.ttl über
+# GET /ontology). Modellierung nach recherche/Rueckkanal-Konzept_MP-zu-RDF,
+# Abschnitt 6: oa:Annotation + PROV-O + RDF-star, Named Graph pro Nutzer.
+# oa:- und prov:-Terme werden wiederverwendet, nicht neu definiert.
+
+# --- Klassen ---------------------------------------------------------------
+db:ExpertFinding a owl:Class ;
+    rdfs:subClassOf oa:Annotation ;
+    rdfs:label "Expert Finding" ;
+    rdfs:comment "Eine im Rückkanal erfasste Experten-Erkenntnis aus einer MP-Selektion (Urheber, Sicht, Zeit, Konfidenz)." .
+
+db:Reclassification a owl:Class ;
+    rdfs:label "Reclassification" ;
+    rdfs:comment "Hypothese, dass die selektierten Proben von einer Klasse (db:from) einer anderen (db:to) zuzuordnen sind." .
+
+# --- Object Properties -----------------------------------------------------
+db:hypothesis a owl:ObjectProperty ;
+    rdfs:label "hypothesis" ;
+    rdfs:domain db:ExpertFinding ;
+    rdfs:range db:Reclassification ;
+    rdfs:comment "Verknüpft ein ExpertFinding mit der aufgestellten Hypothese." .
+
+db:from a owl:ObjectProperty ;
+    rdfs:label "from" ;
+    rdfs:domain db:Reclassification ;
+    rdfs:comment "Ausgangsklasse der Reclassification (NCIt-/DB-Konzept)." .
+
+db:to a owl:ObjectProperty ;
+    rdfs:label "to" ;
+    rdfs:domain db:Reclassification ;
+    rdfs:comment "Zielklasse der Reclassification (NCIt-/DB-Konzept)." .
+
+db:reclassifiedAs a owl:ObjectProperty ;
+    rdfs:label "reclassifiedAs" ;
+    rdfs:comment "Kern-Aussage: eine Probe sollte als <Ziel-Konzept> klassifiziert werden. Provenienz/Konfidenz werden per RDF-star direkt an diese Aussage gehängt (<< s db:reclassifiedAs o >> prov:wasDerivedFrom … ; db:confidence …)." .
+
+# --- Datatype / Annotation Properties -------------------------------------
+db:inView a owl:DatatypeProperty ;
+    rdfs:label "inView" ;
+    rdfs:domain db:ExpertFinding ;
+    rdfs:range xsd:string ;
+    rdfs:comment "MP-Sicht(en), in der die Erkenntnis entstand, z. B. 'gene-tSNE <-> miRNA-tSNE'." .
+
+db:morphParam a owl:DatatypeProperty ;
+    rdfs:label "morphParam" ;
+    rdfs:domain db:ExpertFinding ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "Morph-Parameter t der MP-Sicht (0..1)." .
+
+db:tag a owl:DatatypeProperty ;
+    rdfs:label "tag" ;
+    rdfs:domain db:ExpertFinding ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Frei vergebenes Schlagwort/Kategorie der Erkenntnis." .
+
+# db:confidence wird sowohl am ExpertFinding als auch an der RDF-star-Kern-
+# Aussage verwendet (deren Subjekt ein Quoted Triple ist) — daher bewusst
+# ohne rdfs:domain, nur mit numerischem Range.
+db:confidence a owl:DatatypeProperty ;
+    rdfs:label "confidence" ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "Subjektive Konfidenz (0..1) einer Aussage oder Erkenntnis." .

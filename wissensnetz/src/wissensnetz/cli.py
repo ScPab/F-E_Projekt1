@@ -17,7 +17,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import enrichment
+from . import enrichment, feedback
 from .config import INSTANCE, PREFIXES, Settings
 from .graphstore import GraphStore, GraphStoreError
 from .init import initialize, tbox_loaded
@@ -58,6 +58,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "ref",
         help="Case (submitterId oder IRI) oder Diagnose (IRI oder Kennung wie d-11111111)",
     )
+
+    # --- Aufgabe 4: Rückkanal (Schreiben) ---
+    p_fb = sub.add_parser("feedback", help="MP-Selektions-Event in den Nutzer-Graph schreiben")
+    p_fb.add_argument("event", help="Pfad zu einem selection_event.json")
+    p_fb.add_argument("--user", default=None, help="Nutzer-ID überschreiben (sonst aus dem Event)")
+
+    p_find = sub.add_parser("findings", help="Gespeicherte Experten-Erkenntnisse auflisten")
+    p_find.add_argument("--user", default=None, help="nur Erkenntnisse dieses Nutzers")
 
     return parser
 
@@ -183,6 +191,48 @@ def _cmd_context(store: GraphStore, ref: str) -> int:
     return 1
 
 
+def _cmd_feedback(store: GraphStore, event_path: str, user: str | None) -> int:
+    path = Path(event_path)
+    if not path.exists():
+        print(f"Event-Datei nicht gefunden: {path}", file=sys.stderr)
+        return 1
+    event = feedback.SelectionEvent.from_json_file(path)
+    if user:
+        event.user = user
+    graph_iri = feedback.write_feedback(store, event)
+    print(f"Erkenntnis geschrieben für Nutzer '{event.user}'")
+    print(f"Named Graph: {graph_iri}")
+    print(f"Proben:      {len(event.samples)}  "
+          f"(Hypothese {event.hypothesis.from_} -> {event.hypothesis.to})")
+    return 0
+
+
+def _cmd_findings(store: GraphStore, user: str | None) -> int:
+    findings = feedback.list_findings(store, user=user)
+    if not findings:
+        print("(keine Erkenntnisse gefunden)")
+        return 0
+    recls = feedback.reclassifications(store, user=user)
+    by_anno: dict[str, list[dict]] = {}
+    for r in recls:
+        by_anno.setdefault(r["annotation"], []).append(r)
+    for f in findings:
+        hyp = f["hypothesis"]
+        print(f"- {f['annotation']}")
+        print(f"    Nutzer:    {f.get('user') or '—'}   Zeit: {f.get('timestamp') or '—'}")
+        print(f"    Sicht:     {f.get('view') or '—'}   morph-t: {f.get('morph_param') or '—'}"
+              f"   Konfidenz: {f.get('confidence') or '—'}")
+        print(f"    Hypothese: {hyp.get('from') or '—'} -> {hyp.get('to') or '—'}"
+              + (f"  ({hyp['note']})" if hyp.get("note") else ""))
+        print(f"    Ziele:     {len(f['targets'])} Probe(n)")
+        stars = by_anno.get(f["annotation"], [])
+        for r in stars:
+            print(f"      * {r['sample']}  reclassifiedAs {r['reclassified_as']}"
+                  f"  @ {r.get('confidence') or '—'}")
+    print(f"\n{len(findings)} Erkenntnis(se)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     store = GraphStore(Settings.from_env())
@@ -199,6 +249,10 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_hierarchy(store, args.klasse, args.up, args.no_self)
         if args.command == "context":
             return _cmd_context(store, args.ref)
+        if args.command == "feedback":
+            return _cmd_feedback(store, args.event, args.user)
+        if args.command == "findings":
+            return _cmd_findings(store, args.user)
     except (GraphStoreError, FileNotFoundError) as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 1

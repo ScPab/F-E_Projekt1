@@ -24,14 +24,22 @@ from .graphstore import GraphStore
 # ontology/ liegt im Paket-Repo neben src/ — von hier aus zwei Ebenen hoch.
 _ONTOLOGY_DIR = Path(__file__).resolve().parents[2] / "ontology"
 TBOX_PATH = _ONTOLOGY_DIR / "databridge-core.ttl"
+# Rückkanal-Vokabular (Aufgabe 4), separat von der Kern-TBox gehalten.
+FEEDBACK_PATH = _ONTOLOGY_DIR / "feedback.ttl"
 
-# Marker-Abfrage: Ist die TBox bereits geladen?
+# Marker-Abfragen: Ist die jeweilige TBox/das Vokabular bereits geladen?
 _TBOX_PRESENT = PREFIXES + "ASK { db:Case a owl:Class }"
+_FEEDBACK_PRESENT = PREFIXES + "ASK { db:ExpertFinding a owl:Class }"
 
 
 def tbox_loaded(store: GraphStore) -> bool:
     """True, wenn die TBox (Marker-Klasse ``db:Case``) im Store vorhanden ist."""
     return store.ask(_TBOX_PRESENT)
+
+
+def feedback_vocab_loaded(store: GraphStore) -> bool:
+    """True, wenn das Rückkanal-Vokabular (``db:ExpertFinding``) vorhanden ist."""
+    return store.ask(_FEEDBACK_PRESENT)
 
 
 def initialize(
@@ -55,6 +63,16 @@ def initialize(
         store.load_turtle(tbox_path)
         tbox_action = "reloaded (force)" if already else "loaded"
 
+    # Rückkanal-Vokabular (Aufgabe 4) mitladen, sofern vorhanden.
+    feedback_action = "not found"
+    if FEEDBACK_PATH.exists():
+        already_fb = feedback_vocab_loaded(store)
+        if already_fb and not force:
+            feedback_action = "skipped (bereits vorhanden)"
+        else:
+            store.load_turtle(FEEDBACK_PATH)
+            feedback_action = "reloaded (force)" if already_fb else "loaded"
+
     class_count = store.query(
         PREFIXES + "SELECT (COUNT(DISTINCT ?c) AS ?n) WHERE { ?c a owl:Class }"
     )
@@ -64,5 +82,6 @@ def initialize(
         "dataset": store.settings.dataset,
         "dataset_created": dataset_created,
         "tbox": tbox_action,
+        "feedback_vocab": feedback_action,
         "owl_classes": n_classes,
     }
