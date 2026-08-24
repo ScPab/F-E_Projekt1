@@ -1,0 +1,19 @@
+# Einheitliche Zeilenenden im Repository -> verhindert das LF/CRLF-Rauschen,
+# das sonst bei jedem Commit unter Windows entsteht (git status voll "geaenderter"
+# Dateien ohne echte Aenderung).
+#
+# Regel: Text wird als LF gespeichert; Git normalisiert beim Commit automatisch.
+* text=auto eol=lf
+
+# Binaerdateien nie als Text behandeln (keine EOL-Konvertierung):
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.docx  binary
+*.pptx  binary
+*.xlsx  binary
+*.h5ad  binary
+*.hdf   binary
+*.ico   binary
