@@ -55,3 +55,11 @@ class TransformRequest(BaseModel):
     project_id: Optional[StrOrList] = Field(None, description='z. B. "TCGA-BRCA" (nur relevant ohne "cases")')
     access: Optional[StrOrList] = Field("open", description="Access-Level für den Live-Abruf")
     size: int = Field(20, ge=1, le=2000, description="Trefferanzahl für den Live-Abruf")
+    load: bool = Field(
+        False,
+        description="Bei true: das erzeugte Turtle zusätzlich direkt per Graph Store "
+        "Protocol in graph-db (Fuseki) schreiben, statt es nur als Text zurückzugeben.",
+    )
+    graph: Optional[str] = Field(
+        None, description="Named-Graph-IRI für den Fuseki-Import (nur mit load=true); ohne Angabe Default-Graph."
+    )

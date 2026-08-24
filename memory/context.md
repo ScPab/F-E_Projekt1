@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-08-20
+Stand: 2026-08-24
 
 ## Ziel
 
@@ -43,9 +43,6 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - Alignment-Tabellen (`wissensnetz/ontology/alignment/`) sind noch leer —
   Befüllung mit verifizierten NCIt-/DO-Codes ist offener nächster Schritt
   (Wissensnetz-Teilbereich, Marcel).
-- Anbindung Mediator ↔ graph-db per SPARQL/SPARQL-Update (bislang nicht
-  implementiert; `POST /transform` liefert aktuell nur Turtle-Text als
-  Datei-/Text-Senke, kein direkter Fuseki-Import).
 - Cache-Tiers 2 (materialisierte anndata-Objekte) und 3 (transiente
   Rohdaten) haben nur ein Datei-Grundgerüst (`wrappers/gdc/cache.py`); echte
   Nutzung folgt erst mit der anndata-Transformation bzw. dem
@@ -53,7 +50,23 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
 
-## Umgesetzt seit letztem Stand (2026-08-20)
+## Umgesetzt seit letztem Stand (2026-08-24)
+
+- Direkte Anbindung Mediator → graph-db: `POST /transform` akzeptiert
+  `load: true` (optional `graph: <IRI>`) und schreibt das erzeugte Turtle
+  dann direkt per Graph Store Protocol in Fuseki (`wissensnetz.GraphStore.
+  load_turtle`), statt es nur als Text zurückzugeben. Dazu installiert der
+  Mediator das `wissensnetz`-Package (`mediator/environment.yml`,
+  `mediator/Dockerfile`: `-e /wissensnetz`); in `docker-compose.yml` zeigt
+  `GRAPH_DB_URL` beim Mediator-Service fest auf `http://graph-db:3030`
+  (Compose-internes Netzwerk statt host-seitigem `GRAPH_DB_PORT`).
+  Abhängigkeitsrichtung bleibt Mediator → Wissensnetz, wie in
+  `wissensnetz/pyproject.toml` von Anfang an vorgesehen. `scripts/load_gdc.py`
+  (zweistufiger externer Weg: Turtle abrufen, dann `GraphStore.load_turtle`)
+  bleibt als Alternative bestehen, z. B. für lokale Mediator-Läufe ohne
+  Docker/GRAPH_DB_URL-Override.
+
+## Umgesetzt seit vorletztem Stand (2026-08-20)
 
 - Semantische Mapping-Ebene GDC → RDF/OWL für den Kern-Ausschnitt
   case/project/demographic/diagnosis, aufbauend auf Marcels
@@ -74,7 +87,7 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `mediator/scripts/example_gdc_to_rdf.py`.
 - Anleitung für neue Quellen: `docs/adding_new_sources.md`.
 
-## Umgesetzt seit vorletztem Stand (2026-08-19)
+## Umgesetzt davor (2026-08-19)
 
 - Abfrage-/Schema-Introspektionslogik im GDC-Wrapper implementiert
   (`GDCWrapper.query/search/get_schema/build_manifest`,

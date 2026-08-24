@@ -17,6 +17,13 @@ services:
       - "${MEDIATOR_PORT:-8000}:8000"
     env_file:
       - .env
+    environment:
+      # Überschreibt ein evtl. in .env gesetztes GRAPH_DB_URL: innerhalb des
+      # Compose-Netzwerks ist graph-db über den Service-Namen erreichbar,
+      # nicht über den host-seitig gemappten GRAPH_DB_PORT. Nötig für
+      # POST /transform mit load=true (direkter Fuseki-Import, siehe
+      # wissensnetz/src/wissensnetz/config.py).
+      - GRAPH_DB_URL=http://graph-db:3030
     depends_on:
       - graph-db
     volumes:

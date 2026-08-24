@@ -24,6 +24,7 @@ import os
 from fastapi import FastAPI, HTTPException, Response
 from gdc import GDCWrapper, build_filters
 from requests import RequestException
+from wissensnetz import GraphStore, GraphStoreError
 
 from .schemas import ManifestRequest, QueryRequest, TransformRequest
 from .semantic import mapping as semantic_mapping
@@ -50,6 +51,12 @@ app = FastAPI(
 # und den Cache-Zugriffspunkt, siehe wrappers/gdc/cache.py).
 _gdc_wrapper: GDCWrapper | None = None
 
+# Einzelne, wiederverwendete GraphStore-Instanz (Fuseki-Anbindung für
+# POST /transform mit load=true). Verbindung wird aus ENV gelesen
+# (GRAPH_DB_URL/GRAPH_DB_DATASET/..., siehe wissensnetz/src/wissensnetz/config.py
+# und docker-compose.yml für den Compose-internen Wert).
+_graph_store: GraphStore | None = None
+
 
 def get_gdc_wrapper() -> GDCWrapper:
     """Liefert eine lazily initialisierte, geteilte GDCWrapper-Instanz."""
@@ -58,6 +65,14 @@ def get_gdc_wrapper() -> GDCWrapper:
         base_url = os.environ.get("GDC_API_BASE_URL", "https://api.gdc.cancer.gov")
         _gdc_wrapper = GDCWrapper(base_url)
     return _gdc_wrapper
+
+
+def get_graph_store() -> GraphStore:
+    """Liefert eine lazily initialisierte, geteilte GraphStore-Instanz."""
+    global _graph_store
+    if _graph_store is None:
+        _graph_store = GraphStore()
+    return _graph_store
 
 
 @app.get("/health")
@@ -128,9 +143,11 @@ async def transform(request: TransformRequest) -> dict:
     """GDC-Cases -> RDF/OWL-Tripel (Turtle), gemäß wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL.
 
     Nimmt entweder rohe `cases`-Treffer entgegen oder holt sie live über den
-    GDC-Wrapper. Ausgabe ist reiner Turtle-Text (Datei-/Text-Senke für den
-    Prototyp) — ein direkter Import in graph-db ist noch nicht Teil dieses
-    Schritts (SPARQL-Update-Anbindung laut ADR-0002 weiterhin offen).
+    GDC-Wrapper. Ausgabe ist immer der erzeugte Turtle-Text; bei `load=true`
+    wird er zusätzlich direkt per Graph Store Protocol in graph-db (Fuseki)
+    geschrieben (siehe `wissensnetz.GraphStore.load_turtle`, ADR-0002) — die
+    Turtle-Ausgabe bleibt roh erhalten, damit die angehängten RDF-star-Blöcke
+    (Provenienz/Konfidenz) nicht durch einen rdflib-Roundtrip verloren gehen.
     """
     if request.source != "gdc":
         raise HTTPException(status_code=400, detail=f"Unbekannte Quelle: {request.source!r} (aktuell nur 'gdc')")
@@ -154,7 +171,18 @@ async def transform(request: TransformRequest) -> dict:
     alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
     graph, star_annotations = semantic_mapping.cases_to_graph(cases, alignment=alignment)
     turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
-    return {"format": "turtle", "triple_count": len(graph), "turtle": turtle}
+    response = {"format": "turtle", "triple_count": len(graph), "turtle": turtle, "loaded": False}
+
+    if request.load:
+        store = get_graph_store()
+        try:
+            store.load_turtle(turtle, graph=request.graph)
+        except GraphStoreError as exc:
+            raise HTTPException(status_code=502, detail=f"graph-db-Import fehlgeschlagen: {exc}") from exc
+        response["loaded"] = True
+        response["graph"] = request.graph
+
+    return response
 
 
 @app.get("/ontology")

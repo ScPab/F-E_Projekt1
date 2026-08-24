@@ -96,11 +96,23 @@ Ontologie: [`wissensnetz/ontology/`](wissensnetz/ontology/).
 # Basis-Ontologie (TBox) zur Inspektion
 curl http://localhost:8000/ontology
 
-# GDC-Cases live abrufen und nach RDF/OWL transformieren
+# GDC-Cases live abrufen und nach RDF/OWL transformieren (nur Turtle-Text)
 curl -X POST http://localhost:8000/transform \
   -H "Content-Type: application/json" \
   -d '{"source": "gdc", "project_id": "TCGA-BRCA", "size": 5}'
+
+# Dasselbe, aber zusätzlich direkt in graph-db (Fuseki) schreiben
+curl -X POST http://localhost:8000/transform \
+  -H "Content-Type: application/json" \
+  -d '{"source": "gdc", "project_id": "TCGA-BRCA", "size": 5, "load": true}'
 ```
+
+Mit `"load": true` schreibt der Mediator das erzeugte Turtle direkt per Graph
+Store Protocol in `graph-db` (optional `"graph": "<IRI>"` für einen Named
+Graph) — die Antwort enthält dann zusätzlich `"loaded": true`. Ohne `load`
+bleibt `/transform` wie bisher eine reine Text-Senke (kein Seiteneffekt);
+das Laden erfolgt dann extern, z. B. über
+[`scripts/load_gdc.py`](scripts/load_gdc.py) oder `wissensnetz load`.
 
 Ein vollständiges, lokal ausführbares Beispiel mit TCGA-BRCA-Beispieldaten
 (ohne laufenden Service) liegt unter

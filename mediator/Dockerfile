@@ -8,6 +8,9 @@ WORKDIR /app
 # Mediator-Code als auch das lokale Wrapper-Package (/wrappers) verfügbar sind.
 COPY mediator/environment.yml /app/environment.yml
 COPY wrappers /wrappers
+# Wissensnetz-Package (siehe environment.yml, "-e /wissensnetz") für den
+# direkten graph-db-Import aus POST /transform (load=true).
+COPY wissensnetz /wissensnetz
 
 # Environment aus environment.yml erzeugen. Name laut environment.yml: databridge-mediator.
 RUN mamba env create -f /app/environment.yml && mamba clean --all --yes

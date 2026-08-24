@@ -104,6 +104,15 @@ python scripts/load_gdc.py --project TCGA-BRCA --size 50
 ```
 Optionen: `--size`, `--project`, `--graph <IRI>`, `--mediator-url <url>`.
 
+Alternativ lädt der Mediator direkt selbst (`POST /transform` mit
+`"load": true` schreibt das erzeugte Turtle per Graph Store Protocol in
+`graph-db` — kein externer Zwischenschritt nötig, siehe Root-README):
+```powershell
+curl -X POST http://localhost:8000/transform `
+  -H "Content-Type: application/json" `
+  -d '{\"source\": \"gdc\", \"project_id\": \"TCGA-BRCA\", \"size\": 50, \"load\": true}'
+```
+
 **c) Damit arbeiten:**
 ```powershell
 wissensnetz query "SELECT ?sid WHERE { ?c a db:Case ; db:submitterId ?sid } LIMIT 5"

@@ -30,3 +30,8 @@ dependencies:
       # Dockerfile) — ein relativer Pfad "./wrappers" würde also
       # fälschlich /app/wrappers suchen und fehlschlagen.
       - -e /wrappers
+      # Wissensnetz-Package (Graphstore-Client für graph-db), siehe
+      # wissensnetz/pyproject.toml: "Der Mediator kann es später optional
+      # per pip install -e ./wissensnetz nutzen". Ermöglicht POST /transform
+      # mit load=true (direkter Fuseki-Import statt nur Turtle-Text-Rückgabe).
+      - -e /wissensnetz

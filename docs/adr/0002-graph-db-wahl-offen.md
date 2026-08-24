@@ -90,7 +90,10 @@ Fuseki/TDB2) – es entsteht kein Infrastruktur-Wechsel. Der Service-Name
 
 - Der Mediator bindet die Zugriffsschicht an **SPARQL** (Abfrage) und
   **SPARQL Update** (Schreiben/Knowledge-Transfer); keine Cypher/Gremlin-
-  Kopplung. Diese Anbindung ist noch zu implementieren (aktuell Grundgerüst).
+  Kopplung. Update (2026-08-24): Die Schreib-Anbindung ist umgesetzt — `POST
+  /transform` schreibt bei `load: true` direkt per Graph Store Protocol in
+  `graph-db` (`mediator/app/main.py`, unter Nutzung von
+  `wissensnetz.GraphStore`, siehe `memory/context.md`).
 - **Tooling** für den Wissensnetz-Workstream: `rdflib` (Python, passt zum
   FastAPI-Mediator) für ETL/Serialisierung; Apache Jena/Fuseki als Store und
   SPARQL-Endpoint; Protégé + OWL API für Ontologie-Design und -Evolution.
