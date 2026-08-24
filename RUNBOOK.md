@@ -129,6 +129,15 @@ bokeh serve --show wissensnetz/prototype/mp_lite/app.py
 Öffnet den Browser: Punkte selektieren → Kontext (②); Hypothese eintragen →
 „Selektion als Erkenntnis speichern" (③). Details: `wissensnetz/prototype/README.md`.
 
+## 6b. Wissensnetz visuell ansehen (pyvis)
+```powershell
+python scripts\graph_view.py --limit 500     # erzeugt graph_view.html und öffnet es
+```
+Interaktives Netz aus dem aktuellen Fuseki-Inhalt, farbcodiert: Schema (blau),
+TCGA-Instanzen (grün), Rückkanal/Annotationen (rot), externe Konzepte wie NCIt
+(lila). Einfach erneut ausführen, um das Wachstum zu sehen. `start_all.ps1` ruft
+das beim Start automatisch auf. Optionen: `--limit`, `--output`, `--no-open`.
+
 ## 7. Rückkanal per CLI testen
 ```powershell
 wissensnetz feedback wissensnetz/data/sample/selection_event.json

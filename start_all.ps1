@@ -9,6 +9,7 @@
       4. Wissensnetz initialisieren (Dataset + TBox + Rueckkanal-Vokabular)
       5. Mediator (FastAPI) in eigenem Fenster starten und auf /health warten
       6. TCGA/GDC-Daten ueber die API abrufen und ins Wissensnetz laden
+      6b. Graph-Visualisierung (pyvis, graph_view.html) erzeugen und oeffnen
       7. Oberflaeche (MP-lite, Bokeh) starten - Browser oeffnet sich
 
     Strg+C in diesem Fenster stoppt die Oberflaeche und faehrt danach automatisch
@@ -79,13 +80,17 @@ Info "Projekt-Root: $PSScriptRoot"
 
 # --- 1) Abhaengigkeiten -----------------------------------------------------
 if (-not $SkipInstall) {
-    if (Get-Command wissensnetz -ErrorAction SilentlyContinue) {
-        Good "Abhaengigkeiten vorhanden (wissensnetz gefunden)."
-    } else {
-        Step "Installiere Abhaengigkeiten (pip install -r requirements.txt) ..."
+    $need = $false
+    if (-not (Get-Command wissensnetz -ErrorAction SilentlyContinue)) { $need = $true }
+    python -c "import bokeh, pyvis, requests, rdflib" *> $null
+    if ($LASTEXITCODE -ne 0) { $need = $true }
+    if ($need) {
+        Step "Installiere/aktualisiere Abhaengigkeiten (pip install -r requirements.txt) ..."
         pip install -r requirements.txt
         if ($LASTEXITCODE -ne 0) { Fail "pip install fehlgeschlagen."; exit 1 }
         Good "Abhaengigkeiten installiert."
+    } else {
+        Good "Abhaengigkeiten vorhanden."
     }
 }
 
@@ -152,6 +157,14 @@ if ($SkipLoad) {
     python scripts\load_gdc.py --project $Project --size $Size --mediator-url "http://localhost:$MediatorPort"
     if ($LASTEXITCODE -ne 0) { Fail "GDC-Load fehlgeschlagen (Beispieldaten bleiben nutzbar)." }
     else { Good "GDC-Daten geladen." }
+}
+
+# --- 6b) Wissensnetz visualisieren (pyvis) ---------------------------------
+if (-not $NoUi) {
+    Step "Erzeuge Graph-Visualisierung (pyvis, graph_view.html) ..."
+    python scripts\graph_view.py --limit 500
+    if ($LASTEXITCODE -ne 0) { Fail "Graph-Visualisierung fehlgeschlagen (nicht kritisch)." }
+    else { Good "graph_view.html geoeffnet." }
 }
 
 # --- 7) Oberflaeche (MP-lite) starten --------------------------------------
