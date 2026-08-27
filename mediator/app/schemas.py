@@ -37,6 +37,42 @@ class ManifestRequest(BaseModel):
     size: int = Field(10000, ge=1, le=100000)
 
 
+class GeoQueryRequest(BaseModel):
+    """Suchparameter für POST /geo/query (Metadaten-Tier, GEOWrapper.search)."""
+
+    accession: Optional[str] = Field(None, description='GEO-Accession, z. B. "GSE68849"')
+    organism: Optional[StrOrList] = Field(None, description='z. B. "Homo sapiens"')
+    entry_type: Optional[str] = Field("gse", description="gse (Series), gds, gpl oder gsm")
+    db: str = Field("gds", description="Entrez-Datenbank, Standard: gds")
+    size: int = Field(20, ge=1, le=2000, description="Trefferanzahl pro Seite")
+    from_: int = Field(0, ge=0, alias="from", description="Pagination-Offset")
+
+    model_config = {"populate_by_name": True}
+
+
+class EnaQueryRequest(BaseModel):
+    """Suchparameter für POST /ena/query (Metadaten-Tier, ENAWrapper.search)."""
+
+    result: str = Field("read_run", description="ENA-Ergebnistyp, z. B. read_run, study, sample")
+    study_accession: Optional[StrOrList] = Field(None, description='z. B. "PRJEB1234"')
+    library_strategy: Optional[StrOrList] = Field(None, description='z. B. "RNA-Seq"')
+    instrument_platform: Optional[StrOrList] = Field(None, description='z. B. "ILLUMINA"')
+    fields: Optional[list[str]] = Field(None, description="Gewünschte Rückgabefelder (siehe GET /ena/schema/{result})")
+    size: int = Field(20, ge=1, le=2000, description="Trefferanzahl pro Seite")
+    from_: int = Field(0, ge=0, alias="from", description="Pagination-Offset")
+
+    model_config = {"populate_by_name": True}
+
+
+class CBioMolecularDataRequest(BaseModel):
+    """Suchparameter für POST /cbioportal/molecular-data/{molecular_profile_id}
+    (Bulk-Tier-Äquivalent, CBioPortalWrapper.get_molecular_data)."""
+
+    sample_list_id: str = Field(..., description="ID der Sample-Liste (siehe GET /cbioportal/sample-lists/{study_id})")
+    entrez_gene_ids: list[int] = Field(..., description="Entrez-Gen-IDs, für die Werte abgerufen werden sollen")
+    projection: str = Field("SUMMARY", description="Detailgrad der Antwort laut cBioPortal-API")
+
+
 class TransformRequest(BaseModel):
     """Anfrage für POST /transform (GDC-JSON -> RDF/OWL, siehe app/semantic/mapping.py).
 

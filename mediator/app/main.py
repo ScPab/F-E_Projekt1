@@ -3,8 +3,9 @@ DataBridge Mediator – FastAPI-Grundgerüst.
 
 Der Mediator ist der zentrale Einstiegspunkt der Mediator-Wrapper-Architektur:
 Er nimmt Anfragen entgegen und delegiert sie an die passenden Wrapper-Module
-(aktuell: wrappers/gdc, als Python-Package im selben Container installiert,
-siehe docs/adr/0001-wrapper-als-python-package.md) für die eigentliche
+(wrappers/gdc, wrappers/geo, wrappers/ena, wrappers/cbioportal, als
+Python-Package im selben Container installiert, siehe
+docs/adr/0001-wrapper-als-python-package.md) für die eigentliche
 Datenbeschaffung.
 
 Die hier exponierten Endpunkte (/query, /schema/{endpoint}, /manifest)
@@ -21,12 +22,22 @@ wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL für das zugrundeliegende Konzept).
 
 import os
 
-from fastapi import FastAPI, HTTPException, Response
+from cbioportal import CBioPortalWrapper
+from ena import ENAWrapper
+from fastapi import FastAPI, HTTPException, Query, Response
 from gdc import GDCWrapper, build_filters
+from geo import GEOWrapper
 from requests import RequestException
 from wissensnetz import GraphStore, GraphStoreError
 
-from .schemas import ManifestRequest, QueryRequest, TransformRequest
+from .schemas import (
+    CBioMolecularDataRequest,
+    EnaQueryRequest,
+    GeoQueryRequest,
+    ManifestRequest,
+    QueryRequest,
+    TransformRequest,
+)
 from .semantic import mapping as semantic_mapping
 from .semantic.paths import alignment_path, ontology_path
 
@@ -51,6 +62,12 @@ app = FastAPI(
 # und den Cache-Zugriffspunkt, siehe wrappers/gdc/cache.py).
 _gdc_wrapper: GDCWrapper | None = None
 
+# Analog wiederverwendete Instanzen für die weiteren Wrapper (siehe
+# wrappers/geo, wrappers/ena, wrappers/cbioportal).
+_geo_wrapper: GEOWrapper | None = None
+_ena_wrapper: ENAWrapper | None = None
+_cbioportal_wrapper: CBioPortalWrapper | None = None
+
 # Einzelne, wiederverwendete GraphStore-Instanz (Fuseki-Anbindung für
 # POST /transform mit load=true). Verbindung wird aus ENV gelesen
 # (GRAPH_DB_URL/GRAPH_DB_DATASET/..., siehe wissensnetz/src/wissensnetz/config.py
@@ -65,6 +82,33 @@ def get_gdc_wrapper() -> GDCWrapper:
         base_url = os.environ.get("GDC_API_BASE_URL", "https://api.gdc.cancer.gov")
         _gdc_wrapper = GDCWrapper(base_url)
     return _gdc_wrapper
+
+
+def get_geo_wrapper() -> GEOWrapper:
+    """Liefert eine lazily initialisierte, geteilte GEOWrapper-Instanz."""
+    global _geo_wrapper
+    if _geo_wrapper is None:
+        base_url = os.environ.get("GEO_API_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
+        _geo_wrapper = GEOWrapper(base_url)
+    return _geo_wrapper
+
+
+def get_ena_wrapper() -> ENAWrapper:
+    """Liefert eine lazily initialisierte, geteilte ENAWrapper-Instanz."""
+    global _ena_wrapper
+    if _ena_wrapper is None:
+        base_url = os.environ.get("ENA_API_BASE_URL", "https://www.ebi.ac.uk/ena/portal/api")
+        _ena_wrapper = ENAWrapper(base_url)
+    return _ena_wrapper
+
+
+def get_cbioportal_wrapper() -> CBioPortalWrapper:
+    """Liefert eine lazily initialisierte, geteilte CBioPortalWrapper-Instanz."""
+    global _cbioportal_wrapper
+    if _cbioportal_wrapper is None:
+        base_url = os.environ.get("CBIOPORTAL_API_BASE_URL", "https://www.cbioportal.org/api")
+        _cbioportal_wrapper = CBioPortalWrapper(base_url)
+    return _cbioportal_wrapper
 
 
 def get_graph_store() -> GraphStore:
@@ -136,6 +180,188 @@ async def manifest(request: ManifestRequest) -> dict:
     except RequestException as exc:
         raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
     return {"manifest": content}
+
+
+# ----------------------------------------------------------------------
+# GEO (Gene Expression Omnibus), siehe wrappers/geo/client.py
+# ----------------------------------------------------------------------
+
+
+@app.post("/geo/query")
+async def geo_query(request: GeoQueryRequest) -> dict:
+    """Metadaten-Suche gegen GEO (esearch+esummary), analog zu POST /query."""
+    wrapper = get_geo_wrapper()
+    try:
+        return wrapper.search(
+            accession=request.accession,
+            organism=request.organism,
+            entry_type=request.entry_type,
+            db=request.db,
+            size=request.size,
+            from_=request.from_,
+        )
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"GEO-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+@app.get("/geo/schema")
+async def geo_schema(db: str = "gds") -> dict:
+    """Verfügbare Such-Feld-Tags einer GEO/Entrez-Datenbank (einfo), analog zu GET /schema/{endpoint}."""
+    wrapper = get_geo_wrapper()
+    try:
+        fields = wrapper.get_schema(db)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"GEO-API nicht erreichbar oder Fehler: {exc}") from exc
+    return {"db": db, "fields": fields}
+
+
+@app.get("/geo/ftp-link/{accession}")
+async def geo_ftp_link(accession: str) -> dict:
+    """FTP-Verzeichnislink einer GEO-Accession (Bulk-Tier-Äquivalent zu POST /manifest)."""
+    wrapper = get_geo_wrapper()
+    try:
+        link = wrapper.get_ftp_link(accession)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"GEO-API nicht erreichbar oder Fehler: {exc}") from exc
+    if link is None:
+        raise HTTPException(status_code=404, detail=f"Keine GEO-Accession gefunden: {accession!r}")
+    return {"accession": accession, "ftp_link": link}
+
+
+# ----------------------------------------------------------------------
+# ENA (European Nucleotide Archive), siehe wrappers/ena/client.py
+# ----------------------------------------------------------------------
+
+
+@app.post("/ena/query")
+async def ena_query(request: EnaQueryRequest) -> dict:
+    """Metadaten-Suche gegen ENA (/search), analog zu POST /query."""
+    wrapper = get_ena_wrapper()
+    try:
+        return wrapper.search(
+            result=request.result,
+            study_accession=request.study_accession,
+            library_strategy=request.library_strategy,
+            instrument_platform=request.instrument_platform,
+            fields=request.fields,
+            size=request.size,
+            from_=request.from_,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ENA-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+@app.get("/ena/schema/{result}")
+async def ena_schema(result: str) -> dict:
+    """Verfügbare Feldnamen eines ENA-Ergebnistyps (/returnFields), analog zu GET /schema/{endpoint}."""
+    wrapper = get_ena_wrapper()
+    try:
+        fields = wrapper.get_schema(result)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ENA-API nicht erreichbar oder Fehler: {exc}") from exc
+    return {"result": result, "fields": fields}
+
+
+@app.get("/ena/download-links/{run_accession}")
+async def ena_download_links(run_accession: str) -> dict:
+    """FASTQ-Download-URLs eines Read-Runs (Bulk-Tier-Äquivalent zu POST /manifest)."""
+    wrapper = get_ena_wrapper()
+    try:
+        return wrapper.get_download_links(run_accession)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ENA-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+# ----------------------------------------------------------------------
+# cBioPortal, siehe wrappers/cbioportal/client.py
+# ----------------------------------------------------------------------
+
+
+@app.get("/cbioportal/studies")
+async def cbioportal_studies(
+    keyword: str | None = None,
+    size: int = 20,
+    from_: int = Query(0, alias="from"),
+) -> dict:
+    """Studien-Suche gegen cBioPortal (/studies), analog zu POST /query."""
+    wrapper = get_cbioportal_wrapper()
+    try:
+        return wrapper.list_studies(keyword=keyword, size=size, from_=from_)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+@app.get("/cbioportal/schema/{study_id}")
+async def cbioportal_schema(study_id: str) -> dict:
+    """Klinische Attribut-IDs einer Studie, analog zu GET /schema/{endpoint}."""
+    wrapper = get_cbioportal_wrapper()
+    try:
+        fields = wrapper.get_schema(study_id)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
+    return {"study_id": study_id, "fields": fields}
+
+
+@app.get("/cbioportal/clinical-data/{study_id}")
+async def cbioportal_clinical_data(
+    study_id: str,
+    clinical_data_type: str = "PATIENT",
+    size: int = 20,
+    from_: int = Query(0, alias="from"),
+) -> dict:
+    """Klinische Datenpunkte (Attribut/Wert je Patient oder Sample) einer Studie."""
+    wrapper = get_cbioportal_wrapper()
+    try:
+        return wrapper.get_clinical_data(
+            study_id, clinical_data_type=clinical_data_type, size=size, from_=from_
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+@app.get("/cbioportal/molecular-profiles/{study_id}")
+async def cbioportal_molecular_profiles(study_id: str) -> list[dict]:
+    """Verfügbare molekulare Profile einer Studie (Vorbereitung für /cbioportal/molecular-data)."""
+    wrapper = get_cbioportal_wrapper()
+    try:
+        return wrapper.list_molecular_profiles(study_id)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+@app.get("/cbioportal/sample-lists/{study_id}")
+async def cbioportal_sample_lists(study_id: str) -> list[dict]:
+    """Vordefinierte Sample-Listen einer Studie (Vorbereitung für /cbioportal/molecular-data)."""
+    wrapper = get_cbioportal_wrapper()
+    try:
+        return wrapper.list_sample_lists(study_id)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
+
+
+@app.post("/cbioportal/molecular-data/{molecular_profile_id}")
+async def cbioportal_molecular_data(
+    molecular_profile_id: str, request: CBioMolecularDataRequest
+) -> dict:
+    """Genomische Profildaten für eine Gen-/Sample-Auswahl (Bulk-Tier-Äquivalent zu POST /manifest)."""
+    wrapper = get_cbioportal_wrapper()
+    try:
+        return wrapper.get_molecular_data(
+            molecular_profile_id,
+            sample_list_id=request.sample_list_id,
+            entrez_gene_ids=request.entrez_gene_ids,
+            projection=request.projection,
+        )
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
 
 
 @app.post("/transform")
