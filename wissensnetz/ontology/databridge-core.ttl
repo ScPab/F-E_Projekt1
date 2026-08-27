@@ -132,6 +132,52 @@ db:ageAtDiagnosis a owl:DatatypeProperty ;
     rdfs:domain db:Diagnosis ;
     rdfs:range xsd:integer .
 
+# Weitere Demographic-Felder aus dem GDC-'demographic'-Node (Rohtext, kein
+# Alignment) — für die vollständige Oviedo-MP-Feldliste (Hover in MP-lite).
+db:race a owl:DatatypeProperty ;
+    rdfs:label "race" ;
+    rdfs:comment "Race des Case, wie von GDC geliefert (demographic.race)." ;
+    rdfs:domain db:Demographic ;
+    rdfs:range xsd:string .
+
+db:ethnicity a owl:DatatypeProperty ;
+    rdfs:label "ethnicity" ;
+    rdfs:comment "Ethnicity des Case, wie von GDC geliefert (demographic.ethnicity)." ;
+    rdfs:domain db:Demographic ;
+    rdfs:range xsd:string .
+
+db:vitalStatus a owl:DatatypeProperty ;
+    rdfs:label "vitalStatus" ;
+    rdfs:comment "Vital status des Case, wie von GDC geliefert (demographic.vital_status)." ;
+    rdfs:domain db:Demographic ;
+    rdfs:range xsd:string .
+
+# Weitere Diagnosis-Felder aus dem GDC-'diagnosis'-Node (Rohtext, kein
+# Alignment) — für die vollständige Oviedo-MP-Feldliste (Hover in MP-lite).
+db:tumorStage a owl:DatatypeProperty ;
+    rdfs:label "tumorStage" ;
+    rdfs:comment "Tumor-Stadium der Diagnose, wie von GDC geliefert (diagnoses.ajcc_pathologic_stage bzw. tumor_stage)." ;
+    rdfs:domain db:Diagnosis ;
+    rdfs:range xsd:string .
+
+db:morphology a owl:DatatypeProperty ;
+    rdfs:label "morphology" ;
+    rdfs:comment "Morphologie-Code der Diagnose, wie von GDC geliefert (diagnoses.morphology)." ;
+    rdfs:domain db:Diagnosis ;
+    rdfs:range xsd:string .
+
+db:siteOfResectionOrBiopsy a owl:DatatypeProperty ;
+    rdfs:label "siteOfResectionOrBiopsy" ;
+    rdfs:comment "Ort der Resektion/Biopsie der Diagnose, wie von GDC geliefert (diagnoses.site_of_resection_or_biopsy)." ;
+    rdfs:domain db:Diagnosis ;
+    rdfs:range xsd:string .
+
+db:metastasisAtDiagnosis a owl:DatatypeProperty ;
+    rdfs:label "metastasisAtDiagnosis" ;
+    rdfs:comment "Metastasierung bei Diagnosestellung, wie von GDC geliefert (diagnoses.metastasis_at_diagnosis)." ;
+    rdfs:domain db:Diagnosis ;
+    rdfs:range xsd:string .
+
 # ---------------------------------------------------------------------------
 # Cardinality-Restriktion (required: [primary_diagnosis] im GDC-Schema)
 # ---------------------------------------------------------------------------

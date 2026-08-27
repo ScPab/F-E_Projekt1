@@ -41,6 +41,45 @@ def test_case_context_by_submitter_id(loaded_store: GraphStore) -> None:
     assert diag["aligned_concept"] is None
 
 
+def test_case_context_has_oviedo_fields(loaded_store: GraphStore) -> None:
+    # Aufgabe 5: case_context liefert die neuen Oviedo-MP-Felder als Keys, auch
+    # wenn Mediator/Wrapper sie noch nicht befüllen (Werte dürfen None sein).
+    # Keine Exception, bestehende Felder bleiben intakt.
+    ctx = e.case_context(loaded_store, "TCGA-A1-A0SB")
+    for key in ("race", "ethnicity", "vital_status"):
+        assert key in ctx  # Top-Ebene (Demographic)
+    diag = ctx["diagnoses"][0]
+    for key in ("tumor_stage", "morphology", "site_of_resection_or_biopsy",
+                "has_metastasis"):
+        assert key in diag  # pro Diagnose-Eintrag
+
+
+def test_all_cases_contains_fixture_cases(loaded_store: GraphStore) -> None:
+    # Aufgabe 7: Sammel-Leseabfrage liefert je Fall genau einen Eintrag mit den
+    # erwarteten Keys; die BRCA-Fixture-Fälle sind enthalten. (Der Store kann
+    # weitere Fälle enthalten — daher keine exakte Gesamtzahl prüfen.)
+    cases = e.all_cases(loaded_store)
+    assert isinstance(cases, list) and cases
+    by_sid = {c["submitter_id"]: c for c in cases if c.get("submitter_id")}
+    assert "TCGA-A1-A0SB" in by_sid
+    brca = by_sid["TCGA-A1-A0SB"]
+    assert brca["project_id"] == "TCGA-BRCA"
+    assert brca["gender"] == "female"
+    assert brca["primary_diagnosis"] == "Infiltrating duct carcinoma, NOS"
+    # Neue Aufgabe-5-Felder als Keys vorhanden (Werte dürfen None sein).
+    for key in ("race", "ethnicity", "vital_status", "tumor_stage", "morphology",
+                "site_of_resection_or_biopsy", "has_metastasis"):
+        assert key in brca
+    # ein Eintrag je Fall (keine Duplikate durch mehrere Diagnosen)
+    sids = [c["submitter_id"] for c in cases if c.get("submitter_id")]
+    assert len(sids) == len(set(sids))
+
+
+def test_all_cases_limit(loaded_store: GraphStore) -> None:
+    limited = e.all_cases(loaded_store, limit=2)
+    assert len(limited) <= 2
+
+
 def test_case_context_by_iri(loaded_store: GraphStore) -> None:
     iri = "http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444"
     ctx = e.case_context(loaded_store, iri)

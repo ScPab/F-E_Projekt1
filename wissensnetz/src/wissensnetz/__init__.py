@@ -8,7 +8,13 @@
 from __future__ import annotations
 
 from .config import Settings
-from .enrichment import case_context, diagnosis_context, subclasses, superclasses
+from .enrichment import (
+    all_cases,
+    case_context,
+    diagnosis_context,
+    subclasses,
+    superclasses,
+)
 from .feedback import (
     Hypothesis,
     SelectionEvent,
@@ -29,6 +35,7 @@ __all__ = [
     "superclasses",
     "case_context",
     "diagnosis_context",
+    "all_cases",
     "SelectionEvent",
     "Hypothesis",
     "selection_to_sparql",

@@ -104,6 +104,13 @@ python scripts/load_gdc.py --project TCGA-BRCA --size 50
 ```
 Optionen: `--size`, `--project`, `--graph <IRI>`, `--mediator-url <url>`.
 
+**Alle 32 Oviedo-Kohorten (Pancancer)** für die Krebsarten-Ansicht in MP-Lite:
+```powershell
+python scripts/load_gdc.py --pancancer --size 50
+```
+`--size` gilt pro Projekt; ein fehlschlagendes Projekt bricht den Lauf nicht ab
+(Warnung + Zusammenfassung am Ende). Für eine Teilmenge: `--projects TCGA-ACC,TCGA-BRCA`.
+
 Alternativ lädt der Mediator direkt selbst (`POST /transform` mit
 `"load": true` schreibt das erzeugte Turtle per Graph Store Protocol in
 `graph-db` — kein externer Zwischenschritt nötig, siehe Root-README):

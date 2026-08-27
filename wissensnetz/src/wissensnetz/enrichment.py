@@ -121,9 +121,17 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
     """Kontext zu einem Fall. ``case_ref`` = Case-IRI **oder** ``submitterId``.
 
     Liefert ``{}``, wenn kein Case gefunden wird, sonst ein Dict mit
-    ``case_iri``, ``submitter_id``, ``project_id``, ``gender`` und ``diagnoses``
-    (Liste von ``{iri, label, age_at_diagnosis, aligned_concept}``; letzteres
-    aktuell ``None``, solange kein NCIt-Alignment vorliegt).
+    ``case_iri``, ``submitter_id``, ``project_id``, ``gender``, ``race``,
+    ``ethnicity``, ``vital_status`` (Top-Ebene, aus dem Demographic) und
+    ``diagnoses`` (Liste von ``{iri, label, age_at_diagnosis, aligned_concept,
+    tumor_stage, morphology, site_of_resection_or_biopsy, has_metastasis}``).
+
+    Alle Felder sind **tolerant**: fehlt ein Wert im Graphen, steht ``None``
+    (keine Exception). ``aligned_concept`` bleibt ``None``, solange kein
+    NCIt-Alignment vorliegt; die neuen Demographic-/Diagnose-Felder (race,
+    ethnicity, vital_status, tumor_stage, morphology,
+    site_of_resection_or_biopsy, has_metastasis) bleiben ``None``, bis
+    Mediator/Wrapper sie liefern (siehe HANDOFF_oviedo_felder.md).
     """
     ref = case_ref.strip()
     if _is_iri(ref):
@@ -132,17 +140,29 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         binder = f'?c db:submitterId "{_escape_literal(ref)}" .'
 
     sparql = PREFIXES + f"""
-    SELECT ?c ?sid ?projectId ?gender ?diag ?label ?age ?aligned WHERE {{
+    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus
+           ?diag ?label ?age ?aligned
+           ?tumorStage ?morphology ?siteBiopsy ?metastasis WHERE {{
       {binder}
       ?c a db:Case .
       OPTIONAL {{ ?c db:submitterId ?sid }}
       OPTIONAL {{ ?c db:belongsToProject ?proj . ?proj db:projectId ?projectId }}
-      OPTIONAL {{ ?c db:hasDemographic ?demo . ?demo db:gender ?gender }}
+      OPTIONAL {{
+        ?c db:hasDemographic ?demo .
+        OPTIONAL {{ ?demo db:gender ?gender }}
+        OPTIONAL {{ ?demo db:race ?race }}
+        OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
+        OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
+      }}
       OPTIONAL {{
         ?c db:hasDiagnosis ?diag .
         OPTIONAL {{ ?diag db:primaryDiagnosisLabel ?label }}
         OPTIONAL {{ ?diag db:ageAtDiagnosis ?age }}
         OPTIONAL {{ ?diag db:primaryDiagnosis ?aligned }}
+        OPTIONAL {{ ?diag db:tumorStage ?tumorStage }}
+        OPTIONAL {{ ?diag db:morphology ?morphology }}
+        OPTIONAL {{ ?diag db:siteOfResectionOrBiopsy ?siteBiopsy }}
+        OPTIONAL {{ ?diag db:metastasisAtDiagnosis ?metastasis }}
       }}
     }}
     """
@@ -155,6 +175,9 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         "submitter_id": _first(rows, "sid"),
         "project_id": _first(rows, "projectId"),
         "gender": _first(rows, "gender"),
+        "race": _first(rows, "race"),
+        "ethnicity": _first(rows, "ethnicity"),
+        "vital_status": _first(rows, "vitalStatus"),
         "diagnoses": [],
     }
     seen: set[str] = set()
@@ -165,6 +188,78 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         seen.add(diag)
         result["diagnoses"].append(_diagnosis_row(r, iri=diag))
     return result
+
+
+def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, Any]]:
+    """Sammel-Leseabfrage über **alle** Fälle im Store (für MP-lite Aufgabe 7).
+
+    Genau **eine** SPARQL-SELECT über ``?c a db:Case`` (nicht pro Fall ein
+    :func:`case_context`), die je Fall ein Dict liefert mit ``case_iri``,
+    ``submitter_id``, ``project_id`` (über ``db:belongsToProject``/``db:projectId``),
+    ``gender``, ``race``, ``ethnicity``, ``vital_status`` sowie — aus der ersten
+    Diagnose — ``primary_diagnosis`` (Label), ``tumor_stage``, ``morphology``,
+    ``site_of_resection_or_biopsy`` und ``has_metastasis``.
+
+    Fehlende Werte sind ``None`` (tolerant, wie die übrigen enrichment-Funktionen).
+    Mit ``limit`` wird die **Fall**-Anzahl begrenzt (deterministisch via
+    ``ORDER BY ?c``), ohne dass mehrere Diagnose-Zeilen einen Fall zerschneiden.
+    """
+    inner = "{ SELECT ?c WHERE { ?c a db:Case } ORDER BY ?c"
+    if limit is not None:
+        inner += f" LIMIT {int(limit)}"
+    inner += " }"
+
+    sparql = PREFIXES + f"""
+    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus
+           ?label ?tumorStage ?morphology ?siteBiopsy ?metastasis WHERE {{
+      {inner}
+      ?c a db:Case .
+      OPTIONAL {{ ?c db:submitterId ?sid }}
+      OPTIONAL {{ ?c db:belongsToProject ?proj . ?proj db:projectId ?projectId }}
+      OPTIONAL {{
+        ?c db:hasDemographic ?demo .
+        OPTIONAL {{ ?demo db:gender ?gender }}
+        OPTIONAL {{ ?demo db:race ?race }}
+        OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
+        OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
+      }}
+      OPTIONAL {{
+        ?c db:hasDiagnosis ?diag .
+        OPTIONAL {{ ?diag db:primaryDiagnosisLabel ?label }}
+        OPTIONAL {{ ?diag db:tumorStage ?tumorStage }}
+        OPTIONAL {{ ?diag db:morphology ?morphology }}
+        OPTIONAL {{ ?diag db:siteOfResectionOrBiopsy ?siteBiopsy }}
+        OPTIONAL {{ ?diag db:metastasisAtDiagnosis ?metastasis }}
+      }}
+    }} ORDER BY ?c
+    """
+    # Mehrere Diagnosen ⇒ mehrere Zeilen pro Fall: auf einen Eintrag je Fall
+    # verdichten (erste Diagnose / erster Nicht-Null-Wert gewinnt).
+    _keys = (
+        ("submitter_id", "sid"), ("project_id", "projectId"), ("gender", "gender"),
+        ("race", "race"), ("ethnicity", "ethnicity"), ("vital_status", "vitalStatus"),
+        ("primary_diagnosis", "label"), ("tumor_stage", "tumorStage"),
+        ("morphology", "morphology"), ("site_of_resection_or_biopsy", "siteBiopsy"),
+        ("has_metastasis", "metastasis"),
+    )
+    by_case: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for r in store.query(sparql):
+        c = r.get("c")
+        if not c:
+            continue
+        if c not in by_case:
+            entry: dict[str, Any] = {"case_iri": c}
+            for out_key, var in _keys:
+                entry[out_key] = r.get(var)
+            by_case[c] = entry
+            order.append(c)
+        else:
+            entry = by_case[c]
+            for out_key, var in _keys:
+                if entry[out_key] is None and r.get(var) is not None:
+                    entry[out_key] = r.get(var)
+    return [by_case[c] for c in order]
 
 
 def diagnosis_context(store: GraphStore, diagnosis_ref: str) -> dict[str, Any]:
@@ -216,4 +311,9 @@ def _diagnosis_row(r: dict[str, Any], *, iri: str | None) -> dict[str, Any]:
         "label": r.get("label"),
         "age_at_diagnosis": int(age) if age is not None else None,
         "aligned_concept": r.get("aligned"),
+        # Neue Oviedo-MP-Felder (tolerant: None, bis Mediator/Wrapper sie liefern).
+        "tumor_stage": r.get("tumorStage"),
+        "morphology": r.get("morphology"),
+        "site_of_resection_or_biopsy": r.get("siteBiopsy"),
+        "has_metastasis": r.get("metastasis"),
     }
