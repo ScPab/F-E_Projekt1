@@ -80,6 +80,50 @@ def test_all_cases_limit(loaded_store: GraphStore) -> None:
     assert len(limited) <= 2
 
 
+# --- Sample/type (Aufgabe 8) ----------------------------------------------
+# Hinweis: case_context/all_cases fragen den DEFAULT-Graph ab (kein
+# union-default-graph, s. UNION-Muster in test_graphstore). Ein eigener Named
+# Graph wäre für diese Funktionen unsichtbar — daher wird der Test-Fall in den
+# Default-Graph geladen und im finally per gezieltem DELETE wieder entfernt
+# (Isolation wie bei DROP GRAPH, nur für Default-Graph-Tripel).
+_SMP_CASE = "urn:test:sample#c1"
+_SMP_SAMPLE = "urn:test:sample#s1"
+_SMP_TTL = """
+@prefix db: <http://databridge.hka/onto#> .
+@prefix ex: <urn:test:sample#> .
+ex:c1 a db:Case ; db:submitterId "TEST-SMP-XYZ" ; db:hasSample ex:s1 .
+ex:s1 a db:Sample ; db:sampleType "Primary Tumor" .
+"""
+
+
+@pytest.fixture()
+def sample_store(loaded_store: GraphStore) -> GraphStore:
+    loaded_store.load_turtle(_SMP_TTL)  # Default-Graph
+    try:
+        yield loaded_store
+    finally:
+        loaded_store.update(f"DELETE WHERE {{ <{_SMP_CASE}> ?p ?o }}")
+        loaded_store.update(f"DELETE WHERE {{ <{_SMP_SAMPLE}> ?p ?o }}")
+
+
+def test_case_context_returns_sample_type(sample_store: GraphStore) -> None:
+    ctx = e.case_context(sample_store, "TEST-SMP-XYZ")
+    assert ctx["sample_type"] == "Primary Tumor"
+
+
+def test_all_cases_returns_sample_type(sample_store: GraphStore) -> None:
+    by_sid = {c["submitter_id"]: c for c in e.all_cases(sample_store) if c.get("submitter_id")}
+    assert by_sid["TEST-SMP-XYZ"]["sample_type"] == "Primary Tumor"
+
+
+def test_sample_type_none_without_sample(loaded_store: GraphStore) -> None:
+    # BRCA-Fixture hat kein db:Sample -> sample_type None, keine Exception.
+    ctx = e.case_context(loaded_store, "TCGA-A1-A0SB")
+    assert ctx["sample_type"] is None
+    brca = next(c for c in e.all_cases(loaded_store) if c.get("submitter_id") == "TCGA-A1-A0SB")
+    assert brca["sample_type"] is None
+
+
 def test_case_context_by_iri(loaded_store: GraphStore) -> None:
     iri = "http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444"
     ctx = e.case_context(loaded_store, iri)

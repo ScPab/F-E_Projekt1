@@ -8,7 +8,7 @@ Slider pro Variable**. Die finale Position ist die softmax-gewichtete Summe der
 Encodings (Σ a_i·E[i], a = softmax(10·slider)); der Callback läuft clientseitig
 (CustomJS). Basis-Views „genes"/„miRNA" plus, sofern encodierbar, Kreis-Encodings
 der klinischen Variablen (Aufgabe 5). Variablen ohne Daten erscheinen als
-deaktivierte Slider (ehrliche Datenlücke, siehe HANDOFF_morphing_daten.md).
+deaktivierte Slider (ehrliche Datenlücke, siehe HANDOFF.md).
 
 Kopplung an das Wissensnetz (Paket ``wissensnetz``, in-process — kein REST nötig):
   ② Anreicherung:  Auswahl/Selektion einer Probe → ``enrichment.case_context()``
@@ -129,11 +129,13 @@ _FIELDS = ("cancer", "sample_type", "race", "gender", "ethnicity", "tumor_stage"
 
 
 def _fill_fields(fields: dict[str, list[str]], i: int, *, code: str | None,
-                 race, gender, ethnicity, vital, tumor_stage, morphology,
-                 site, dx, metastasis) -> None:
-    """Eine Zeile der Hover-Spalten setzen (``sample_type`` bleibt "--" — GDC-
-    'sample' ist noch nicht modelliert, siehe HANDOFF_oviedo_felder.md)."""
+                 race, gender, ethnicity, vital, sample_type, tumor_stage,
+                 morphology, site, dx, metastasis) -> None:
+    """Eine Zeile der Hover-Spalten setzen. ``sample_type`` (Oviedo-Spalte 'type')
+    kommt aus ``db:Sample``/``db:sampleType`` (Aufgabe 8) und bleibt "--", bis der
+    Mediator ``samples.sample_type`` mappt (HANDOFF.md, Teil 2)."""
     fields["cancer"][i] = _dash(code)
+    fields["sample_type"][i] = _dash(sample_type)
     fields["race"][i] = _dash(race)
     fields["gender"][i] = _dash(gender)
     fields["ethnicity"][i] = _dash(ethnicity)
@@ -173,6 +175,7 @@ if real_cases:
         _fill_fields(
             fields, i, code=code, race=c.get("race"), gender=c.get("gender"),
             ethnicity=c.get("ethnicity"), vital=c.get("vital_status"),
+            sample_type=c.get("sample_type"),
             tumor_stage=c.get("tumor_stage"), morphology=c.get("morphology"),
             site=c.get("site_of_resection_or_biopsy"),
             dx=c.get("primary_diagnosis"), metastasis=c.get("has_metastasis"),
@@ -201,6 +204,7 @@ else:
             _fill_fields(
                 fields, i, code=code, race=ctx.get("race"), gender=ctx.get("gender"),
                 ethnicity=ctx.get("ethnicity"), vital=ctx.get("vital_status"),
+                sample_type=ctx.get("sample_type"),
                 tumor_stage=d0.get("tumor_stage"), morphology=d0.get("morphology"),
                 site=d0.get("site_of_resection_or_biopsy"), dx=d0.get("label"),
                 metastasis=d0.get("has_metastasis"),
@@ -213,7 +217,7 @@ present_cohorts = [c for c in OVIEDO_COHORTS if c in _present]
 has_uncolored = any(code is None for code in point_codes)
 
 # Basis-Views „genes"/„miRNA" bleiben synthetische Platzhalter (bis Expressions-
-# daten integriert sind, siehe HANDOFF_morphing_daten.md) — Punktzahl an die
+# daten integriert sind, siehe HANDOFF.md) — Punktzahl an die
 # echte Fallzahl N angepasst, deterministisch erzeugt.
 rng = np.random.default_rng(42)
 L0 = rng.normal(0.0, 2.5, size=(N, 2))
@@ -358,7 +362,7 @@ if disabled_vars:
     _missing_text = (
         "<b>Ohne Daten deaktiviert:</b> " + ", ".join(disabled_vars)
         + " — noch keine Werte im Graphen. Sobald Mediator/Wrapper sie liefern, "
-        "werden die Slider automatisch aktiv (siehe HANDOFF_morphing_daten.md)."
+        "werden die Slider automatisch aktiv (siehe HANDOFF.md)."
     )
 else:
     _missing_text = "<i>Alle Variablen encodierbar.</i>"

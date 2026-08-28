@@ -14,7 +14,7 @@ fremden Code oder sklearn-Pflicht:
 
 Fehlende Werte (``None``, ``""``, ``"--"``, ``NaN``) landen im Ursprung ``(0, 0)``
 bzw. tragen nichts zur Achse bei — so bleibt die App tolerant, solange
-Mediator/Wrapper viele Felder noch nicht liefern (siehe HANDOFF_morphing_daten.md).
+Mediator/Wrapper viele Felder noch nicht liefern (siehe HANDOFF.md).
 Alle Funktionen liefern ``(n, 2)``-``float``-Arrays in der Reihenfolge der
 Eingabe.
 """

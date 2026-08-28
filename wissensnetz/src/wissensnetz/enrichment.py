@@ -131,7 +131,9 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
     NCIt-Alignment vorliegt; die neuen Demographic-/Diagnose-Felder (race,
     ethnicity, vital_status, tumor_stage, morphology,
     site_of_resection_or_biopsy, has_metastasis) bleiben ``None``, bis
-    Mediator/Wrapper sie liefern (siehe HANDOFF_oviedo_felder.md).
+    Mediator/Wrapper sie liefern (siehe HANDOFF.md). ``sample_type`` (erster
+    Sample-Wert, analog ``gender``) bleibt ``None``, bis der Mediator
+    ``samples.sample_type`` auf ``db:sampleType`` mappt (HANDOFF.md, Teil 2).
     """
     ref = case_ref.strip()
     if _is_iri(ref):
@@ -140,7 +142,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         binder = f'?c db:submitterId "{_escape_literal(ref)}" .'
 
     sparql = PREFIXES + f"""
-    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus
+    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus ?sampleType
            ?diag ?label ?age ?aligned
            ?tumorStage ?morphology ?siteBiopsy ?metastasis WHERE {{
       {binder}
@@ -154,6 +156,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
         OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
       }}
+      OPTIONAL {{ ?c db:hasSample ?sample . ?sample db:sampleType ?sampleType }}
       OPTIONAL {{
         ?c db:hasDiagnosis ?diag .
         OPTIONAL {{ ?diag db:primaryDiagnosisLabel ?label }}
@@ -178,6 +181,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         "race": _first(rows, "race"),
         "ethnicity": _first(rows, "ethnicity"),
         "vital_status": _first(rows, "vitalStatus"),
+        "sample_type": _first(rows, "sampleType"),
         "diagnoses": [],
     }
     seen: set[str] = set()
@@ -196,13 +200,16 @@ def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, 
     Genau **eine** SPARQL-SELECT über ``?c a db:Case`` (nicht pro Fall ein
     :func:`case_context`), die je Fall ein Dict liefert mit ``case_iri``,
     ``submitter_id``, ``project_id`` (über ``db:belongsToProject``/``db:projectId``),
-    ``gender``, ``race``, ``ethnicity``, ``vital_status`` sowie — aus der ersten
-    Diagnose — ``primary_diagnosis`` (Label), ``tumor_stage``, ``morphology``,
-    ``site_of_resection_or_biopsy`` und ``has_metastasis``.
+    ``gender``, ``race``, ``ethnicity``, ``vital_status``, ``sample_type`` (erster
+    Sample-Wert) sowie — aus der ersten Diagnose — ``primary_diagnosis`` (Label),
+    ``tumor_stage``, ``morphology``, ``site_of_resection_or_biopsy`` und
+    ``has_metastasis``.
 
-    Fehlende Werte sind ``None`` (tolerant, wie die übrigen enrichment-Funktionen).
-    Mit ``limit`` wird die **Fall**-Anzahl begrenzt (deterministisch via
-    ``ORDER BY ?c``), ohne dass mehrere Diagnose-Zeilen einen Fall zerschneiden.
+    Fehlende Werte sind ``None`` (tolerant, wie die übrigen enrichment-Funktionen);
+    ``sample_type`` bleibt ``None``, bis der Mediator ``samples.sample_type`` auf
+    ``db:sampleType`` mappt (siehe HANDOFF.md, Teil 2). Mit ``limit`` wird die
+    **Fall**-Anzahl begrenzt (deterministisch via ``ORDER BY ?c``), ohne dass
+    mehrere Diagnose-Zeilen einen Fall zerschneiden.
     """
     inner = "{ SELECT ?c WHERE { ?c a db:Case } ORDER BY ?c"
     if limit is not None:
@@ -210,7 +217,7 @@ def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, 
     inner += " }"
 
     sparql = PREFIXES + f"""
-    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus
+    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus ?sampleType
            ?label ?tumorStage ?morphology ?siteBiopsy ?metastasis WHERE {{
       {inner}
       ?c a db:Case .
@@ -223,6 +230,7 @@ def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, 
         OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
         OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
       }}
+      OPTIONAL {{ ?c db:hasSample ?sample . ?sample db:sampleType ?sampleType }}
       OPTIONAL {{
         ?c db:hasDiagnosis ?diag .
         OPTIONAL {{ ?diag db:primaryDiagnosisLabel ?label }}
@@ -238,6 +246,7 @@ def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, 
     _keys = (
         ("submitter_id", "sid"), ("project_id", "projectId"), ("gender", "gender"),
         ("race", "race"), ("ethnicity", "ethnicity"), ("vital_status", "vitalStatus"),
+        ("sample_type", "sampleType"),
         ("primary_diagnosis", "label"), ("tumor_stage", "tumorStage"),
         ("morphology", "morphology"), ("site_of_resection_or_biopsy", "siteBiopsy"),
         ("has_metastasis", "metastasis"),

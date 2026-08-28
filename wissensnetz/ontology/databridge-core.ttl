@@ -43,6 +43,10 @@ db:Diagnosis a owl:Class ;
     rdfs:label "Diagnosis" ;
     rdfs:comment "Text term for histologic diagnosis (GDC-Node 'diagnosis')." .
 
+db:Sample a owl:Class ;
+    rdfs:label "Sample" ;
+    rdfs:comment "Entspricht GDC-Node 'sample': ein Biospecimen/Probe eines Case (z. B. Primary Tumor, Solid Tissue Normal)." .
+
 # ---------------------------------------------------------------------------
 # Object Properties (links + backref -> owl:inverseOf)
 # ---------------------------------------------------------------------------
@@ -67,6 +71,19 @@ db:hasDemographic a owl:ObjectProperty ;
 db:isDemographicOf a owl:ObjectProperty ;
     rdfs:label "isDemographicOf" ;
     rdfs:domain db:Demographic ;
+    rdfs:range db:Case .
+
+# link: samples (Case -> Sample), backref: case (Sample -> Case) — analog zu
+# hasDemographic/isDemographicOf.
+db:hasSample a owl:ObjectProperty ;
+    rdfs:label "hasSample" ;
+    rdfs:domain db:Case ;
+    rdfs:range db:Sample ;
+    owl:inverseOf db:isSampleOf .
+
+db:isSampleOf a owl:ObjectProperty ;
+    rdfs:label "isSampleOf" ;
+    rdfs:domain db:Sample ;
     rdfs:range db:Case .
 
 # link: cases (Diagnosis -> Case), backref: diagnoses (Case -> Diagnosis) —
@@ -176,6 +193,14 @@ db:metastasisAtDiagnosis a owl:DatatypeProperty ;
     rdfs:label "metastasisAtDiagnosis" ;
     rdfs:comment "Metastasierung bei Diagnosestellung, wie von GDC geliefert (diagnoses.metastasis_at_diagnosis)." ;
     rdfs:domain db:Diagnosis ;
+    rdfs:range xsd:string .
+
+# Sample-Typ aus dem GDC-'sample'-Node (Rohtext, kein Alignment) — trägt die
+# Oviedo-Hover-Spalte 'type' (z. B. "Primary Tumor" / "Solid Tissue Normal").
+db:sampleType a owl:DatatypeProperty ;
+    rdfs:label "sampleType" ;
+    rdfs:comment "Sample-/Biospecimen-Typ, wie von GDC geliefert (samples.sample_type)." ;
+    rdfs:domain db:Sample ;
     rdfs:range xsd:string .
 
 # ---------------------------------------------------------------------------
