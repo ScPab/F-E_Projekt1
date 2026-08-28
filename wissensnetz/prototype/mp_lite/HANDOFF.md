@@ -129,7 +129,12 @@ Oviedo-Cancer-Map".
 
 ## Kurz-Checkliste
 
-- [ ] Julian: GDC-Wrapper fragt die 7 klinischen Felder (+ optional disease_type) an.
+- [x] Julian: GDC-Wrapper fragt die 7 klinischen Felder (+ optional disease_type) an
+      — kein Code-Änderung nötig, `GDCWrapper.query()`/`.search()` reichen `fields`
+      generisch durch; live gegen die echte GDC-API verifiziert (2026-08-28):
+      alle 7 Felder existieren im `cases`-Schema und liefern echte Werte, außer
+      `diagnoses.tumor_stage` (existiert nicht — `diagnoses.ajcc_pathologic_stage`
+      verwenden, siehe Feld-Tabelle oben).
 - [ ] Pablo: Mediator mappt sie auf `db:race/ethnicity/vitalStatus/tumorStage/
       morphology/siteOfResectionOrBiopsy/metastasisAtDiagnosis`; Fixture neu gezogen.
 - [x] Marcel: `db:Sample`-Modell für `type` angelegt (Teil 2, Schritte 1/2/4 erledigt).

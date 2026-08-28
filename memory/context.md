@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-08-24
+Stand: 2026-08-28
 
 ## Ziel
 
@@ -37,6 +37,16 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 
 ## Offene Punkte
 
+- Mediator-Anbindung für die drei neuen Wrapper `geo`/`ena`/`cbioportal`
+  (Routing analog zu `/query`, `/schema/{endpoint}` für `gdc` in
+  `mediator/app/main.py`) — noch offen.
+- Mediator muss die 7 neuen klinischen GDC-Felder + `sample_type` auf die
+  bereits deklarierten `db:`-Properties mappen (`TRANSFORM_CASE_FIELDS` in
+  `mediator/app/main.py`, `cases_to_graph` in
+  `mediator/app/semantic/mapping.py`); danach `cases_brca_sample.ttl`
+  neu ziehen. Siehe `wissensnetz/prototype/mp_lite/HANDOFF.md` Teil 1/2.
+- Team-Entscheidung Expressionsdaten (Graph vs. h5ad-Seitenkanal) für die
+  Morphing-Slider `genes`/`miRNA`/Einzelmarker — siehe HANDOFF.md Teil 3.
 - Wahl der Frontend-/Visualisierungstechnologie.
 - Ontologie-/Schema-Design des Wissensnetzes über den jetzigen Kern-Ausschnitt
   hinaus (weitere GDC-Nodes, Wiederverwendung von GO/SO neben NCIt/DO).
@@ -49,6 +59,39 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `gdc-client`-Bulk-Download.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
+
+## Umgesetzt seit letztem Stand (2026-08-28)
+
+- Drei neue Wrapper analog zu `wrappers/gdc` (Julian): `wrappers/geo`,
+  `wrappers/ena`, `wrappers/cbioportal` — je eigenständiges Python-Unterpaket
+  gemäß ADR-0001, mit Metadaten-Suche, Schema-Introspektion und
+  Bulk-Tier-Äquivalent; live gegen die echten APIs verifiziert. `to_anndata`
+  bewusst `NotImplementedError` (außerhalb Wrapper-Scope). **Noch nicht an
+  den Mediator angebunden** (kein `/query`/`/schema`-Routing in
+  `mediator/app/main.py` für diese drei Quellen).
+- Pytest-Unit-Tests für `wrappers/gdc` ergänzt (gemocktes `requests`,
+  kein Netzwerkzugriff): `build_filters`, `query`/`search`-Pagination,
+  `get_schema`, Fehlerfälle (HTTP-Fehler, unbekannter Endpunkt).
+- Wissensnetz-Seite (Marcel) hat MP-lite in mehreren Schritten an das
+  Original-Tool von Oviedo angeglichen (Aufgaben 5–8, siehe
+  `wissensnetz/TASKS_aufgabe5.md` bis `_aufgabe8.md`): Hover mit voller
+  Oviedo-Feldliste, Multi-Variablen-Morphing (ein Slider pro Variable,
+  clientseitig), alle 32 TCGA-Kohorten (Pancancer) über `scripts/load_gdc.py
+  --pancancer`, sowie ein `db:Sample`-Modell für das Feld `type`
+  (`sample_type`). Offene Gegenstücke dazu sind in
+  `wissensnetz/prototype/mp_lite/HANDOFF.md` present: Mediator muss die
+  neuen klinischen Felder (race/ethnicity/vital_status/tumor_stage/
+  morphology/site_of_resection_or_biopsy/has_metastasis/sample_type) auf die
+  bereits deklarierten `db:`-Properties mappen (Pablo) — Wrapper-seitig
+  (Julian) ist das bereits möglich, siehe unten.
+- GDC-Wrapper-seitige Prüfung für HANDOFF Teil 1a (Julian): live gegen die
+  echte GDC-API verifiziert, dass `GDCWrapper.query()`/`.search()` die 7
+  angeforderten klinischen Felder (`demographic.race/ethnicity/vital_status`,
+  `diagnoses.morphology/site_of_resection_or_biopsy/
+  ajcc_pathologic_stage/metastasis_at_diagnosis`) unverändert unterstützen —
+  der `fields`-Parameter wird generisch durchgereicht, kein Wrapper-Code
+  nötig. `diagnoses.tumor_stage` existiert im aktuellen GDC-Schema **nicht**
+  (stattdessen `ajcc_pathologic_stage` verwenden).
 
 ## Umgesetzt seit letztem Stand (2026-08-24)
 

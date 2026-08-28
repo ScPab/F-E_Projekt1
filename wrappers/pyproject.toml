@@ -11,8 +11,14 @@ dependencies = [
     "requests",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 # Jedes Unterverzeichnis (z. B. gdc/) ist ein eigenständiges Wrapper-Modul für
 # genau eine Datenquelle. Neue Quellen werden als neues Unterpaket ergänzt,
 # ohne bestehende Wrapper oder den Mediator anzufassen.
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
