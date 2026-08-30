@@ -1,40 +1,86 @@
 {
-  "_hinweis": "Illustratives Beispiel für scripts/example_gdc_to_rdf.py und POST /transform. Keine echten Patientendaten — Form entspricht GDCWrapper.search('cases', fields=[...]) für TCGA-BRCA (case_id, submitter_id, project.project_id, demographic.gender, diagnoses[].primary_diagnosis/age_at_diagnosis).",
+  "_hinweis": "Illustratives Beispiel für scripts/example_gdc_to_rdf.py und POST /transform. Keine echten Patientendaten — Form entspricht GDCWrapper.search('cases', fields=TRANSFORM_CASE_FIELDS) für TCGA-BRCA (case_id, submitter_id, project.project_id, demographic.gender/race/ethnicity/vital_status, diagnoses[].primary_diagnosis/age_at_diagnosis/morphology/site_of_resection_or_biopsy/ajcc_pathologic_stage/metastasis_at_diagnosis, samples[].sample_id/sample_type).",
   "cases": [
     {
       "case_id": "11111111-1111-4111-8111-111111111111",
       "submitter_id": "TCGA-A1-A0SB",
       "project": { "project_id": "TCGA-BRCA" },
-      "demographic": { "gender": "female" },
+      "demographic": { "gender": "female", "race": "white", "ethnicity": "not hispanic or latino", "vital_status": "Alive" },
       "diagnoses": [
-        { "diagnosis_id": "d-11111111", "primary_diagnosis": "Infiltrating duct carcinoma, NOS", "age_at_diagnosis": 21200 }
+        {
+          "diagnosis_id": "d-11111111",
+          "primary_diagnosis": "Infiltrating duct carcinoma, NOS",
+          "age_at_diagnosis": 21200,
+          "morphology": "8500/3",
+          "site_of_resection_or_biopsy": "Breast, NOS",
+          "ajcc_pathologic_stage": "Stage IIA",
+          "metastasis_at_diagnosis": "No"
+        }
+      ],
+      "samples": [
+        { "sample_id": "s-11111111-01", "sample_type": "Primary Tumor" },
+        { "sample_id": "s-11111111-10", "sample_type": "Solid Tissue Normal" }
       ]
     },
     {
       "case_id": "22222222-2222-4222-8222-222222222222",
       "submitter_id": "TCGA-A1-A0SD",
       "project": { "project_id": "TCGA-BRCA" },
-      "demographic": { "gender": "female" },
+      "demographic": { "gender": "female", "race": "black or african american", "ethnicity": "not hispanic or latino", "vital_status": "Alive" },
       "diagnoses": [
-        { "diagnosis_id": "d-22222222", "primary_diagnosis": "Lobular carcinoma, NOS", "age_at_diagnosis": 19870 }
+        {
+          "diagnosis_id": "d-22222222",
+          "primary_diagnosis": "Lobular carcinoma, NOS",
+          "age_at_diagnosis": 19870,
+          "morphology": "8520/3",
+          "site_of_resection_or_biopsy": "Breast, NOS",
+          "ajcc_pathologic_stage": "Stage IB",
+          "metastasis_at_diagnosis": "No"
+        }
+      ],
+      "samples": [
+        { "sample_id": "s-22222222-01", "sample_type": "Primary Tumor" }
       ]
     },
     {
       "case_id": "33333333-3333-4333-8333-333333333333",
       "submitter_id": "TCGA-A1-A0SE",
       "project": { "project_id": "TCGA-BRCA" },
-      "demographic": { "gender": "female" },
+      "demographic": { "gender": "female", "race": "white", "ethnicity": "hispanic or latino", "vital_status": "Dead" },
       "diagnoses": [
-        { "diagnosis_id": "d-33333333", "primary_diagnosis": "Infiltrating duct carcinoma, NOS", "age_at_diagnosis": 25630 }
+        {
+          "diagnosis_id": "d-33333333",
+          "primary_diagnosis": "Infiltrating duct carcinoma, NOS",
+          "age_at_diagnosis": 25630,
+          "morphology": "8500/3",
+          "site_of_resection_or_biopsy": "Breast, NOS",
+          "ajcc_pathologic_stage": "Stage IIIA",
+          "metastasis_at_diagnosis": "Yes"
+        }
+      ],
+      "samples": [
+        { "sample_id": "s-33333333-01", "sample_type": "Primary Tumor" },
+        { "sample_id": "s-33333333-10", "sample_type": "Solid Tissue Normal" }
       ]
     },
     {
       "case_id": "44444444-4444-4444-8444-444444444444",
       "submitter_id": "TCGA-A1-A0SH",
       "project": { "project_id": "TCGA-BRCA" },
-      "demographic": { "gender": "male" },
+      "demographic": { "gender": "male", "race": "asian", "ethnicity": "not hispanic or latino", "vital_status": "Alive" },
       "diagnoses": [
-        { "diagnosis_id": "d-44444444", "primary_diagnosis": "Adenocarcinoma, NOS", "age_at_diagnosis": 23360 }
+        {
+          "diagnosis_id": "d-44444444",
+          "primary_diagnosis": "Adenocarcinoma, NOS",
+          "age_at_diagnosis": 23360,
+          "morphology": "8140/3",
+          "site_of_resection_or_biopsy": "Breast, NOS",
+          "ajcc_pathologic_stage": "Stage I",
+          "metastasis_at_diagnosis": "No"
+        }
+      ],
+      "samples": [
+        { "sample_id": "s-44444444-01", "sample_type": "Primary Tumor" }
       ]
     }
   ]

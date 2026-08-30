@@ -42,14 +42,30 @@ from .semantic import mapping as semantic_mapping
 from .semantic.paths import alignment_path, ontology_path
 
 # Felder für den Live-Abruf von POST /transform (Kern-Ausschnitt
-# case/project/demographic/diagnosis, siehe app/semantic/mapping.py).
+# case/project/demographic/diagnosis/samples, siehe app/semantic/mapping.py).
+# Erweitert um die volle Oviedo-Hover-Feldliste (siehe
+# wissensnetz/prototype/mp_lite/HANDOFF.md, Teil 1/2): race/ethnicity/
+# vital_status (demographic), morphology/site_of_resection_or_biopsy/
+# ajcc_pathologic_stage/metastasis_at_diagnosis (diagnoses) sowie
+# sample_id/sample_type (samples) — live gegen die GDC-API verifiziert
+# (siehe HANDOFF.md-Checkliste, 2026-08-28); `diagnoses.tumor_stage`
+# existiert dort nicht, daher `diagnoses.ajcc_pathologic_stage`.
 TRANSFORM_CASE_FIELDS = [
     "case_id",
     "submitter_id",
     "project.project_id",
     "demographic.gender",
+    "demographic.race",
+    "demographic.ethnicity",
+    "demographic.vital_status",
     "diagnoses.primary_diagnosis",
     "diagnoses.age_at_diagnosis",
+    "diagnoses.morphology",
+    "diagnoses.site_of_resection_or_biopsy",
+    "diagnoses.ajcc_pathologic_stage",
+    "diagnoses.metastasis_at_diagnosis",
+    "samples.sample_id",
+    "samples.sample_type",
 ]
 
 app = FastAPI(

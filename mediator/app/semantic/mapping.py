@@ -1,8 +1,10 @@
 """Regelbasiertes GDC-Case-JSON -> RDF/OWL-Mapping (ABox).
 
 Setzt die Konstrukt-Regeln aus wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL für
-den Kern-Ausschnitt case/project/demographic/diagnosis um (Ontologie/TBox
-siehe wissensnetz/ontology/databridge-core.ttl): enum-Werte werden — wo eine
+den Ausschnitt case/project/demographic/diagnosis/samples um (Ontologie/TBox
+siehe wissensnetz/ontology/databridge-core.ttl, inkl. der für die
+Oviedo-Hover-Feldliste ergänzten Properties — siehe
+wissensnetz/prototype/mp_lite/HANDOFF.md): enum-Werte werden — wo eine
 Alignment-Tabelle einen Treffer liefert — auf externe Bio-Ontologien (hier:
 NCIt für primary_diagnosis) abgebildet, sonst bleibt der Rohtext als Literal
 erhalten. Kanten-Provenienz/-Konfidenz für Alignment-Aussagen werden über
@@ -66,11 +68,14 @@ def cases_to_graph(
     *,
     alignment: dict[str, str] | None = None,
 ) -> tuple[Graph, list[StarAnnotation]]:
-    """Übersetzt GDC-`cases`-Treffer in RDF-Tripel (case/project/demographic/diagnoses).
+    """Übersetzt GDC-`cases`-Treffer in RDF-Tripel (case/project/demographic/diagnoses/samples).
 
     Erwartet die verschachtelte Form, wie sie GDCWrapper.search("cases",
-    fields=[...]) liefert (project.project_id, demographic.gender,
-    diagnoses[].primary_diagnosis, diagnoses[].age_at_diagnosis).
+    fields=[...]) liefert (project.project_id, demographic.gender/race/
+    ethnicity/vital_status, diagnoses[].primary_diagnosis/age_at_diagnosis/
+    morphology/site_of_resection_or_biopsy/ajcc_pathologic_stage/
+    metastasis_at_diagnosis, samples[].sample_id/sample_type — siehe
+    TRANSFORM_CASE_FIELDS in app/main.py für die vollständige Feldliste).
 
     Gibt den Haupt-Graphen sowie eine Liste offener RDF-star-Annotationen
     zurück (Provenienz/Konfidenz für erfolgreiche NCIt-Alignments) — diese
@@ -109,8 +114,23 @@ def cases_to_graph(
             graph.add((demo_iri, RDF.type, DB.Demographic))
             if demographic.get("gender"):
                 graph.add((demo_iri, DB.gender, Literal(demographic["gender"], datatype=XSD.string)))
+            if demographic.get("race"):
+                graph.add((demo_iri, DB.race, Literal(demographic["race"], datatype=XSD.string)))
+            if demographic.get("ethnicity"):
+                graph.add((demo_iri, DB.ethnicity, Literal(demographic["ethnicity"], datatype=XSD.string)))
+            if demographic.get("vital_status"):
+                graph.add((demo_iri, DB.vitalStatus, Literal(demographic["vital_status"], datatype=XSD.string)))
             graph.add((case_iri, DB.hasDemographic, demo_iri))
             graph.add((demo_iri, DB.isDemographicOf, case_iri))
+
+        for idx, sample in enumerate(case.get("samples") or []):
+            sample_key = sample.get("sample_id") or f"{case_id}-sample{idx}"
+            sample_iri = URIRef(f"{INSTANCE_BASE}sample/{_slug(sample_key)}")
+            graph.add((sample_iri, RDF.type, DB.Sample))
+            if sample.get("sample_type"):
+                graph.add((sample_iri, DB.sampleType, Literal(sample["sample_type"], datatype=XSD.string)))
+            graph.add((case_iri, DB.hasSample, sample_iri))
+            graph.add((sample_iri, DB.isSampleOf, case_iri))
 
         for idx, diagnosis in enumerate(case.get("diagnoses") or []):
             diag_key = diagnosis.get("diagnosis_id") or f"{case_id}-diag{idx}"
@@ -133,6 +153,30 @@ def cases_to_graph(
             if diagnosis.get("age_at_diagnosis") is not None:
                 graph.add(
                     (diag_iri, DB.ageAtDiagnosis, Literal(diagnosis["age_at_diagnosis"], datatype=XSD.integer))
+                )
+
+            if diagnosis.get("morphology"):
+                graph.add((diag_iri, DB.morphology, Literal(diagnosis["morphology"], datatype=XSD.string)))
+            if diagnosis.get("site_of_resection_or_biopsy"):
+                graph.add(
+                    (
+                        diag_iri,
+                        DB.siteOfResectionOrBiopsy,
+                        Literal(diagnosis["site_of_resection_or_biopsy"], datatype=XSD.string),
+                    )
+                )
+            # GDC liefert das Tumor-Stadium unter `ajcc_pathologic_stage`, nicht
+            # unter dem älteren `tumor_stage` (live gegen die GDC-API verifiziert,
+            # siehe wissensnetz/prototype/mp_lite/HANDOFF.md).
+            if diagnosis.get("ajcc_pathologic_stage"):
+                graph.add((diag_iri, DB.tumorStage, Literal(diagnosis["ajcc_pathologic_stage"], datatype=XSD.string)))
+            if diagnosis.get("metastasis_at_diagnosis"):
+                graph.add(
+                    (
+                        diag_iri,
+                        DB.metastasisAtDiagnosis,
+                        Literal(diagnosis["metastasis_at_diagnosis"], datatype=XSD.string),
+                    )
                 )
 
     return graph, star_annotations

@@ -85,7 +85,7 @@ Schritte (Reihenfolge; Owner in Klammern):
    `db:hasSample`/`db:isSampleOf` (Case ↔ Sample) in `databridge-core.ttl`.
 2. ✅ **erledigt** (Marcel/Wissensnetz) — Datatype-Property `db:sampleType`
    (`rdfs:domain db:Sample`, `xsd:string`).
-3. ⬜ **offen** (Pablo/Mediator) — `samples.sample_type` auf `db:sampleType`
+3. ✅ **erledigt** (Pablo/Mediator) — `samples.sample_type` auf `db:sampleType`
    mappen: `TRANSFORM_CASE_FIELDS` (`mediator/app/main.py`) + `cases_to_graph`
    (`mediator/app/semantic/mapping.py`) müssen je Sample einen `db:Sample`-Knoten
    an den Case hängen (`db:hasSample`) und `samples.sample_type` als
@@ -135,8 +135,11 @@ Oviedo-Cancer-Map".
       alle 7 Felder existieren im `cases`-Schema und liefern echte Werte, außer
       `diagnoses.tumor_stage` (existiert nicht — `diagnoses.ajcc_pathologic_stage`
       verwenden, siehe Feld-Tabelle oben).
-- [ ] Pablo: Mediator mappt sie auf `db:race/ethnicity/vitalStatus/tumorStage/
-      morphology/siteOfResectionOrBiopsy/metastasisAtDiagnosis`; Fixture neu gezogen.
+- [x] Pablo: Mediator mappt sie auf `db:race/ethnicity/vitalStatus/tumorStage/
+      morphology/siteOfResectionOrBiopsy/metastasisAtDiagnosis`; Fixture neu gezogen
+      (`TRANSFORM_CASE_FIELDS` + `cases_to_graph` in `mediator/app/main.py` bzw.
+      `mediator/app/semantic/mapping.py` erweitert; Beispieldaten in
+      `mediator/sample_data/cases_brca_sample.json` um die neuen Felder ergänzt).
 - [x] Marcel: `db:Sample`-Modell für `type` angelegt (Teil 2, Schritte 1/2/4 erledigt).
-- [ ] Pablo: Mediator mappt `samples.sample_type` → `db:hasSample`/`db:sampleType`; Fixture neu (Teil 2, Schritt 3).
+- [x] Pablo: Mediator mappt `samples.sample_type` → `db:hasSample`/`db:sampleType`; Fixture neu (Teil 2, Schritt 3).
 - [ ] Team: Architekturentscheidung Expressionsdaten (Graph vs. h5ad-Seitenkanal, Teil 3).

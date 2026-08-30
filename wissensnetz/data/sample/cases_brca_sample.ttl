@@ -7,75 +7,128 @@
 # Bei Änderungen am Mapping neu aus dem Mediator ziehen — hier NICHT von Hand
 # pflegen (Komponentengrenze: der Mediator besitzt das GDC->RDF-Mapping).
 #
-# Alignment-Tabelle war leer -> primary_diagnosis nur als Literal
-# (db:primaryDiagnosisLabel), kein db:primaryDiagnosis/NCIt und daher auch
-# keine RDF-star-Bloecke. 58 Tripel aus 4 Cases.
+# Neu gezogen für die Oviedo-Hover-Feldliste (siehe
+# wissensnetz/prototype/mp_lite/HANDOFF.md, Teil 1+2): demographic.race/
+# ethnicity/vital_status, diagnoses.morphology/site_of_resection_or_biopsy/
+# ajcc_pathologic_stage(->tumorStage)/metastasis_at_diagnosis sowie je Case
+# db:Sample-Knoten (db:hasSample/db:sampleType) aus samples.sample_id/
+# sample_type.
+#
+# Alignment-Tabelle enthält inzwischen 3 Einträge (ontology/alignment/
+# ncit_primary_diagnosis.json) -> 3 der 4 Diagnosen zusätzlich als
+# db:primaryDiagnosis (NCIt) mit RDF-star-Provenienz/-Konfidenz; die 4.
+# ("Adenocarcinoma, NOS") bleibt Literal (db:primaryDiagnosisLabel), da ohne
+# Alignment-Eintrag. 113 Tripel (Hauptgraph) aus 4 Cases + 3 RDF-star-Blöcke.
 
 @prefix db: <http://databridge.hka/onto#> .
+@prefix ncit: <http://purl.obolibrary.org/obo/NCIT_> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 <http://databridge.hka/instance/demographic/11111111-1111-4111-8111-111111111111> a db:Demographic ;
+    db:ethnicity "not hispanic or latino"^^xsd:string ;
     db:gender "female"^^xsd:string ;
-    db:isDemographicOf <http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> .
+    db:isDemographicOf <http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> ;
+    db:race "white"^^xsd:string ;
+    db:vitalStatus "Alive"^^xsd:string .
 
 <http://databridge.hka/instance/demographic/22222222-2222-4222-8222-222222222222> a db:Demographic ;
+    db:ethnicity "not hispanic or latino"^^xsd:string ;
     db:gender "female"^^xsd:string ;
-    db:isDemographicOf <http://databridge.hka/instance/case/22222222-2222-4222-8222-222222222222> .
+    db:isDemographicOf <http://databridge.hka/instance/case/22222222-2222-4222-8222-222222222222> ;
+    db:race "black or african american"^^xsd:string ;
+    db:vitalStatus "Alive"^^xsd:string .
 
 <http://databridge.hka/instance/demographic/33333333-3333-4333-8333-333333333333> a db:Demographic ;
+    db:ethnicity "hispanic or latino"^^xsd:string ;
     db:gender "female"^^xsd:string ;
-    db:isDemographicOf <http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> .
+    db:isDemographicOf <http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> ;
+    db:race "white"^^xsd:string ;
+    db:vitalStatus "Dead"^^xsd:string .
 
 <http://databridge.hka/instance/demographic/44444444-4444-4444-8444-444444444444> a db:Demographic ;
+    db:ethnicity "not hispanic or latino"^^xsd:string ;
     db:gender "male"^^xsd:string ;
-    db:isDemographicOf <http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444> .
+    db:isDemographicOf <http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444> ;
+    db:race "asian"^^xsd:string ;
+    db:vitalStatus "Alive"^^xsd:string .
 
 <http://databridge.hka/instance/diagnosis/d-11111111> a db:Diagnosis ;
     db:ageAtDiagnosis 21200 ;
     db:describesCase <http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> ;
-    db:primaryDiagnosisLabel "Infiltrating duct carcinoma, NOS"^^xsd:string .
+    db:metastasisAtDiagnosis "No"^^xsd:string ;
+    db:morphology "8500/3"^^xsd:string ;
+    db:primaryDiagnosis ncit:C4194 ;
+    db:primaryDiagnosisLabel "Infiltrating duct carcinoma, NOS"^^xsd:string ;
+    db:siteOfResectionOrBiopsy "Breast, NOS"^^xsd:string ;
+    db:tumorStage "Stage IIA"^^xsd:string .
 
 <http://databridge.hka/instance/diagnosis/d-22222222> a db:Diagnosis ;
     db:ageAtDiagnosis 19870 ;
     db:describesCase <http://databridge.hka/instance/case/22222222-2222-4222-8222-222222222222> ;
-    db:primaryDiagnosisLabel "Lobular carcinoma, NOS"^^xsd:string .
+    db:metastasisAtDiagnosis "No"^^xsd:string ;
+    db:morphology "8520/3"^^xsd:string ;
+    db:primaryDiagnosis ncit:C7950 ;
+    db:primaryDiagnosisLabel "Lobular carcinoma, NOS"^^xsd:string ;
+    db:siteOfResectionOrBiopsy "Breast, NOS"^^xsd:string ;
+    db:tumorStage "Stage IB"^^xsd:string .
 
 <http://databridge.hka/instance/diagnosis/d-33333333> a db:Diagnosis ;
     db:ageAtDiagnosis 25630 ;
     db:describesCase <http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> ;
-    db:primaryDiagnosisLabel "Infiltrating duct carcinoma, NOS"^^xsd:string .
+    db:metastasisAtDiagnosis "Yes"^^xsd:string ;
+    db:morphology "8500/3"^^xsd:string ;
+    db:primaryDiagnosis ncit:C4194 ;
+    db:primaryDiagnosisLabel "Infiltrating duct carcinoma, NOS"^^xsd:string ;
+    db:siteOfResectionOrBiopsy "Breast, NOS"^^xsd:string ;
+    db:tumorStage "Stage IIIA"^^xsd:string .
 
 <http://databridge.hka/instance/diagnosis/d-44444444> a db:Diagnosis ;
     db:ageAtDiagnosis 23360 ;
     db:describesCase <http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444> ;
-    db:primaryDiagnosisLabel "Adenocarcinoma, NOS"^^xsd:string .
+    db:metastasisAtDiagnosis "No"^^xsd:string ;
+    db:morphology "8140/3"^^xsd:string ;
+    db:primaryDiagnosisLabel "Adenocarcinoma, NOS"^^xsd:string ;
+    db:siteOfResectionOrBiopsy "Breast, NOS"^^xsd:string ;
+    db:tumorStage "Stage I"^^xsd:string .
 
-<http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> a db:Case ;
-    db:belongsToProject <http://databridge.hka/instance/project/TCGA-BRCA> ;
-    db:caseId "11111111-1111-4111-8111-111111111111"^^xsd:string ;
-    db:hasDemographic <http://databridge.hka/instance/demographic/11111111-1111-4111-8111-111111111111> ;
-    db:hasDiagnosis <http://databridge.hka/instance/diagnosis/d-11111111> ;
-    db:submitterId "TCGA-A1-A0SB"^^xsd:string .
+<http://databridge.hka/instance/sample/s-11111111-01> a db:Sample ;
+    db:isSampleOf <http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> ;
+    db:sampleType "Primary Tumor"^^xsd:string .
+
+<http://databridge.hka/instance/sample/s-11111111-10> a db:Sample ;
+    db:isSampleOf <http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> ;
+    db:sampleType "Solid Tissue Normal"^^xsd:string .
+
+<http://databridge.hka/instance/sample/s-22222222-01> a db:Sample ;
+    db:isSampleOf <http://databridge.hka/instance/case/22222222-2222-4222-8222-222222222222> ;
+    db:sampleType "Primary Tumor"^^xsd:string .
+
+<http://databridge.hka/instance/sample/s-33333333-01> a db:Sample ;
+    db:isSampleOf <http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> ;
+    db:sampleType "Primary Tumor"^^xsd:string .
+
+<http://databridge.hka/instance/sample/s-33333333-10> a db:Sample ;
+    db:isSampleOf <http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> ;
+    db:sampleType "Solid Tissue Normal"^^xsd:string .
+
+<http://databridge.hka/instance/sample/s-44444444-01> a db:Sample ;
+    db:isSampleOf <http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444> ;
+    db:sampleType "Primary Tumor"^^xsd:string .
 
 <http://databridge.hka/instance/case/22222222-2222-4222-8222-222222222222> a db:Case ;
     db:belongsToProject <http://databridge.hka/instance/project/TCGA-BRCA> ;
     db:caseId "22222222-2222-4222-8222-222222222222"^^xsd:string ;
     db:hasDemographic <http://databridge.hka/instance/demographic/22222222-2222-4222-8222-222222222222> ;
     db:hasDiagnosis <http://databridge.hka/instance/diagnosis/d-22222222> ;
+    db:hasSample <http://databridge.hka/instance/sample/s-22222222-01> ;
     db:submitterId "TCGA-A1-A0SD"^^xsd:string .
-
-<http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> a db:Case ;
-    db:belongsToProject <http://databridge.hka/instance/project/TCGA-BRCA> ;
-    db:caseId "33333333-3333-4333-8333-333333333333"^^xsd:string ;
-    db:hasDemographic <http://databridge.hka/instance/demographic/33333333-3333-4333-8333-333333333333> ;
-    db:hasDiagnosis <http://databridge.hka/instance/diagnosis/d-33333333> ;
-    db:submitterId "TCGA-A1-A0SE"^^xsd:string .
 
 <http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444> a db:Case ;
     db:belongsToProject <http://databridge.hka/instance/project/TCGA-BRCA> ;
     db:caseId "44444444-4444-4444-8444-444444444444"^^xsd:string ;
     db:hasDemographic <http://databridge.hka/instance/demographic/44444444-4444-4444-8444-444444444444> ;
     db:hasDiagnosis <http://databridge.hka/instance/diagnosis/d-44444444> ;
+    db:hasSample <http://databridge.hka/instance/sample/s-44444444-01> ;
     db:submitterId "TCGA-A1-A0SH"^^xsd:string .
 
 <http://databridge.hka/instance/project/TCGA-BRCA> a db:Project ;
@@ -84,3 +137,40 @@
         <http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333>,
         <http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444> ;
     db:projectId "TCGA-BRCA"^^xsd:string .
+
+<http://databridge.hka/instance/case/11111111-1111-4111-8111-111111111111> a db:Case ;
+    db:belongsToProject <http://databridge.hka/instance/project/TCGA-BRCA> ;
+    db:caseId "11111111-1111-4111-8111-111111111111"^^xsd:string ;
+    db:hasDemographic <http://databridge.hka/instance/demographic/11111111-1111-4111-8111-111111111111> ;
+    db:hasDiagnosis <http://databridge.hka/instance/diagnosis/d-11111111> ;
+    db:hasSample <http://databridge.hka/instance/sample/s-11111111-01>,
+        <http://databridge.hka/instance/sample/s-11111111-10> ;
+    db:submitterId "TCGA-A1-A0SB"^^xsd:string .
+
+<http://databridge.hka/instance/case/33333333-3333-4333-8333-333333333333> a db:Case ;
+    db:belongsToProject <http://databridge.hka/instance/project/TCGA-BRCA> ;
+    db:caseId "33333333-3333-4333-8333-333333333333"^^xsd:string ;
+    db:hasDemographic <http://databridge.hka/instance/demographic/33333333-3333-4333-8333-333333333333> ;
+    db:hasDiagnosis <http://databridge.hka/instance/diagnosis/d-33333333> ;
+    db:hasSample <http://databridge.hka/instance/sample/s-33333333-01>,
+        <http://databridge.hka/instance/sample/s-33333333-10> ;
+    db:submitterId "TCGA-A1-A0SE"^^xsd:string .
+
+
+
+# RDF-star: Provenienz & Konfidenz für Alignment-Aussagen
+# (siehe wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL, Abschnitt 4; ADR-0002)
+@prefix gdc: <http://databridge.hka/source/gdc#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+<< <http://databridge.hka/instance/diagnosis/d-11111111> <http://databridge.hka/onto#primaryDiagnosis> <http://purl.obolibrary.org/obo/NCIT_C4194> >>
+    prov:wasDerivedFrom gdc:submission ;
+    db:confidence 1.0 .
+
+<< <http://databridge.hka/instance/diagnosis/d-22222222> <http://databridge.hka/onto#primaryDiagnosis> <http://purl.obolibrary.org/obo/NCIT_C7950> >>
+    prov:wasDerivedFrom gdc:submission ;
+    db:confidence 1.0 .
+
+<< <http://databridge.hka/instance/diagnosis/d-33333333> <http://databridge.hka/onto#primaryDiagnosis> <http://purl.obolibrary.org/obo/NCIT_C4194> >>
+    prov:wasDerivedFrom gdc:submission ;
+    db:confidence 1.0 .

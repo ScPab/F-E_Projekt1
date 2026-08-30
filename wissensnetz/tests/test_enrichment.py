@@ -37,8 +37,10 @@ def test_case_context_by_submitter_id(loaded_store: GraphStore) -> None:
     diag = ctx["diagnoses"][0]
     assert diag["label"] == "Infiltrating duct carcinoma, NOS"
     assert diag["age_at_diagnosis"] == 21200
-    # Alignment-Tabelle ist leer -> derzeit kein NCIt-Concept.
-    assert diag["aligned_concept"] is None
+    # Alignment-Tabelle enthält seit der Mediator-Fixture-Aktualisierung einen
+    # Treffer für "Infiltrating duct carcinoma, NOS" (siehe
+    # ontology/alignment/ncit_primary_diagnosis.json).
+    assert diag["aligned_concept"] == "http://purl.obolibrary.org/obo/NCIT_C4194"
 
 
 def test_case_context_has_oviedo_fields(loaded_store: GraphStore) -> None:
@@ -116,12 +118,16 @@ def test_all_cases_returns_sample_type(sample_store: GraphStore) -> None:
     assert by_sid["TEST-SMP-XYZ"]["sample_type"] == "Primary Tumor"
 
 
-def test_sample_type_none_without_sample(loaded_store: GraphStore) -> None:
-    # BRCA-Fixture hat kein db:Sample -> sample_type None, keine Exception.
-    ctx = e.case_context(loaded_store, "TCGA-A1-A0SB")
-    assert ctx["sample_type"] is None
-    brca = next(c for c in e.all_cases(loaded_store) if c.get("submitter_id") == "TCGA-A1-A0SB")
-    assert brca["sample_type"] is None
+def test_sample_type_from_fixture(loaded_store: GraphStore) -> None:
+    # BRCA-Fixture liefert seit der Mediator-Fixture-Aktualisierung (Teil 2,
+    # samples.sample_type -> db:hasSample/db:sampleType) echte Sample-Typen.
+    # TCGA-A1-A0SD hat genau ein Sample -> deterministischer Wert; TCGA-A1-A0SB
+    # hat zwei Samples (Primary Tumor + Solid Tissue Normal), daher hier nur
+    # gegen den Fall mit genau einem Sample geprüft.
+    ctx = e.case_context(loaded_store, "TCGA-A1-A0SD")
+    assert ctx["sample_type"] == "Primary Tumor"
+    brca = next(c for c in e.all_cases(loaded_store) if c.get("submitter_id") == "TCGA-A1-A0SD")
+    assert brca["sample_type"] == "Primary Tumor"
 
 
 def test_case_context_by_iri(loaded_store: GraphStore) -> None:
@@ -142,7 +148,7 @@ def test_diagnosis_context_by_id(loaded_store: GraphStore) -> None:
     assert ctx["label"] == "Infiltrating duct carcinoma, NOS"
     assert ctx["age_at_diagnosis"] == 21200
     assert ctx["submitter_id"] == "TCGA-A1-A0SB"
-    assert ctx["aligned_concept"] is None
+    assert ctx["aligned_concept"] == "http://purl.obolibrary.org/obo/NCIT_C4194"
 
 
 def test_diagnosis_context_unknown_returns_empty(loaded_store: GraphStore) -> None:
