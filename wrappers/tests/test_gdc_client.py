@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 import requests
 
-from gdc import GDCWrapper, build_filters
+from gdc import GDCWrapper, build_expression_filters, build_filters, extract_sample_case_rows
 from gdc.cache import WrapperCache
 
 
@@ -190,6 +190,161 @@ def test_search_builds_filters_and_delegates_to_query(wrapper):
         "content": {"field": "cases.project.project_id", "value": ["TCGA-BRCA"]},
     }
     assert params["fields"] == "demographic.race"
+
+
+# ---------------------------------------------------------------------
+# Expressionsdaten (HANDOFF Teil 3/3a, wissensnetz/HANDOFF_anndata.md)
+# ---------------------------------------------------------------------
+
+def test_build_expression_filters_rna_seq():
+    filters = build_expression_filters(assay="rna_seq", project_id="TCGA-BRCA")
+    fields = {c["content"]["field"]: c["content"]["value"] for c in filters["content"]}
+    assert fields["files.data_type"] == ["Gene Expression Quantification"]
+    assert fields["files.experimental_strategy"] == ["RNA-Seq"]
+    assert fields["cases.project.project_id"] == ["TCGA-BRCA"]
+    assert fields["files.access"] == ["open"]
+
+
+def test_build_expression_filters_mirna_seq():
+    filters = build_expression_filters(assay="mirna_seq", access=None)
+    fields = {c["content"]["field"]: c["content"]["value"] for c in filters["content"]}
+    assert fields["files.data_type"] == ["miRNA Expression Quantification"]
+    assert fields["files.experimental_strategy"] == ["miRNA-Seq"]
+
+
+def test_build_expression_filters_unknown_assay_raises_valueerror():
+    with pytest.raises(ValueError):
+        build_expression_filters(assay="not_an_assay")
+
+
+def test_extract_sample_case_rows_flattens_cases_and_samples():
+    hits = [
+        {
+            "file_id": "file-1",
+            "file_name": "sample-a.rna_seq.gene_counts.tsv",
+            "cases": [
+                {
+                    "submitter_id": "TCGA-XX-0001",
+                    "samples": [{"sample_id": "s-0001-01", "sample_type": "Primary Tumor"}],
+                }
+            ],
+        },
+        {"file_id": "file-2", "file_name": "no-case.tsv", "cases": []},
+    ]
+
+    rows = extract_sample_case_rows(hits)
+
+    assert rows == [
+        {
+            "file_id": "file-1",
+            "file_name": "sample-a.rna_seq.gene_counts.tsv",
+            "submitter_id": "TCGA-XX-0001",
+            "sample_id": "s-0001-01",
+            "sample_type": "Primary Tumor",
+        }
+    ]
+
+
+def test_search_expression_files_merges_default_fields(wrapper):
+    fake_session = FakeSession(FakeResponse({"data": {"hits": [], "pagination": {}}}))
+    wrapper.session = fake_session
+
+    wrapper.search_expression_files(assay="rna_seq", project_id="TCGA-BRCA", fields=["md5sum"])
+
+    params = fake_session.last_call["params"]
+    requested_fields = params["fields"].split(",")
+    assert "md5sum" in requested_fields
+    assert "file_id" in requested_fields
+    assert "cases.samples.sample_id" in requested_fields
+
+
+def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path, monkeypatch):
+    hits = [
+        {
+            "file_id": "file-1",
+            "file_name": "s-0001-01.rna_seq.gene_counts.tsv",
+            "cases": [
+                {
+                    "submitter_id": "TCGA-XX-0001",
+                    "samples": [{"sample_id": "s-0001-01", "sample_type": "Primary Tumor"}],
+                }
+            ],
+        }
+    ]
+
+    query_response = FakeResponse({"data": {"hits": hits, "pagination": {"total": 1}}})
+    manifest_response = FakeResponse(text="id\tfilename\nfile-1\ts-0001-01.rna_seq.gene_counts.tsv\n")
+
+    class RoutingSession:
+        """Liefert je nach Endpunkt eine andere vorbereitete Antwort."""
+
+        def get(self, url, params=None, timeout=None):
+            return manifest_response if params.get("return_type") == "manifest" else query_response
+
+    wrapper.session = RoutingSession()
+
+    output_dir = tmp_path / "downloads"
+
+    def fake_run(command, capture_output, text, check):
+        # Simuliert das gdc-client-Ablagemuster <output_dir>/<file_id>/<file_name>.
+        file_dir = output_dir / "file-1"
+        file_dir.mkdir(parents=True, exist_ok=True)
+        (file_dir / "s-0001-01.rna_seq.gene_counts.tsv").write_text("gene_id\tvalue\n", encoding="utf-8")
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("gdc.client.subprocess.run", fake_run)
+
+    result = wrapper.download_expression_files(
+        assay="rna_seq", project_id="TCGA-XX", output_dir=str(output_dir)
+    )
+
+    assert result["download"]["status"] == "completed"
+    assert result["sample_case_map"] == {"s-0001-01": "TCGA-XX-0001"}
+    assert result["sample_types"] == {"s-0001-01": "Primary Tumor"}
+    assert result["sample_files"] == {"s-0001-01": output_dir / "file-1" / "s-0001-01.rna_seq.gene_counts.tsv"}
+    assert result["quantification_columns"] == {
+        "id_column": "gene_id",
+        "value_column": "tpm_unstranded",
+        "label_column": "gene_name",
+    }
+
+
+def test_download_expression_files_gdc_client_not_installed(wrapper, tmp_path, monkeypatch):
+    """`gdc-client` fehlt -> `sample_files` bleibt leer statt eines Absturzes."""
+    hits = [
+        {
+            "file_id": "file-1",
+            "file_name": "s-0001-01.rna_seq.gene_counts.tsv",
+            "cases": [{"submitter_id": "TCGA-XX-0001", "samples": [{"sample_id": "s-0001-01"}]}],
+        }
+    ]
+    query_response = FakeResponse({"data": {"hits": hits, "pagination": {"total": 1}}})
+    manifest_response = FakeResponse(text="id\tfilename\nfile-1\ts-0001-01.rna_seq.gene_counts.tsv\n")
+
+    class RoutingSession:
+        def get(self, url, params=None, timeout=None):
+            return manifest_response if params.get("return_type") == "manifest" else query_response
+
+    wrapper.session = RoutingSession()
+
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr("gdc.client.subprocess.run", fake_run)
+
+    result = wrapper.download_expression_files(
+        assay="rna_seq", project_id="TCGA-XX", output_dir=str(tmp_path / "downloads")
+    )
+
+    assert result["download"]["status"] == "not_run"
+    assert result["sample_case_map"] == {"s-0001-01": "TCGA-XX-0001"}
+    assert result["sample_files"] == {}
 
 
 # ---------------------------------------------------------------------

@@ -47,6 +47,7 @@ def build_filters(
     *,
     project_id: Optional[StrOrList] = None,
     experimental_strategy: Optional[StrOrList] = None,
+    data_type: Optional[StrOrList] = None,
     access: Optional[StrOrList] = "open",
     extra: Optional[list[dict]] = None,
 ) -> Optional[dict]:
@@ -59,6 +60,10 @@ def build_filters(
 
     Beispiel (Testfall TCGA-BRCA / RNA-Seq / open):
         build_filters(project_id="TCGA-BRCA", experimental_strategy="RNA-Seq")
+
+    `data_type` filtert auf `files.data_type` (z. B. "Gene Expression
+    Quantification" / "miRNA Expression Quantification") — Grundlage für
+    `build_expression_filters` (siehe dort, HANDOFF Teil 3/3a).
     """
     content: list[dict] = []
 
@@ -70,6 +75,8 @@ def build_filters(
         _in("cases.project.project_id", project_id)
     if experimental_strategy:
         _in("files.experimental_strategy", experimental_strategy)
+    if data_type:
+        _in("files.data_type", data_type)
     if access:
         _in("files.access", access)
     if extra:
@@ -80,6 +87,101 @@ def build_filters(
     if len(content) == 1:
         return content[0]
     return {"op": "and", "content": content}
+
+
+# ----------------------------------------------------------------------
+# Expressionsdaten (HANDOFF Teil 3/3a, wissensnetz/HANDOFF_anndata.md):
+# RNA-Seq-Gene-Counts bzw. miRNA-Seq-Quantifizierung je Probe. Der Wrapper
+# beschafft nur die Rohdateien + Proben/Case-Zuordnung — der Zusammenbau zur
+# anndata-Matrix (`X`/`obs`/`var`) ist bewusst Mediator-Aufgabe (siehe
+# `to_anndata` unten sowie `mediator/app/semantic/expression.py`).
+# ----------------------------------------------------------------------
+
+# assay -> GDC-Filterwerte (`files.data_type` / `files.experimental_strategy`).
+EXPRESSION_ASSAYS: dict[str, dict[str, str]] = {
+    "rna_seq": {
+        "data_type": "Gene Expression Quantification",
+        "experimental_strategy": "RNA-Seq",
+    },
+    "mirna_seq": {
+        "data_type": "miRNA Expression Quantification",
+        "experimental_strategy": "miRNA-Seq",
+    },
+}
+
+# assay -> Spaltennamen, die `expression.parse_gdc_quantification_file`
+# (Mediator-Seite) für diesen Dateityp erwartet — Teil der "Form, die der
+# Mediator zu einer Matrix zusammenbauen kann" (HANDOFF_anndata.md, 3a).
+EXPRESSION_QUANTIFICATION_COLUMNS: dict[str, dict[str, Optional[str]]] = {
+    "rna_seq": {"id_column": "gene_id", "value_column": "tpm_unstranded", "label_column": "gene_name"},
+    "mirna_seq": {"id_column": "miRNA_ID", "value_column": "reads_per_million_miRNA_mapped", "label_column": None},
+}
+
+# Felder, die für die Proben/Case-Zuordnung nötig sind (siehe
+# `extract_sample_case_rows`); zusätzliche Felder können darüber hinaus
+# angefragt werden.
+EXPRESSION_FILE_FIELDS: list[str] = [
+    "file_id",
+    "file_name",
+    "data_type",
+    "experimental_strategy",
+    "cases.submitter_id",
+    "cases.samples.sample_id",
+    "cases.samples.sample_type",
+]
+
+
+def build_expression_filters(
+    *,
+    assay: str,
+    project_id: Optional[StrOrList] = None,
+    access: Optional[StrOrList] = "open",
+    extra: Optional[list[dict]] = None,
+) -> dict:
+    """`build_filters`-Variante, fest auf einen Expressions-Assay eingeschränkt.
+
+    `assay`: einer von `EXPRESSION_ASSAYS` (`"rna_seq"` / `"mirna_seq"`).
+    """
+    if assay not in EXPRESSION_ASSAYS:
+        raise ValueError(f"Unbekannter Assay: {assay!r} (erwartet: {tuple(EXPRESSION_ASSAYS)})")
+    assay_filter = EXPRESSION_ASSAYS[assay]
+    filters = build_filters(
+        project_id=project_id,
+        experimental_strategy=assay_filter["experimental_strategy"],
+        data_type=assay_filter["data_type"],
+        access=access,
+        extra=extra,
+    )
+    assert filters is not None  # data_type ist immer gesetzt -> content nie leer
+    return filters
+
+
+def extract_sample_case_rows(hits: list[dict]) -> list[dict[str, Optional[str]]]:
+    """Flacht GDC-`files`-Treffer (mit `cases.submitter_id` +
+    `cases.samples.sample_id`/`sample_type`) zu einer Zeile je
+    (Datei, Probe)-Paar ab — die "Proben↔Case-Zuordnung", die der Mediator
+    laut HANDOFF_anndata.md (Abschnitt 3a/3b) vom Wrapper erwartet.
+
+    Ein Treffer ohne `cases`/`samples` (unerwartet für TCGA-Quantifizierungs-
+    dateien, aber keine GDC-Garantie) liefert keine Zeile statt eines Fehlers.
+    """
+    rows: list[dict[str, Optional[str]]] = []
+    for hit in hits:
+        file_id = hit.get("file_id")
+        file_name = hit.get("file_name")
+        for case in hit.get("cases") or []:
+            submitter_id = case.get("submitter_id")
+            for sample in case.get("samples") or []:
+                rows.append(
+                    {
+                        "file_id": file_id,
+                        "file_name": file_name,
+                        "submitter_id": submitter_id,
+                        "sample_id": sample.get("sample_id"),
+                        "sample_type": sample.get("sample_type"),
+                    }
+                )
+    return rows
 
 
 class GDCWrapper:
@@ -190,6 +292,27 @@ class GDCWrapper:
         )
         return self.query(endpoint, filters=filters, fields=fields, size=size, from_=from_)
 
+    def search_expression_files(
+        self,
+        *,
+        assay: str,
+        project_id: Optional[StrOrList] = None,
+        access: Optional[StrOrList] = "open",
+        fields: Optional[list[str]] = None,
+        size: int = 20,
+        from_: int = 0,
+    ) -> dict:
+        """Sucht Expressions-Quantifizierungsdateien (RNA-Seq/miRNA-Seq) inkl.
+        Proben/Case-Zuordnung (HANDOFF Teil 3a).
+
+        Ergänzt vom Aufrufer übergebene `fields` immer um
+        `EXPRESSION_FILE_FIELDS`, damit `extract_sample_case_rows` auf dem
+        Ergebnis (`result["results"]`) funktioniert.
+        """
+        merged_fields = list(dict.fromkeys(EXPRESSION_FILE_FIELDS + (fields or [])))
+        filters = build_expression_filters(assay=assay, project_id=project_id, access=access)
+        return self.query("files", filters=filters, fields=merged_fields, size=size, from_=from_)
+
     def get_schema(self, endpoint: str) -> list[str]:
         """Ruft `_mapping` für einen Endpunkt ab und liefert die verfügbaren
         Feldnamen sortiert als Liste.
@@ -264,6 +387,60 @@ class GDCWrapper:
                 "hint": "gdc-client ist im Container nicht installiert/im PATH. "
                 "Der Bulk-Download läuft containerintern separat über gdc-client.",
             }
+
+    def download_expression_files(
+        self,
+        *,
+        assay: str,
+        project_id: Optional[StrOrList] = None,
+        output_dir: str,
+        access: Optional[StrOrList] = "open",
+        size: int = 10000,
+    ) -> dict:
+        """Beschafft Expressions-Rohdaten für den Mediator (HANDOFF Teil 3a):
+        Manifest bauen, über `gdc-client` herunterladen und die
+        Proben↔Case-Zuordnung + lokalen Dateipfade je Probe liefern — in der
+        Form, die `mediator/app/semantic/expression.assemble_matrix`/
+        `build_obs` direkt entgegennehmen (`sample_files`/`sample_case_map`/
+        `sample_types`).
+
+        Baut bewusst KEIN anndata (siehe `to_anndata`/Modul-Docstring) —
+        das bleibt der separate Mediator-Schritt.
+        """
+        filters = build_expression_filters(assay=assay, project_id=project_id, access=access)
+        metadata = self.query("files", filters=filters, fields=EXPRESSION_FILE_FIELDS, size=size)
+        rows = extract_sample_case_rows(metadata["results"])
+
+        manifest = self.build_manifest(filters=filters, size=size)
+        download = self.download_via_gdc_client(manifest, output_dir)
+
+        sample_case_map: dict[str, str] = {}
+        sample_types: dict[str, str] = {}
+        sample_files: dict[str, Path] = {}
+        out_dir = Path(output_dir)
+        for row in rows:
+            sample_id, file_id, file_name = row["sample_id"], row["file_id"], row["file_name"]
+            if not sample_id or not file_id or not file_name:
+                continue
+            sample_case_map[sample_id] = row["submitter_id"]
+            if row.get("sample_type"):
+                sample_types[sample_id] = row["sample_type"]
+            if download["status"] == "completed":
+                # gdc-client legt jede Datei unter <output_dir>/<file_id>/<file_name> ab.
+                local_path = out_dir / file_id / file_name
+                if local_path.exists():
+                    sample_files[sample_id] = local_path
+
+        return {
+            "assay": assay,
+            "filters": filters,
+            "quantification_columns": EXPRESSION_QUANTIFICATION_COLUMNS[assay],
+            "download": download,
+            "files": rows,
+            "sample_case_map": sample_case_map,
+            "sample_types": sample_types,
+            "sample_files": sample_files,
+        }
 
     def to_anndata(self, raw_response: object) -> None:
         """Überführt eine GDC-Antwort in das Zielformat anndata/.h5ad.

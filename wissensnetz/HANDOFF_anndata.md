@@ -137,10 +137,20 @@ Damit werden die heute deaktivierten Expressions-Slider echt.
 ## 6) Definition of Done
 - **Julian:** Manifest+Download liefern für ein TCGA-Projekt die Expression-Files je Probe
   + Feature-IDs + Proben↔Case-Zuordnung; Test gegen echte GDC-Files (klein, z. B.
-  TCGA-BRCA size 5). `to_anndata` bleibt bewusst `NotImplementedError`. **Status: offen**
-  — `POST /export/anndata` nutzt bis dahin das bestehende Bulk-Tier
-  (`build_manifest`/`download_via_gdc_client`) unverändert und liefert einen klaren
-  503-Fehler, solange `gdc-client` im Container nicht installiert ist.
+  TCGA-BRCA size 5). `to_anndata` bleibt bewusst `NotImplementedError`. **Status: erledigt**
+  — `GDCWrapper.download_expression_files()` (`wrappers/gdc/client.py`) filtert das
+  Manifest auf `data_type`/`experimental_strategy` je Assay (`build_expression_filters`,
+  `EXPRESSION_ASSAYS` = `rna_seq`/`mirna_seq`), lädt via `download_via_gdc_client` und
+  liefert `sample_files`/`sample_case_map`/`sample_types` + `quantification_columns`
+  (`id_column`/`value_column`/`label_column` je Assay) — direkt kompatibel zu
+  `expression.assemble_matrix`/`build_obs` auf Mediator-Seite. Proben-Zuordnung
+  (`extract_sample_case_rows`) live gegen die echte GDC-API verifiziert (2026-08-31):
+  `files.cases.samples.sample_id` liefert exakt dieselbe Sample-UUID wie
+  `cases.samples.sample_id`, auf die Pablos `db:Sample`-Mapping aufsetzt — die
+  Proben-IDs beider Endpunkte sind also konsistent verknüpfbar. `to_anndata` bleibt
+  `NotImplementedError`; `/export/anndata` liefert weiterhin einen 503-Fehler, solange
+  `gdc-client` im Container nicht installiert ist (lokal ohne `gdc-client` getestet:
+  `download`-Status `"not_run"`, `sample_case_map`/`sample_types` trotzdem vollständig).
 - **Pablo:** `/export/anndata` erzeugt ein valides `.h5ad`, das mit `scanpy.read_h5ad()`
   öffnet und `X`, vollständige `obs` (alle Oviedo-Felder aus dem Wissensnetz), `var` und
   — falls entschieden — `obsm`-tSNE enthält. **Status: erledigt** — siehe
