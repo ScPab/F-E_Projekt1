@@ -114,24 +114,49 @@ Damit werden die heute deaktivierten Expressions-Slider echt.
 ## 5) Offene Punkte — bitte im Team kurz abstimmen
 1. **obs-Granularität:** Expression ist pro Aliquot/Sample, Klinik-Metadaten pro Case →
    ein repräsentatives Sample je Case oder alle Samples?
+   → **Erste Entscheidung (Pablo, Mediator-Umsetzung):** pro Sample (`obs`-Index =
+   `sample_id`), Klinik-Felder werden je Case auf seine Sample(s) dupliziert — siehe
+   `app/semantic/expression.py::build_obs`-Docstring. Revidierbar, sobald das
+   Wissensnetz eine sample-granulare Abfrage liefert (siehe Abschnitt 3c).
 2. **Wer berechnet die tSNE (`obsm`)?** Im Oviedo-Original vorab trainiert
    (`pancancer_morphing.hdf`). Vorschlag: ein Scanpy-Vorverarbeitungsschritt
    (Mediator oder separates Skript), Ergebnis in `obsm`. Alternativ liefert DataBridge
    nur `X`+`obs`+`var` und Oviedo rechnet selbst.
+   → **Erste Entscheidung (Pablo):** optional im Mediator selbst (`compute_tsne`,
+   Default `false` in `POST /export/anndata` — bewusst konservativ, siehe Offener-Punkt-
+   Charakter dieser Frage), via scikit-learn (`expression.py::compute_tsne`).
 3. **Genumfang:** alle ~20k Gene oder ein Subset (Oviedo nutzte den
    Cancer-Gene-Census-Filter)? Beeinflusst Größe/Performance stark.
+   → **Erste Entscheidung (Pablo):** kein Default-Filter (alle Gene aus den gelieferten
+   Dateien); `POST /export/anndata` nimmt optional `gene_ids` als Whitelist entgegen.
 4. **Übergabeweg des `.h5ad`:** Datei-Pfad, Download-Endpoint oder Volume — wie bekommt
    der Prototyp/das Oviedo-Frontend die Datei?
+   → **Erste Entscheidung (Pablo):** Download-Endpoint (`GET
+   /export/anndata/download/{filename}`), passend zum bestehenden REST-Stil des Mediators.
 
 ## 6) Definition of Done
 - **Julian:** Manifest+Download liefern für ein TCGA-Projekt die Expression-Files je Probe
   + Feature-IDs + Proben↔Case-Zuordnung; Test gegen echte GDC-Files (klein, z. B.
-  TCGA-BRCA size 5). `to_anndata` bleibt bewusst `NotImplementedError`.
+  TCGA-BRCA size 5). `to_anndata` bleibt bewusst `NotImplementedError`. **Status: offen**
+  — `POST /export/anndata` nutzt bis dahin das bestehende Bulk-Tier
+  (`build_manifest`/`download_via_gdc_client`) unverändert und liefert einen klaren
+  503-Fehler, solange `gdc-client` im Container nicht installiert ist.
 - **Pablo:** `/export/anndata` erzeugt ein valides `.h5ad`, das mit `scanpy.read_h5ad()`
   öffnet und `X`, vollständige `obs` (alle Oviedo-Felder aus dem Wissensnetz), `var` und
-  — falls entschieden — `obsm`-tSNE enthält.
+  — falls entschieden — `obsm`-tSNE enthält. **Status: erledigt** — siehe
+  `mediator/app/semantic/expression.py` (Assemblierung/Serialisierung) und
+  `POST /export/anndata` / `GET /export/anndata/download/{filename}` in
+  `mediator/app/main.py`. Live gegen die echte GDC-API getestet (Metadaten-Suche +
+  Manifest-Bau); die Zusammenbau-/Export-Pipeline zusätzlich mit einer echten,
+  live geladenen GDC-STAR-Gene-Counts-Datei formatverifiziert.
 - **Gemeinsam:** ein Referenz-`.h5ad` für TCGA-BRCA (klein) als Fixture, analog zu
-  `cases_brca_sample.*`, als Grundlage für die MP-lite-Integration.
+  `cases_brca_sample.*`, als Grundlage für die MP-lite-Integration. **Teilweise erledigt**
+  — `mediator/sample_data/tcga_brca_sample.h5ad` (4 Proben × 5 Gene: BRCA1/CA9/GAPDH/
+  TP53/SAA1, erzeugt aus `mediator/sample_data/expression/*.tsv` +
+  `cases_brca_sample.json` via `mediator/scripts/example_expression_to_anndata.py`).
+  Wie bei `cases_brca_sample.json` **synthetische, keine echten Patientendaten** — sobald
+  Julians Wrapper-Teil steht, sollte dieselbe Fixture aus echten kleinen GDC-Files
+  neu gezogen werden (analog zu `example_gdc_to_rdf.py`/`cases_brca_sample.ttl`).
 
 ## 7) Grenze
 Wrapper/Mediator werden von der Wissensnetz-Seite nicht angefasst. Das Wissensnetz liefert

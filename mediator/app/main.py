@@ -13,24 +13,28 @@ bilden die Schnittstelle, über die spätere Aufrufer (Frontend, andere
 Services) auf den GDC-Wrapper zugreifen — ohne dass der GDC-Wrapper selbst
 ein eigener Netzwerk-Service sein muss.
 
-Die eigentliche Transformationslogik nach anndata/.h5ad (Messmatrizen) folgt
-in späteren Schritten. Die semantische Transformation (GDC-JSON -> RDF/OWL)
-für den Kern-Ausschnitt case/project/demographic/diagnosis ist über
-POST /transform bereits angebunden (siehe app/semantic/mapping.py sowie
-wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL für das zugrundeliegende Konzept).
+Die semantische Transformation (GDC-JSON -> RDF/OWL) für den Ausschnitt
+case/project/demographic/diagnosis/samples ist über POST /transform
+angebunden (siehe app/semantic/mapping.py). Die Transformation nach
+anndata/.h5ad (Expressionsmatrizen, Teil 3 aus wissensnetz/HANDOFF_anndata.md)
+ist über POST /export/anndata angebunden (siehe app/semantic/expression.py).
 """
 
 import os
+from pathlib import Path
+from typing import Any
 
 from cbioportal import CBioPortalWrapper
 from ena import ENAWrapper
 from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from gdc import GDCWrapper, build_filters
 from geo import GEOWrapper
 from requests import RequestException
-from wissensnetz import GraphStore, GraphStoreError
+from wissensnetz import GraphStore, GraphStoreError, all_cases
 
 from .schemas import (
+    AnndataExportRequest,
     CBioMolecularDataRequest,
     EnaQueryRequest,
     GeoQueryRequest,
@@ -38,8 +42,9 @@ from .schemas import (
     QueryRequest,
     TransformRequest,
 )
+from .semantic import expression as expression_export
 from .semantic import mapping as semantic_mapping
-from .semantic.paths import alignment_path, ontology_path
+from .semantic.paths import alignment_path, export_dir, ontology_path
 
 # Felder für den Live-Abruf von POST /transform (Kern-Ausschnitt
 # case/project/demographic/diagnosis/samples, siehe app/semantic/mapping.py).
@@ -438,3 +443,193 @@ async def ontology() -> Response:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Ontologie-Datei nicht gefunden: {path}")
     return Response(content=path.read_text(encoding="utf-8"), media_type="text/turtle")
+
+
+@app.post("/export/anndata")
+async def export_anndata(request: AnndataExportRequest) -> dict:
+    """GDC-Expressionsdateien -> anndata/.h5ad (Teil 3, siehe
+    wissensnetz/HANDOFF_anndata.md und app/semantic/expression.py).
+
+    Ablauf: (1) passende Expressions-Files über den GDC-Wrapper suchen,
+    (2) sie über das bestehende Bulk-Tier (`build_manifest` +
+    `download_via_gdc_client`, benötigt `gdc-client` im Container)
+    herunterladen, (3) daraus X/var zusammenbauen, (4) `obs` aus dem
+    Wissensnetz (`enrichment.all_cases`) anreichern, (5) als `.h5ad`
+    schreiben. Bricht mit einem klaren Fehler ab, statt eine unvollständige
+    Matrix zurückzugeben, wenn `gdc-client` fehlt oder Fuseki nicht
+    erreichbar ist — siehe GET /export/anndata/download/{filename} für den
+    eigentlichen Datei-Download (Offener Punkt 4 im Handoff: Download-Endpoint).
+    """
+    wrapper = get_gdc_wrapper()
+
+    recipe = {
+        "project_id": request.project_id,
+        "experimental_strategy": request.experimental_strategy,
+        "data_type": request.data_type,
+        "id_column": request.id_column,
+        "value_column": request.value_column,
+        "label_column": request.label_column,
+        "size": request.size,
+        "gene_ids": request.gene_ids,
+        "compute_tsne": request.compute_tsne,
+    }
+    recipe_key = wrapper.cache.recipes.key_for(recipe)
+    cached = wrapper.cache.materialized.get(recipe_key)
+    if cached and Path(cached["path"]).exists():
+        return cached
+
+    file_filters = build_filters(
+        project_id=request.project_id,
+        experimental_strategy=request.experimental_strategy,
+        access="open",
+        extra=[{"op": "in", "content": {"field": "files.data_type", "value": [request.data_type]}}],
+    )
+    file_fields = [
+        "file_id",
+        "file_name",
+        "cases.submitter_id",
+        "cases.project.project_id",
+        "cases.samples.sample_id",
+        "cases.samples.sample_type",
+    ]
+    try:
+        result = wrapper.query("files", filters=file_filters, fields=file_fields, size=request.size)
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
+
+    hits = result["results"]
+    if not hits:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Keine Expressions-Files gefunden für project_id={request.project_id!r}, "
+            f"experimental_strategy={request.experimental_strategy!r}, data_type={request.data_type!r}.",
+        )
+
+    file_ids: list[str] = []
+    sample_case_map: dict[str, str] = {}
+    sample_types: dict[str, str] = {}
+    file_names: dict[str, str] = {}
+    for hit in hits:
+        file_id = hit["file_id"]
+        case = (hit.get("cases") or [{}])[0]
+        sample = (case.get("samples") or [{}])[0]
+        sample_id = sample.get("sample_id") or file_id
+        file_ids.append(file_id)
+        file_names[file_id] = hit["file_name"]
+        sample_case_map[sample_id] = case.get("submitter_id")
+        if sample.get("sample_type"):
+            sample_types[sample_id] = sample["sample_type"]
+
+    manifest_filters = build_filters(extra=[{"op": "in", "content": {"field": "files.file_id", "value": file_ids}}])
+    try:
+        manifest = wrapper.build_manifest(filters=manifest_filters, size=len(file_ids))
+    except RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
+
+    raw_dir = wrapper.cache.raw.path_for(recipe_key)
+    download_result = wrapper.download_via_gdc_client(manifest, str(raw_dir))
+    if download_result["status"] != "completed":
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Download der Expressions-Rohdaten fehlgeschlagen oder gdc-client nicht verfügbar "
+                "— es wird keine unvollständige/erfundene Matrix zurückgegeben.",
+                "download_result": download_result,
+            },
+        )
+
+    # Zuordnung Datei -> Probe direkt aus den Suchtreffern (dieselbe Regel wie
+    # oben beim Aufbau von sample_case_map: sample_id, sonst file_id als Fallback).
+    file_id_to_sample_id = {
+        hit["file_id"]: ((hit.get("cases") or [{}])[0].get("samples") or [{}])[0].get("sample_id")
+        or hit["file_id"]
+        for hit in hits
+    }
+
+    sample_files: dict[str, Path] = {}
+    missing_files: list[str] = []
+    for file_id in file_ids:
+        candidate = raw_dir / file_id / file_names[file_id]
+        sample_id = file_id_to_sample_id[file_id]
+        if candidate.exists():
+            sample_files[sample_id] = candidate
+        else:
+            missing_files.append(file_id)
+
+    if not sample_files:
+        raise HTTPException(
+            status_code=502,
+            detail="gdc-client meldete Erfolg, aber keine der erwarteten Dateien wurde gefunden.",
+        )
+
+    sample_case_map = {sid: sub for sid, sub in sample_case_map.items() if sid in sample_files}
+    sample_types = {sid: t for sid, t in sample_types.items() if sid in sample_files}
+
+    try:
+        X, sample_ids, gene_ids, gene_labels = expression_export.assemble_matrix(
+            sample_files,
+            id_column=request.id_column,
+            value_column=request.value_column,
+            label_column=request.label_column,
+            gene_ids=request.gene_ids,
+        )
+    except expression_export.ExpressionAssemblyError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    store = get_graph_store()
+    if not store.is_reachable():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Wissensnetz (Fuseki) nicht erreichbar unter {store.settings.base_url} — "
+            "obs kann nicht befüllt werden.",
+        )
+    cases_by_submitter = {c["submitter_id"]: c for c in all_cases(store) if c.get("submitter_id")}
+
+    obs = expression_export.build_obs(sample_case_map, cases_by_submitter, sample_types=sample_types)
+    obs = obs.loc[sample_ids]  # dieselbe Zeilenreihenfolge wie X sicherstellen
+    var = expression_export.build_var(gene_ids, gene_labels)
+
+    obsm: dict[str, Any] = {}
+    if request.compute_tsne:
+        tsne = expression_export.compute_tsne(X)
+        if tsne is not None:
+            obsm_key = "X_tsne_mirna" if request.experimental_strategy == "miRNA-Seq" else "X_tsne_genes"
+            obsm[obsm_key] = tsne
+
+    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
+
+    filename = request.filename or f"{recipe_key}.h5ad"
+    filename = Path(filename).name  # nur Basisname, keine Pfad-Traversal
+    if not filename.endswith(".h5ad"):
+        filename += ".h5ad"
+    out_path = expression_export.write_h5ad(adata, export_dir() / filename)
+
+    wrapper.cache.raw.purge(recipe_key)
+
+    metadata = {
+        "project_id": request.project_id,
+        "experimental_strategy": request.experimental_strategy,
+        "n_obs": int(adata.n_obs),
+        "n_vars": int(adata.n_vars),
+        "obs_columns": list(obs.columns),
+        "var_columns": list(var.columns),
+        "obsm_keys": list(obsm.keys()),
+        "missing_files": missing_files,
+        "filename": filename,
+        "path": str(out_path),
+        "download_url": f"/export/anndata/download/{filename}",
+    }
+    wrapper.cache.materialized.set(recipe_key, metadata)
+    return metadata
+
+
+@app.get("/export/anndata/download/{filename}")
+async def export_anndata_download(filename: str) -> FileResponse:
+    """Lädt eine zuvor über POST /export/anndata erzeugte `.h5ad`-Datei herunter."""
+    safe_name = Path(filename).name
+    if safe_name != filename:
+        raise HTTPException(status_code=400, detail="Ungültiger Dateiname.")
+    path = export_dir() / safe_name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Export nicht gefunden: {safe_name!r}")
+    return FileResponse(path, media_type="application/octet-stream", filename=safe_name)

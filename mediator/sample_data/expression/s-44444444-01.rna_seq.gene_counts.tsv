@@ -1,0 +1,11 @@
+# gene-model: GENCODE v36
+gene_id	gene_name	gene_type	unstranded	stranded_first	stranded_second	tpm_unstranded	fpkm_unstranded	fpkm_uq_unstranded
+N_unmapped			2976444	2976444	2976444			
+N_multimapping			4105418	4105418	4105418			
+N_noFeature			1954586	28629612	29044609			
+N_ambiguous			5750570	1468817	1446495			
+ENSG00000012048.23	BRCA1	protein_coding	367	183	184	5.1	4.743	4.5645
+ENSG00000107159.13	CA9	protein_coding	2030	1015	1015	28.3	26.319	25.3285
+ENSG00000111640.15	GAPDH	protein_coding	47320	23660	23660	690.5	642.165	617.9975
+ENSG00000141510.18	TP53	protein_coding	2015	1007	1008	29.4	27.342	26.313
+ENSG00000173432.12	SAA1	protein_coding	2850	1425	1425	41.8	38.874	37.411

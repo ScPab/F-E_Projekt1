@@ -99,3 +99,47 @@ class TransformRequest(BaseModel):
     graph: Optional[str] = Field(
         None, description="Named-Graph-IRI für den Fuseki-Import (nur mit load=true); ohne Angabe Default-Graph."
     )
+
+
+class AnndataExportRequest(BaseModel):
+    """Anfrage für POST /export/anndata (GDC-Expressionsdaten -> anndata/.h5ad,
+    Teil 3 aus wissensnetz/HANDOFF_anndata.md).
+
+    Baut aus GDC-Expressions-Rohdateien (Bulk-Tier des GDCWrapper) + den
+    klinischen Oviedo-Feldern aus dem Wissensnetz (`enrichment.all_cases`)
+    einen `anndata.AnnData`-Container und schreibt ihn als `.h5ad`. Setzt
+    einen funktionierenden `gdc-client` im Container voraus (siehe
+    GDCWrapper.download_via_gdc_client) — ohne das liefert der Endpoint
+    einen klaren 503-Fehler statt einer unvollständigen/erfundenen Matrix.
+    """
+
+    project_id: StrOrList = Field(..., description='z. B. "TCGA-BRCA"')
+    experimental_strategy: str = Field(
+        "RNA-Seq", description='"RNA-Seq" (Gene-Counts) oder "miRNA-Seq" (miRNA-Quantifizierung)'
+    )
+    data_type: str = Field(
+        "Gene Expression Quantification",
+        description='GDC files.data_type; bei miRNA-Seq "miRNA Expression Quantification" verwenden.',
+    )
+    id_column: str = Field("gene_id", description='Spalte mit der Feature-ID in der Quantifizierungsdatei.')
+    value_column: str = Field(
+        "tpm_unstranded",
+        description='Spalte mit dem X-Wert; bei miRNA-Seq z. B. "reads_per_million_miRNA_mapped".',
+    )
+    label_column: Optional[str] = Field(
+        "gene_name", description="Optionale Spalte für var['symbol'] (z. B. Gene-Symbol); ohne Treffer bleibt None."
+    )
+    size: int = Field(
+        5, ge=1, le=200, description="Anzahl Expressions-Dateien (~Proben) — klein halten (Bulk-Download je Aufruf)."
+    )
+    gene_ids: Optional[list[str]] = Field(
+        None, description="Optionale Whitelist (Genumfang einschränken); ohne Angabe alle in den Dateien gefundenen."
+    )
+    compute_tsne: bool = Field(
+        False,
+        description="Optional: 2D-tSNE (scikit-learn) berechnen und als obsm['X_tsne_genes'] ablegen "
+        "(siehe HANDOFF_anndata.md, Offener Punkt 2). Bei <=3 Proben automatisch übersprungen.",
+    )
+    filename: Optional[str] = Field(
+        None, description="Ziel-Dateiname (.h5ad, nur Basisname); ohne Angabe automatisch aus project_id generiert."
+    )

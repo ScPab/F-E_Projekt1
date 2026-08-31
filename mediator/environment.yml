@@ -17,6 +17,11 @@ dependencies:
   - requests
   - anndata
   - scanpy
+  # Optionale 2D-tSNE-Projektion für POST /export/anndata (obsm, siehe
+  # app/semantic/expression.py::compute_tsne sowie
+  # wissensnetz/HANDOFF_anndata.md, Offener Punkt 2). scanpy zieht
+  # scikit-learn i. d. R. bereits transitiv, hier explizit für Klarheit.
+  - scikit-learn
   # Semantische Schicht: GDC-JSON -> RDF/OWL (app/semantic/mapping.py), siehe
   # wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL.
   - rdflib
