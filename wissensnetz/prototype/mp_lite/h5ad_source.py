@@ -14,7 +14,9 @@ zurückfällt (kein harter Crash — siehe ``app.py`` Datenquellen-Priorität).
 Pfad-Auflösung (in dieser Reihenfolge):
 1. explizites ``path``-Argument,
 2. ENV ``DATABRIDGE_H5AD``,
-3. Default: das Referenz-``.h5ad`` unter
+3. vorhandene Pancancer-Datei ``<repo>/wissensnetz/data/pancancer.h5ad``
+   (Aufgabe 10; vom Abruf-Skript ``scripts/fetch_pancancer_h5ad.py`` erzeugt),
+4. Default: das Referenz-``.h5ad`` unter
    ``<repo>/mediator/sample_data/tcga_brca_sample.h5ad``.
 """
 
@@ -42,6 +44,10 @@ ENV_VAR = "DATABRIDGE_H5AD"
 # ``<repo>/wissensnetz/prototype/mp_lite/h5ad_source.py`` -> parents[3] == <repo>.
 _DEFAULT_REL = ("mediator", "sample_data", "tcga_brca_sample.h5ad")
 
+# Pancancer-Datei (Aufgabe 10): wird — falls vorhanden — automatisch dem kleinen
+# BRCA-Default vorgezogen. Erzeugt vom Abruf-Skript ``scripts/fetch_pancancer_h5ad.py``.
+_PANCANCER_REL = ("wissensnetz", "data", "pancancer.h5ad")
+
 # Oviedo-``obs``-Spalten, die MP-lite für Hover/Färbung erwartet (Reihenfolge egal;
 # fehlende Spalten werden zu ``None``). ``submitter_id`` = Case-Barcode (Rückkanal-
 # und Kontext-Schlüssel), ``cancer`` = Kohorten-Code (Färbung/Legende).
@@ -61,13 +67,26 @@ def default_h5ad_path() -> Path:
     return _repo_root().joinpath(*_DEFAULT_REL)
 
 
+def pancancer_h5ad_path() -> Path:
+    """Pancancer-``.h5ad`` (Aufgabe 10) unter ``<repo>/wissensnetz/data/pancancer.h5ad``."""
+    return _repo_root().joinpath(*_PANCANCER_REL)
+
+
 def resolve_h5ad_path(path: str | os.PathLike[str] | None = None) -> Path:
-    """Pfad auflösen: explizites ``path`` > ENV ``DATABRIDGE_H5AD`` > Default."""
+    """Pfad auflösen: explizites ``path`` > ENV ``DATABRIDGE_H5AD`` > vorhandene
+    Pancancer-Datei (Aufgabe 10) > BRCA-Default.
+
+    So zeigt MP-Lite nach ``scripts/fetch_pancancer_h5ad.py`` automatisch die
+    Pancancer-Karte, ohne dass ENV gesetzt werden muss; fehlt die Datei, bleibt es
+    beim BRCA-Fixture wie in Aufgabe 9."""
     if path:
         return Path(path)
     env = os.environ.get(ENV_VAR)
     if env:
         return Path(env)
+    pancancer = pancancer_h5ad_path()
+    if pancancer.exists():
+        return pancancer
     return default_h5ad_path()
 
 

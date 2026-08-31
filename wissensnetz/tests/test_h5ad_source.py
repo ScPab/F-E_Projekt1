@@ -73,6 +73,27 @@ def test_resolve_path_prefers_explicit_over_env(monkeypatch) -> None:
     assert h5.resolve_h5ad_path() == Path("env/path.h5ad")
 
 
+def test_resolve_prefers_existing_pancancer_over_brca_default(monkeypatch, tmp_path) -> None:
+    """Aufgabe 10: vorhandene pancancer.h5ad wird dem BRCA-Default vorgezogen —
+    aber explizites Argument und ENV haben weiterhin Vorrang."""
+    monkeypatch.delenv(h5.ENV_VAR, raising=False)
+    pancancer = tmp_path / "pancancer.h5ad"
+    monkeypatch.setattr(h5, "pancancer_h5ad_path", lambda: pancancer)
+
+    # (a) Datei fehlt -> BRCA-Default
+    assert h5.resolve_h5ad_path() == h5.default_h5ad_path()
+
+    # (b) Datei existiert -> Pancancer gewinnt
+    pancancer.write_bytes(b"")
+    assert h5.resolve_h5ad_path() == pancancer
+
+    # (c) ENV schlägt selbst eine vorhandene Pancancer-Datei
+    monkeypatch.setenv(h5.ENV_VAR, "env/path.h5ad")
+    assert h5.resolve_h5ad_path() == Path("env/path.h5ad")
+    # (d) explizites Argument schlägt alles
+    assert h5.resolve_h5ad_path("explicit/x.h5ad") == Path("explicit/x.h5ad")
+
+
 # --- load_h5ad -------------------------------------------------------------
 def test_load_missing_file_returns_none() -> None:
     assert h5.load_h5ad("does/not/exist.h5ad") is None
