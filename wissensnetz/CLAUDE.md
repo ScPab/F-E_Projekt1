@@ -25,10 +25,15 @@ GEM-i). Arbeitsteilung im Team:
   (Abhängigkeitsrichtung nur Mediator→Wissensnetz, nie umgekehrt).
 - **Das GDC→RDF-Mapping NICHT nachbauen** — B besitzt es; wir konsumieren nur
   den fertigen Turtle-Output.
-- Kein anndata, kein GDC-API-Zugriff (fremde Teile).
+- Kein GDC-API-Zugriff (fremder Teil). Das **Kernpaket** (`src/wissensnetz/`)
+  bleibt anndata-frei. **Ausnahme:** der Bokeh-**Prototyp** (`prototype/mp_lite/`)
+  darf das vom Mediator erzeugte Expressions-`.h5ad` **lesend** über `anndata`
+  einbinden (optionale Prototyp-Abhängigkeit, siehe `prototype/README.md`,
+  Extra `[prototype]`); erzeugt wird das `.h5ad` weiterhin nur mediator-seitig.
 - Eigenständiges, installierbares Python-Paket (Muster wie `wrappers/pyproject.toml`),
   damit der Mediator es später optional per `pip install -e ./wissensnetz` nutzen kann.
-- Git-Branch `Wissensnetz` verwenden (auschecken/anlegen, falls nötig), kleine Commits.
+- Git-Branch `main` verwenden, kleine Commits. (Der frühere Branch `Wissensnetz`
+  wird nicht mehr benutzt; die Arbeit läuft jetzt über `main`.)
 
 ## Wo was liegt (zum Verstehen lesen, nicht ändern)
 - Ontologie/TBox (unser): `wissensnetz/ontology/databridge-core.ttl`,
