@@ -7,8 +7,12 @@
       2. Docker pruefen - laeuft er nicht, Docker Desktop starten und warten
       3. Triple-Store (Fuseki / graph-db) starten und auf Bereitschaft warten
       4. Wissensnetz initialisieren (Dataset + TBox + Rueckkanal-Vokabular)
-      5. Mediator (FastAPI) in eigenem Fenster starten und auf /health warten
-      6. TCGA/GDC-Daten ueber die API abrufen und ins Wissensnetz laden
+      5. Mediator (FastAPI) als Container starten (docker compose, enthaelt
+         gdc-client) und auf /health warten
+      6. Alle Oviedo-Kohorten (Pancancer) ueber die API abrufen und ins
+         Wissensnetz laden - Basis fuer die Kohorten-Faerbung der obs
+      6c. Pancancer-Expressions-.h5ad ueber den Mediator-Export abrufen
+          (wissensnetz/data/pancancer.h5ad -> MP-lite bevorzugt sie automatisch)
       6b. Graph-Visualisierung (pyvis, graph_view.html) erzeugen und oeffnen
       7. Oberflaeche (MP-lite, Bokeh) starten - Browser oeffnet sich
 
@@ -26,18 +30,20 @@
 .EXAMPLE
     .\start_all.ps1
 .EXAMPLE
-    .\start_all.ps1 -Project TCGA-BRCA -Size 100
+    .\start_all.ps1 -Size 100
 .EXAMPLE
     .\start_all.ps1 -SkipLoad -NoUi
+.EXAMPLE
+    .\start_all.ps1 -PancancerSize 80
 #>
 [CmdletBinding()]
 param(
-    [string]$Project = "TCGA-BRCA",
     [int]$Size = 50,
     [int]$MediatorPort = 8000,
     [int]$UiPort = 5006,
     [switch]$SkipInstall,
     [switch]$SkipLoad,
+    [int]$PancancerSize = 40,
     [switch]$NoUi
 )
 
@@ -133,30 +139,48 @@ wissensnetz init
 if ($LASTEXITCODE -ne 0) { Fail "wissensnetz init fehlgeschlagen."; Stop-All; exit 1 }
 Good "Wissensnetz initialisiert."
 
-# --- 5) Mediator starten (eigenes Fenster) ---------------------------------
+# --- 5) Mediator starten (Container - bringt gdc-client aus mediator/Dockerfile mit) ---
+# Bewusst als Container (nicht Host-uvicorn): nur so ist `gdc-client` fuer den
+# Bulk-Download der Expressions-Rohdaten (POST /export/anndata) verfuegbar. Auf
+# Windows gibt es dafuer kein conda-Paket; das Linux-Image installiert es per
+# bioconda. Der Container erreicht Fuseki ueber graph-db:3030 (Compose-Netzwerk).
 $medHealth = "http://localhost:$MediatorPort/health"
 $medUp = $false
 try { Invoke-WebRequest $medHealth -UseBasicParsing -TimeoutSec 2 | Out-Null; $medUp = $true } catch { $medUp = $false }
 if ($medUp) {
     Good "Mediator laeuft bereits ($medHealth)."
 } else {
-    Step "Starte Mediator (uvicorn, Port $MediatorPort) in neuem Fenster ..."
-    $medDir = Join-Path $PSScriptRoot "mediator"
-    Start-Process -FilePath "python" -ArgumentList @('-m','uvicorn','app.main:app','--port',"$MediatorPort") -WorkingDirectory $medDir | Out-Null
+    Step "Baue/starte Mediator-Container (docker compose up -d --build mediator) - erster Build dauert einige Minuten ..."
+    $env:MEDIATOR_PORT = "$MediatorPort"   # Port-Mapping in docker-compose.yml (${MEDIATOR_PORT:-8000})
+    docker compose up -d --build mediator
+    if ($LASTEXITCODE -ne 0) { Fail "docker compose up mediator fehlgeschlagen."; Stop-All; exit 1 }
     Write-Host "   Warte auf Mediator " -NoNewline
-    if (-not (Wait-Url $medHealth 90)) { Write-Host ""; Fail "Mediator nicht erreichbar (Timeout) - siehe Mediator-Fenster."; Stop-All; exit 1 }
+    if (-not (Wait-Url $medHealth 120)) { Write-Host ""; Fail "Mediator nicht erreichbar (Timeout) - 'docker compose logs mediator' pruefen."; Stop-All; exit 1 }
     Write-Host ""
-    Good "Mediator bereit ($medHealth)."
+    Good "Mediator bereit ($medHealth) - Container mit gdc-client."
 }
 
 # --- 6) TCGA/GDC-Daten abrufen und laden -----------------------------------
 if ($SkipLoad) {
     Good "GDC-Datenabruf uebersprungen (-SkipLoad)."
 } else {
-    Step "Lade $Project (size=$Size) aus GDC ins Wissensnetz ..."
-    python scripts\load_gdc.py --project $Project --size $Size --mediator-url "http://localhost:$MediatorPort"
+    Step "Lade ALLE Oviedo-Kohorten aus GDC ins Wissensnetz (Pancancer, size=$Size je Kohorte) - Basis der Kohorten-Faerbung ..."
+    python scripts\load_gdc.py --pancancer --size $Size --mediator-url "http://localhost:$MediatorPort"
     if ($LASTEXITCODE -ne 0) { Fail "GDC-Load fehlgeschlagen (Beispieldaten bleiben nutzbar)." }
-    else { Good "GDC-Daten geladen." }
+    else { Good "GDC-Daten geladen (alle Kohorten)." }
+}
+
+# --- 6c) Pancancer-Expressions-.h5ad abrufen (fester Pipeline-Schritt) ------
+# Erzeugt wissensnetz/data/pancancer.h5ad ueber POST /export/anndata; MP-lite
+# bevorzugt die Datei danach automatisch (echte Gene-Expression-Karte statt
+# BRCA-Fixture). Braucht den Mediator-Container mit gdc-client (Schritt 5) und
+# ein gefuelltes Fuseki (Schritt 6). Grosse RNA-Seq-Downloads dauern - -PancancerSize
+# steuert die Probenzahl (Default 40). Bei -SkipLoad ausgelassen (keine Daten laden).
+if (-not $SkipLoad) {
+    Step "Rufe Pancancer-Expressions-.h5ad ab (fetch_pancancer_h5ad.py --size $PancancerSize) ..."
+    python scripts\fetch_pancancer_h5ad.py --size $PancancerSize --mediator-url "http://localhost:$MediatorPort"
+    if ($LASTEXITCODE -ne 0) { Fail "Pancancer-Abruf fehlgeschlagen (MP-lite bleibt beim BRCA-Fixture)." }
+    else { Good "pancancer.h5ad erzeugt - MP-lite bevorzugt sie automatisch." }
 }
 
 # --- 6b) Wissensnetz visualisieren (pyvis) ---------------------------------

@@ -15,8 +15,9 @@ Kurzreferenz, um das Projekt und alle Skripte zum Laufen zu bringen.
 ## 1. Schnellstart — alles mit einem Befehl (`start_all.ps1`)
 
 Ein Skript fährt die **komplette Pipeline** hoch: prüft/startet Docker, startet
-Fuseki, initialisiert das Wissensnetz, startet den Mediator, ruft TCGA/GDC-Daten
-über die API ab und öffnet zum Schluss die Oberfläche (MP-lite).
+Fuseki, initialisiert das Wissensnetz, baut/startet den Mediator-**Container**
+(mit `gdc-client`), lädt alle Kohorten in den Graphen, ruft die Pancancer-
+Expressions-`.h5ad` ab und öffnet zum Schluss die Oberfläche (MP-lite).
 
 ```powershell
 conda activate F+E
@@ -26,23 +27,28 @@ powershell -ExecutionPolicy Bypass -File .\start_all.ps1
 
 Was das Skript der Reihe nach macht: (1) Abhängigkeiten sicherstellen →
 (2) Docker prüfen, ggf. Docker Desktop starten und warten → (3) Fuseki starten →
-(4) `wissensnetz init` → (5) Mediator (FastAPI) in eigenem Fenster starten →
-(6) `load_gdc.py` (TCGA-Daten laden) → (7) Bokeh-Oberfläche öffnen.
+(4) `wissensnetz init` → (5) Mediator-Container bauen/starten (`docker compose`,
+enthält `gdc-client`) → (6) alle Oviedo-Kohorten laden (`load_gdc.py --pancancer`,
+Basis der Kohorten-Färbung) → (6c) Pancancer-`.h5ad` abrufen
+(`fetch_pancancer_h5ad.py` → `wissensnetz/data/pancancer.h5ad`) → (7) Bokeh öffnen.
 
 Optionen:
 
 | Option | Wirkung |
 | --- | --- |
-| `-Project TCGA-LUAD -Size 100` | anderes Projekt / mehr Fälle |
-| `-SkipLoad` | Dienste starten, aber keine GDC-Daten laden |
+| `-Size 100` | mehr Fälle **pro Kohorte** beim Graph-Load |
+| `-PancancerSize 80` | mehr Proben in der Pancancer-`.h5ad` (längere Downloads) |
+| `-SkipLoad` | Dienste starten, aber weder Graph-Load noch Pancancer-Abruf |
 | `-NoUi` | ohne Bokeh-Oberfläche (nur Dienste) |
 | `-SkipInstall` | `pip install` überspringen |
 | `-MediatorPort 8001` | anderen Mediator-Port verwenden |
 
-Hinweise: Der **Mediator** öffnet sich in einem eigenen Fenster; die
-**Oberfläche** läuft im aktuellen Fenster. **Strg+C beendet alles** — es stoppt
-die Oberfläche und fährt danach automatisch Mediator, `graph-db` (Docker) und die
-Oberfläche herunter und schließt das Fenster.
+Hinweise: Der **Mediator** läuft jetzt als **Docker-Container** (kein eigenes
+Fenster mehr; Logs via `docker compose logs -f mediator`); die **Oberfläche** läuft
+im aktuellen Fenster. Der **erste Lauf baut das Mediator-Image** (einige Minuten,
+lädt `gdc-client` aus bioconda). **Strg+C beendet alles** — es stoppt die Oberfläche
+und fährt danach automatisch Mediator + `graph-db` (`docker compose down`) herunter
+und schließt das Fenster.
 
 Damit sich das Fenster wirklich schließt, das Skript **direkt in der aktivierten
 Session** starten (nicht als `powershell -File`-Kindprozess):
