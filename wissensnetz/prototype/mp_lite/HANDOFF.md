@@ -105,6 +105,8 @@ F-E_Projekt1\wissensnetz\prototype\mp_lite\HANDOFF_oviedo_felder.md
 
 ## Teil 3 — Expressionsdaten integrieren (größere, gemeinsame Aufgabe)
 
+> **Ausführliche Aufgabenverteilung dazu: `wissensnetz/HANDOFF_anndata.md`** — Architekturentscheidung (Expression via .h5ad-Seitenkanal, nicht als RDF-Tripel) + konkrete Schritte für Julian (Rohdaten) und Pablo (anndata-Bau).
+
 Die Morph-Slider `genes`-tSNE, `miRNA`-tSNE sowie Einzelmarker (`miRNA-210-3p`,
 `CA9`, `SAA1` …) existieren im Wissensnetz **noch gar nicht**. MP-lite nutzt an
 ihrer Stelle derzeit synthetische Platzhalter-Layouts (`L0`/`L1`). Benötigt:
