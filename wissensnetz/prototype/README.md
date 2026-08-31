@@ -23,16 +23,31 @@ konvexer Morph-Slider „Gene ↔ miRNA") und koppelt **in-process** an das Pake
 - **③ Rückkanal:** Selektion + Hypothese (von → nach) eingeben → Button speichert
   sie via `feedback.write_feedback` in einen Named Graph pro Nutzer; die Liste
   darunter zeigt alle gespeicherten Erkenntnisse (`list_findings`).
-- **Morphing:** der Slider überblendet die Punkte konvex zwischen zwei Layouts.
+- **Morphing:** je Variable ein Slider; die Endposition ist die softmax-gewichtete
+  Summe der Encodings (wie im Oviedo-Original). Basis-Views „genes"/„miRNA",
+  Einzelmarker-Slider (z. B. CA9/SAA1) und Kreis-Encodings der klinischen Variablen.
+
+## Datenquellen-Priorität (Aufgabe 9)
+Beim Start wählt die App in dieser Reihenfolge:
+1. **Expressions-`.h5ad`** (Mediator-Artefakt, Default
+   `mediator/sample_data/tcga_brca_sample.h5ad`, per ENV `DATABRIDGE_H5AD`
+   überschreibbar) → Punkte/Hover aus `obs`, echte tSNE (`obsm["X_tsne_genes"]`)
+   als Basis-View „genes", Einzelmarker-Slider aus `X` (ENV `DATABRIDGE_MARKERS`,
+   Default `CA9,SAA1`).
+2. sonst der **Graph** (`all_cases()`, Aufgabe 7) → Expressions-Slider deaktiviert.
+3. sonst **Synthetik-Fallback**.
+
+Die Statuszeile („Daten:") zeigt den gewählten Pfad. Fehlt `anndata` oder die
+Datei, fällt die App ohne Crash auf 2./3. zurück. `.h5ad` wird **nur gelesen**.
 
 ## Voraussetzungen & Start
 ```bash
 # 1) Triple-Store starten
 docker compose up -d graph-db
 
-# 2) Pakete
-pip install -e ./wissensnetz
-pip install bokeh numpy
+# 2) Pakete (Prototyp-Extras: bokeh, numpy, anndata)
+pip install -e "./wissensnetz[prototype]"
+# oder einzeln:  pip install bokeh numpy anndata
 
 # 3) Dataset + TBox + Beispiel-ABox laden (idempotent)
 wissensnetz init
@@ -57,7 +72,10 @@ optional, schadet aber nicht.
 - Die Anreicherung ② liefert nur für die vier überlappenden Barcodes etwas —
   echte Fülle kommt mit der NCIt-Alignment-Tabelle und der TBox-Erweiterung
   (Genexpression/miRNA/Methylierung).
-- Der Morph ist ein einfacher konvexer Blend zweier Zufalls-Layouts, kein echtes
-  t-SNE — es geht um den Loop, nicht um die Projektion.
+- Ohne `.h5ad` (Graph-/Synthetik-Pfad) sind die Basis-Views „genes"/„miRNA"
+  synthetische Zufalls-Layouts, kein echtes t-SNE. Mit dem `.h5ad` morpht „genes"
+  entlang der vorberechneten tSNE und die Marker-Slider linear entlang der echten
+  Expressionswerte. Das Referenz-`.h5ad` ist klein (BRCA); der Pancancer-Pfad läuft
+  bis auf Weiteres über den Graphen (Aufgabe 7).
 - `bokeh serve` ist erforderlich (Server-seitige Python-Callbacks); die
   statische `demo.html` von Oviedo kann keine Python-Hooks ausführen.

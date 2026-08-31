@@ -17,6 +17,10 @@ dependencies = [
 # nutzen — Abhängigkeitsrichtung bleibt Mediator -> Wissensnetz.
 [project.optional-dependencies]
 test = ["pytest>=7"]
+# Prototyp-Extras (MP-lite, prototype/mp_lite/app.py). Nur für den Bokeh-Prototyp,
+# nicht für die Kern-Paketfunktion. ``anndata`` (Aufgabe 9) liest das Expressions-
+# ``.h5ad``; fehlt es, fällt die App sauber auf den Graph-/Synthetik-Pfad zurück.
+prototype = ["bokeh>=3", "numpy>=1.24", "anndata>=0.10"]
 
 [project.scripts]
 wissensnetz = "wissensnetz.cli:main"
