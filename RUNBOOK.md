@@ -154,6 +154,35 @@ TCGA-Instanzen (grün), Rückkanal/Annotationen (rot), externe Konzepte wie NCIt
 (lila). Einfach erneut ausführen, um das Wachstum zu sehen. `start_all.ps1` ruft
 das beim Start automatisch auf. Optionen: `--limit`, `--output`, `--no-open`.
 
+## 6c. Pancancer-Expressions-Karte erzeugen (Aufgabe 10)
+Statt des kleinen BRCA-Referenz-`.h5ad` eine **Pancancer**-Expressions-Landkarte
+(echte Gene-Expression über viele TCGA-Kohorten, globale tSNE) live über den
+Mediator-Export (`POST /export/anndata`) beschaffen.
+
+**Voraussetzungen:** Mediator läuft (Abschnitt 4a), im Mediator-Container ein
+funktionierender **`gdc-client`**, und **Fuseki ist gefüllt** (Abschnitt 4b —
+liefert die `obs`-Klinikfelder). Fehlt eins davon, meldet das Skript einen klaren
+Fehler (meist HTTP 503) statt eines Stacktrace.
+
+```powershell
+python scripts\fetch_pancancer_h5ad.py --size 20     # kleiner Smoke-Test zuerst!
+python scripts\fetch_pancancer_h5ad.py               # Default: alle Kohorten, size 160
+```
+Legt `wissensnetz/data/pancancer.h5ad` an; der Report zeigt `n_obs`/`n_vars`,
+`obsm_keys` und die vertretenen Kohorten. **MP-Lite bevorzugt diese Datei
+automatisch** — danach nur die Oberfläche neu laden:
+```powershell
+bokeh serve --show wissensnetz/prototype/mp_lite/app.py
+```
+Die Statuszeile nennt dann `pancancer.h5ad`, der „genes"-Slider morpht entlang der
+globalen tSNE, Punkte sind nach Krebsart gefärbt, Marker-Slider (CA9/SAA1) aktiv.
+
+Optionen: `--size` (1..200, große RNA-Seq-Downloads dauern — klein anfangen),
+`--projects TCGA-ACC,TCGA-BRCA` (Teilmenge), `--out <pfad>`, `--mediator-url <url>`.
+Für eine **gleichmäßig über die Kohorten balancierte** Karte (Oviedo-treu, aber mehr
+Downloads): `--balanced --per-cohort-size 5` (pro Kohorte ein Abruf, danach eine
+globale tSNE im Skript). Ohne die Datei bleibt MP-Lite beim BRCA-Fixture (Aufgabe 9).
+
 ## 7. Rückkanal per CLI testen
 ```powershell
 wissensnetz feedback wissensnetz/data/sample/selection_event.json
