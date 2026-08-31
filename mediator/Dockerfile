@@ -15,6 +15,14 @@ COPY wissensnetz /wissensnetz
 # Environment aus environment.yml erzeugen. Name laut environment.yml: databridge-mediator.
 RUN mamba env create -f /app/environment.yml && mamba clean --all --yes
 
+# GDC Data Transfer Tool (gdc-client) für den Bulk-Download der Expressions-
+# Rohdaten: POST /export/anndata ruft wrappers/gdc `download_via_gdc_client` auf,
+# das `gdc-client download -m <manifest> -d <dir>` aus dem PATH startet. Ohne das
+# Binary liefert der Endpoint einen 503. Aus bioconda ins Mediator-Environment
+# installieren (kein Host-PATH nötig, wenn der Mediator im Container läuft).
+RUN mamba install -n databridge-mediator -c bioconda -c conda-forge gdc-client -y \
+    && mamba clean --all --yes
+
 COPY mediator/app /app/app
 
 # Basis-Ontologie/Alignment-Tabellen (Wissensnetz-Teilbereich, siehe
