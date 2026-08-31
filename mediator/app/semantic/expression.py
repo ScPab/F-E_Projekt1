@@ -200,6 +200,15 @@ def build_obs(
         rows.append(row)
 
     obs = pd.DataFrame(rows, index=pd.Index(list(sample_case_map.keys()), name="sample_id"))
+    # anndata/h5py kann object-Spalten mit ``None`` nicht als vlen-String schreiben
+    # (TypeError: Can't implicitly convert non-string objects to strings). Bei echten
+    # GDC-Proben fehlen einzelne Klinik-Felder bzw. der Case ist (noch) nicht im
+    # Graphen -> ``None``. Fehlende Werte in String-Spalten zu "" normalisieren
+    # (MP-lite behandelt "" ohnehin als fehlend); numerische Spalten (z. B.
+    # age_at_diagnosis) bleiben unangetastet.
+    for col in obs.columns:
+        if obs[col].dtype == object:
+            obs[col] = obs[col].where(obs[col].notna(), "").astype(str)
     return obs
 
 
