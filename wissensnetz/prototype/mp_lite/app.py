@@ -6,9 +6,12 @@ Original-``demo.py`` von Oviedo wiederbeleben zu müssen. Faithful zum MP-Konzep
 im Kleinen: ein Scatter mit Box-/Lasso-Select und — wie im Original — **ein
 Slider pro Variable**. Die finale Position ist die softmax-gewichtete Summe der
 Encodings (Σ a_i·E[i], a = softmax(10·slider)); der Callback läuft clientseitig
-(CustomJS). Basis-Views „genes"/„miRNA" plus, sofern encodierbar, Kreis-Encodings
-der klinischen Variablen (Aufgabe 5). Variablen ohne Daten erscheinen als
-deaktivierte Slider (ehrliche Datenlücke, siehe HANDOFF.md).
+(CustomJS). Basis-Views „genes"/„miRNA", Einzelmarker-Slider (z. B. CA9/SAA1) und,
+sofern encodierbar, Kreis-Encodings der klinischen Variablen (Aufgabe 5). Liegt ein
+Expressions-``.h5ad`` vor (Aufgabe 9), speisen sich „genes" aus der echten tSNE
+(``obsm``) und die Marker linear aus ``X``; sonst bleiben die Basis-Views
+synthetisch. Variablen ohne Daten erscheinen als deaktivierte Slider (ehrliche
+Datenlücke, siehe HANDOFF.md).
 
 Kopplung an das Wissensnetz (Paket ``wissensnetz``, in-process — kein REST nötig):
   ② Anreicherung:  Auswahl/Selektion einer Probe → ``enrichment.case_context()``
@@ -18,9 +21,10 @@ Kopplung an das Wissensnetz (Paket ``wissensnetz``, in-process — kein REST nö
 
 Voraussetzungen & Start: siehe ../README.md
   docker compose up -d graph-db
-  pip install -e ./wissensnetz  &&  pip install bokeh
+  pip install -e "./wissensnetz[prototype]"   # bokeh, numpy, anndata
   wissensnetz init  &&  wissensnetz load wissensnetz/data/sample/cases_brca_sample.ttl
   bokeh serve --show wissensnetz/prototype/mp_lite/app.py
+  # Datenquelle konfigurierbar: ENV DATABRIDGE_H5AD (Pfad), DATABRIDGE_MARKERS (CA9,SAA1)
 
 SPÄTER (Zielweg): dieselben Hooks gegen die echte MP-Web-Version. Diese App ist
 bewusst getrennt gehalten; sie importiert nur ``wissensnetz`` und fasst weder
@@ -61,7 +65,21 @@ _enc_spec = _ilu.spec_from_file_location(
 _enc = _ilu.module_from_spec(_enc_spec)
 _enc_spec.loader.exec_module(_enc)
 circular_encoding = _enc.circular_encoding
+linear_encoding = _enc.linear_encoding
 is_encodable = _enc.is_encodable
+
+# h5ad_source.py (Aufgabe 9) ebenfalls per Dateipfad laden — konsistent mit dem
+# Bokeh-Server-Kontext, in dem der mp_lite-Ordner nicht zwingend auf sys.path liegt.
+_h5_spec = _ilu.spec_from_file_location(
+    "mp_lite_h5ad_source", Path(__file__).resolve().parent / "h5ad_source.py"
+)
+_h5 = _ilu.module_from_spec(_h5_spec)
+_h5_spec.loader.exec_module(_h5)
+load_h5ad = _h5.load_h5ad
+resolve_h5ad_path = _h5.resolve_h5ad_path
+points_from_obs = _h5.points_from_obs
+marker_column = _h5.marker_column
+layout = _h5.layout
 
 # --------------------------------------------------------------------------
 # Store bereitstellen (Fuseki). Idempotentes init + Beispiel-ABox laden, damit
@@ -148,19 +166,55 @@ def _fill_fields(fields: dict[str, list[str]], i: int, *, code: str | None,
 
 
 # --------------------------------------------------------------------------
-# Fälle beschaffen (Aufgabe 7): bevorzugt ECHTE Fälle aus dem Graphen
-# (all_cases). Ist der Store leer/nicht erreichbar, Fallback auf die bisherige
-# Beispiel-/Synthetik-Logik, damit die App standalone lauffähig bleibt.
+# Datenquellen-Priorität (Aufgabe 9):
+#   1. Expressions-``.h5ad`` (Mediator-Artefakt) — Punkte/Hover aus ``obs``,
+#      Encodings aus ``X``/``obsm`` (echtes Morphen der Expressions-Slider).
+#   2. sonst der Graph (``all_cases``, Aufgabe 7) — wie bisher, Expressions-Slider
+#      deaktiviert.
+#   3. sonst Synthetik-Fallback, damit die App standalone lauffähig bleibt.
+# ``.h5ad`` wird NUR gelesen; fehlt ``anndata``/die Datei, fällt es sauber (ohne
+# Crash) auf den Graph-/Synthetik-Pfad zurück.
 # --------------------------------------------------------------------------
+adata = load_h5ad()
+h5ad_points: list[dict] = []
+h5ad_name = ""
+if adata is not None:
+    try:
+        h5ad_points = points_from_obs(adata)
+        h5ad_name = resolve_h5ad_path().name
+    except Exception:  # noqa: BLE001 (Prototyp: robust -> nächster Pfad)
+        h5ad_points = []
+H5AD_OK = bool(h5ad_points)
+
+# Graph nur befragen, wenn kein ``.h5ad`` vorliegt (Priorität 2).
 real_cases: list[dict] = []
-if STORE_OK:
+if not H5AD_OK and STORE_OK:
     try:
         real_cases = all_cases(store)
     except Exception:  # noqa: BLE001 (Prototyp: robust -> Fallback)
         real_cases = []
 
 point_codes: list[str | None]
-if real_cases:
+if H5AD_OK:
+    DATA_SOURCE = f"{len(h5ad_points)} Proben aus {h5ad_name}"
+    TUMORS = [p["tumor"] for p in h5ad_points]
+    N = len(TUMORS)
+    fields = {f: ["--"] * N for f in _FIELDS}
+    point_codes = [None] * N
+    for i, p in enumerate(h5ad_points):
+        # ``cancer`` (Kohorten-Code) steht direkt in ``obs``; zur Sicherheit aus
+        # ``project_id`` ableiten, falls die Spalte mal fehlt.
+        code = cancer_code(p.get("project_id")) or p.get("cancer")
+        point_codes[i] = code
+        _fill_fields(
+            fields, i, code=code, race=p.get("race"), gender=p.get("gender"),
+            ethnicity=p.get("ethnicity"), vital=p.get("vital_status"),
+            sample_type=p.get("sample_type"),
+            tumor_stage=p.get("tumor_stage"), morphology=p.get("morphology"),
+            site=p.get("site_of_resection_or_biopsy"),
+            dx=p.get("primary_diagnosis"), metastasis=p.get("has_metastasis"),
+        )
+elif real_cases:
     DATA_SOURCE = f"{len(real_cases)} echte Fälle aus dem Graphen"
     TUMORS = [
         (c.get("submitter_id") or c.get("case_iri") or f"case-{i}")
@@ -216,12 +270,11 @@ _present = {code for code in point_codes if code}
 present_cohorts = [c for c in OVIEDO_COHORTS if c in _present]
 has_uncolored = any(code is None for code in point_codes)
 
-# Basis-Views „genes"/„miRNA" bleiben synthetische Platzhalter (bis Expressions-
-# daten integriert sind, siehe HANDOFF.md) — Punktzahl an die
-# echte Fallzahl N angepasst, deterministisch erzeugt.
+# Basis-Views „genes"/„miRNA": im ``.h5ad``-Pfad die echten tSNE-Layouts aus
+# ``obsm`` (Aufgabe 9), sonst synthetische Platzhalter — deterministisch, Punktzahl
+# an die echte Fallzahl N angepasst. Die eigentliche Konstruktion erfolgt weiter
+# unten (nach den Skalierungs-Konstanten CIRCLE_SCALE/BASE_WEIGHT).
 rng = np.random.default_rng(42)
-L0 = rng.normal(0.0, 2.5, size=(N, 2))
-L1 = rng.normal(0.0, 2.5, size=(N, 2))
 
 
 # --------------------------------------------------------------------------
@@ -243,10 +296,64 @@ def _softmax(z: np.ndarray) -> np.ndarray:
     return e / e.sum()
 
 
-# E[0] = „genes" (Basis, Startgewicht 0.5), E[1] = „miRNA" (zweite Basis-View).
-encoding_names: list[str] = ["genes", "miRNA"]
-E_arrays: list[np.ndarray] = [L0.copy(), L1.copy()]
-slider_init: list[float] = [BASE_WEIGHT, 0.0]
+def _scale_layout(arr: np.ndarray, target: float = CIRCLE_SCALE) -> np.ndarray:
+    """tSNE-/Roh-Layout zentrieren und auf einen mit den Kreis-/Linear-Encodings
+    vergleichbaren Wertebereich skalieren (max. |Koordinate| ≈ ``target``). Nötig,
+    weil tSNE-Koordinaten in ganz anderen Skalen liegen als die circular/linear
+    Encodings — sonst würde das Morphen zwischen den Views optisch „springen"."""
+    arr = np.asarray(arr, dtype=float)
+    centered = arr - arr.mean(axis=0)
+    peak = float(np.max(np.abs(centered))) if centered.size else 0.0
+    return centered if peak == 0.0 else centered / peak * target
+
+
+# Basis-Views aufbauen. Titel deaktivierter Slider (Basis/Marker/Klinik) sammeln
+# wir in ``disabled_titles`` — damit macht das UI jede Datenlücke ehrlich sichtbar.
+encoding_names: list[str] = []
+E_arrays: list[np.ndarray] = []
+slider_init: list[float] = []
+disabled_titles: list[str] = []
+
+if H5AD_OK:
+    # E[0] = „genes" aus obsm["X_tsne_genes"]; E[1] = „miRNA" aus X_tsne_mirna,
+    # falls vorhanden — sonst ehrlich als deaktivierter Slider (Fixture: nur RNA-Seq).
+    _genes = layout(adata, "X_tsne_genes")
+    if _genes is not None and _genes.shape[0] == N:
+        encoding_names.append("genes")
+        E_arrays.append(_scale_layout(_genes))
+        slider_init.append(BASE_WEIGHT)
+    else:
+        disabled_titles.append("genes  (keine tSNE im .h5ad)")
+    _mirna = layout(adata, "X_tsne_mirna")
+    if _mirna is not None and _mirna.shape[0] == N:
+        encoding_names.append("miRNA")
+        E_arrays.append(_scale_layout(_mirna))
+        slider_init.append(0.0)
+    else:
+        disabled_titles.append("miRNA  (keine tSNE im .h5ad)")
+
+    # Einzelmarker-Slider aus X-Spalten: konfigurierbare Gensymbole (ENV
+    # DATABRIDGE_MARKERS, Default CA9/SAA1). Slider nur aktiv, wenn das Symbol in
+    # ``var`` existiert und die Spalte morphen kann (is_encodable); sonst deaktiviert.
+    import os as _os
+    _marker_env = _os.environ.get("DATABRIDGE_MARKERS", "")
+    MARKER_SYMBOLS = ([s.strip() for s in _marker_env.split(",") if s.strip()]
+                      or ["CA9", "SAA1"])
+    for _sym in MARKER_SYMBOLS:
+        _col = marker_column(adata, _sym)
+        if _col is not None and is_encodable(_col):
+            encoding_names.append(f"marker:{_sym}")
+            E_arrays.append(CIRCLE_SCALE * linear_encoding(_col))
+            slider_init.append(0.0)
+        else:
+            _why = "nicht in var[symbol]" if _col is None else "konstant"
+            disabled_titles.append(f"marker:{_sym}  ({_why})")
+else:
+    # Nicht-h5ad-Pfad: Basis-Views „genes"/„miRNA" synthetisch wie bisher.
+    encoding_names.extend(["genes", "miRNA"])
+    E_arrays.extend([rng.normal(0.0, 2.5, size=(N, 2)),
+                     rng.normal(0.0, 2.5, size=(N, 2))])
+    slider_init.extend([BASE_WEIGHT, 0.0])
 
 # Klinische Variablen in Oviedo-Reihenfolge; Slider-Titel = Feldname wie im Hover.
 _CLINICAL_ORDER = ("cancer", "sample_type", "race", "gender", "ethnicity",
@@ -261,6 +368,16 @@ for _var in _CLINICAL_ORDER:
         slider_init.append(0.0)
     else:
         disabled_vars.append(_var)
+disabled_titles.extend(f"{_var}  (keine Daten)" for _var in disabled_vars)
+
+# Sicherheitsnetz: bliebe (im Extremfall) gar keine Encoding-Variable übrig — etwa
+# ein ``.h5ad`` ohne tSNE und ohne encodierbare Klinik — braucht die Morph-Engine
+# trotzdem mindestens ein E, sonst schlüge das Stapeln fehl. Dann eine synthetische
+# Basis-View einziehen (ehrlich benannt), damit die App lauffähig bleibt.
+if not E_arrays:
+    encoding_names.append("(synthetisch)")
+    E_arrays.append(rng.normal(0.0, 2.5, size=(N, 2)))
+    slider_init.append(BASE_WEIGHT)
 
 # E_stack: (N, 2·k) — je Zeile [E0x,E0y, E1x,E1y, …]; als Liste in die CDS,
 # damit der CustomJS-Callback clientseitig darauf zugreift.
@@ -309,12 +426,13 @@ morph_sliders = [
            title=name)
     for i, name in enumerate(encoding_names)
 ]
-genes_slider = morph_sliders[0]  # Basis-View „genes" (Startgewicht 0.5)
-# Deaktivierte Slider für Variablen ohne (ausreichende) Daten — sichtbare Lücke.
+genes_slider = morph_sliders[0]  # erste Encoding-Variable (i. d. R. „genes")
+# Deaktivierte Slider für Basis-/Marker-/Klinik-Variablen ohne (ausreichende)
+# Daten — macht die Lücke im UI sichtbar (Titel trägt den Grund).
 disabled_sliders = [
     Slider(start=0.0, end=1.0, value=0.0, step=0.01, width=300, disabled=True,
-           title=f"{var}  (keine Daten)")
-    for var in disabled_vars
+           title=title)
+    for title in disabled_titles
 ]
 conf = Slider(start=0.0, end=1.0, value=0.7, step=0.05, width=300, title="Konfidenz")
 user_in = TextInput(title="Nutzer", value="marcel", width=300)
@@ -356,13 +474,14 @@ ctx_div = Div(text="<i>Punkt(e) auswählen (Tap/Box-Select) für Kontext ②</i>
 status_div = Div(text="", width=320)
 findings_div = Div(text="", width=320)
 
-# ③-fremd, aber Kern von Aufgabe 6: welche Variablen mangels Daten deaktiviert
-# sind — macht die Datenlücke im UI ehrlich sichtbar.
-if disabled_vars:
+# ③-fremd, aber Kern von Aufgabe 6/9: welche Variablen mangels Daten deaktiviert
+# sind (Basis-Views, Einzelmarker, Klinik) — macht die Datenlücke im UI ehrlich
+# sichtbar. Der Titel jedes deaktivierten Sliders trägt bereits den Grund.
+if disabled_titles:
     _missing_text = (
-        "<b>Ohne Daten deaktiviert:</b> " + ", ".join(disabled_vars)
-        + " — noch keine Werte im Graphen. Sobald Mediator/Wrapper sie liefern, "
-        "werden die Slider automatisch aktiv (siehe HANDOFF.md)."
+        "<b>Ohne Daten deaktiviert:</b> " + ", ".join(disabled_titles)
+        + " — sobald Mediator/Wrapper (bzw. ein reicheres <code>.h5ad</code>) die "
+        "Werte liefern, werden die Slider automatisch aktiv (siehe HANDOFF.md)."
     )
 else:
     _missing_text = "<i>Alle Variablen encodierbar.</i>"
