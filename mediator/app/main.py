@@ -470,6 +470,7 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         "value_column": request.value_column,
         "label_column": request.label_column,
         "size": request.size,
+        "per_project_size": request.per_project_size,
         "gene_ids": request.gene_ids,
         "compute_tsne": request.compute_tsne,
     }
@@ -478,12 +479,6 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     if cached and Path(cached["path"]).exists():
         return cached
 
-    file_filters = build_filters(
-        project_id=request.project_id,
-        experimental_strategy=request.experimental_strategy,
-        access="open",
-        extra=[{"op": "in", "content": {"field": "files.data_type", "value": [request.data_type]}}],
-    )
     file_fields = [
         "file_id",
         "file_name",
@@ -492,16 +487,38 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         "cases.samples.sample_id",
         "cases.samples.sample_type",
     ]
-    try:
-        result = wrapper.query("files", filters=file_filters, fields=file_fields, size=request.size)
-    except RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
 
-    hits = result["results"]
+    # Files PRO Projekt holen statt in einem Sammel-Query: GDC liefert `size`
+    # Treffer in eigener Default-Reihenfolge ohne Stratifizierung — bei
+    # project_id als Liste (Pancancer/Multi-Kohorten) kamen sonst alle Proben
+    # aus einer einzigen Kohorte, siehe wissensnetz/HANDOFF_export_stratified.md.
+    # Für ein einzelnes project_id ist das äquivalent zum bisherigen
+    # Ein-Query-Verhalten (Schleife über genau ein Projekt).
+    projects = request.project_id if isinstance(request.project_id, list) else [request.project_id]
+    n_each = request.per_project_size or request.size
+
+    hits: list[dict] = []
+    failed_projects: list[str] = []
+    for project in projects:
+        file_filters = build_filters(
+            project_id=project,
+            experimental_strategy=request.experimental_strategy,
+            access="open",
+            extra=[{"op": "in", "content": {"field": "files.data_type", "value": [request.data_type]}}],
+        )
+        try:
+            result = wrapper.query("files", filters=file_filters, fields=file_fields, size=n_each)
+        except RequestException:
+            # eine leere/kaputte Kohorte soll nicht den ganzen Multi-Kohorten-Export killen
+            failed_projects.append(project)
+            continue
+        hits.extend(result["results"])
+
     if not hits:
         raise HTTPException(
             status_code=404,
-            detail=f"Keine Expressions-Files gefunden für project_id={request.project_id!r}, "
+            detail=f"Keine Expressions-Files gefunden für project_id={request.project_id!r} "
+            f"(fehlgeschlagene Kohorten: {failed_projects!r}), "
             f"experimental_strategy={request.experimental_strategy!r}, data_type={request.data_type!r}.",
         )
 
@@ -620,6 +637,7 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         "var_columns": list(var.columns),
         "obsm_keys": list(obsm.keys()),
         "missing_files": missing_files,
+        "failed_projects": failed_projects,
         "filename": filename,
         "path": str(out_path),
         "download_url": f"/export/anndata/download/{filename}",

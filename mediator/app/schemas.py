@@ -130,7 +130,22 @@ class AnndataExportRequest(BaseModel):
         "gene_name", description="Optionale Spalte für var['symbol'] (z. B. Gene-Symbol); ohne Treffer bleibt None."
     )
     size: int = Field(
-        5, ge=1, le=200, description="Anzahl Expressions-Dateien (~Proben) — klein halten (Bulk-Download je Aufruf)."
+        5,
+        ge=1,
+        le=200,
+        description="Anzahl Expressions-Dateien (~Proben). Bei einem einzelnen project_id: Gesamtzahl. "
+        "Bei project_id als Liste (Pancancer/Multi-Kohorten): Anzahl PRO Kohorte, sofern per_project_size "
+        "nicht gesetzt ist — sonst gilt dieses Feld nur als Fallback-Wert. Klein halten (Bulk-Download je Aufruf).",
+    )
+    per_project_size: Optional[int] = Field(
+        None,
+        ge=1,
+        le=200,
+        description="Anzahl Expressions-Dateien PRO Projekt/Kohorte, explizit getrennt von 'size' gehalten. "
+        "Nur relevant, wenn project_id eine Liste ist — verhindert, dass ein Multi-Kohorten-Export alle "
+        "Proben aus derselben (in GDCs Default-Reihenfolge zuerst gelisteten) Kohorte zieht, siehe "
+        "wissensnetz/HANDOFF_export_stratified.md. Gesamtzahl = per_project_size × Anzahl Kohorten — bei "
+        "vielen Kohorten (z. B. Pancancer, 32) daher klein halten (z. B. 5).",
     )
     gene_ids: Optional[list[str]] = Field(
         None, description="Optionale Whitelist (Genumfang einschränken); ohne Angabe alle in den Dateien gefundenen."

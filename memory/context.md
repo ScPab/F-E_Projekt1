@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-08-28
+Stand: 2026-09-02
 
 ## Ziel
 
@@ -59,6 +59,26 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `gdc-client`-Bulk-Download.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
+
+## Umgesetzt seit letztem Stand (2026-09-02)
+
+- Stratifiziertes Sampling für `POST /export/anndata` (Handoff von Marcel:
+  `wissensnetz/HANDOFF_export_stratified.md`). Bug: Bei Multi-Kohorten-Exports
+  (`project_id` als Liste, z. B. Pancancer) holte `export_anndata` alle Files
+  in einem einzigen GDC-Query mit `size` als Gesamt-Limit — ohne
+  Stratifizierung lieferte GDCs Default-Reihenfolge de facto nur Proben aus
+  einer einzigen Kohorte (`obs["cancer"]` z. B. 40× LUAD statt Pancancer-Mix).
+  Fix: Files werden jetzt pro Projekt einzeln abgefragt (`AnndataExportRequest.
+  per_project_size`, neu in `mediator/app/schemas.py`; Loop in
+  `mediator/app/main.py`, `export_anndata`), eine fehlschlagende Kohorte
+  überspringt nur sich selbst (`failed_projects` in der Antwort) statt den
+  gesamten Export abzubrechen. `per_project_size` ist Teil des
+  `recipe`-Cache-Keys, damit stratifizierte Anfragen einen eigenen
+  Materialized-Cache-Eintrag bekommen. Bei einzelnem `project_id` (kein
+  `per_project_size`) bleibt das Verhalten unverändert (ein Query, `size` als
+  Gesamtzahl) — mit einem gemockten `wrapper.query` verifiziert (Multi-Projekt-
+  Stratifizierung inkl. übersprungener fehlerhafter Kohorte, sowie
+  Rückwärtskompatibilität für Einzel-Projekt).
 
 ## Umgesetzt seit letztem Stand (2026-08-28)
 
