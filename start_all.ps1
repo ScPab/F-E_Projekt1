@@ -44,6 +44,7 @@ param(
     [switch]$SkipInstall,
     [switch]$SkipLoad,
     [int]$PancancerSize = 40,
+    [switch]$RebuildMediator,
     [switch]$NoUi
 )
 
@@ -150,9 +151,14 @@ try { Invoke-WebRequest $medHealth -UseBasicParsing -TimeoutSec 2 | Out-Null; $m
 if ($medUp) {
     Good "Mediator laeuft bereits ($medHealth)."
 } else {
-    Step "Baue/starte Mediator-Container (docker compose up -d --build mediator) - erster Build dauert einige Minuten ..."
     $env:MEDIATOR_PORT = "$MediatorPort"   # Port-Mapping in docker-compose.yml (${MEDIATOR_PORT:-8000})
-    docker compose up -d --build mediator
+    if ($RebuildMediator) {
+        Step "Baue Mediator-Container NEU (-RebuildMediator) - dauert einige Minuten ..."
+        docker compose up -d --build mediator
+    } else {
+        Step "Starte Mediator-Container (vorhandenes Image; baut nur beim ersten Mal automatisch). -RebuildMediator erzwingt Neubau ..."
+        docker compose up -d mediator
+    }
     if ($LASTEXITCODE -ne 0) { Fail "docker compose up mediator fehlgeschlagen."; Stop-All; exit 1 }
     Write-Host "   Warte auf Mediator " -NoNewline
     if (-not (Wait-Url $medHealth 120)) { Write-Host ""; Fail "Mediator nicht erreichbar (Timeout) - 'docker compose logs mediator' pruefen."; Stop-All; exit 1 }

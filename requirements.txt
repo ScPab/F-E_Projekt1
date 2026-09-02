@@ -36,7 +36,7 @@ pytest>=7
 # Nur nötig, wenn du die anndata-/Messmatrizen-Konvertierung des Mediators
 # lokal ausführst. Wenn nicht gebraucht: die beiden Zeilen auskommentieren.
 # (Über Conda oft robuster: `conda install -c conda-forge anndata scanpy`.)
-anndata>=0.10
+anndata
 scanpy>=1.10
 
 # --- Optional: Oviedos Original-demo.py / Daten-Notebook -------------------

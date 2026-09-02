@@ -172,6 +172,7 @@ def build_obs(
     cases_by_submitter: dict[str, dict[str, Any]],
     *,
     sample_types: Optional[dict[str, str]] = None,
+    gdc_project_by_sample: Optional[dict[str, str]] = None,
 ) -> pd.DataFrame:
     """Baut `obs` (Zeilen-Metadaten je Probe) aus dem Wissensnetz-Case-Kontext.
 
@@ -190,13 +191,23 @@ def build_obs(
     Spalten für die betroffene Probe ``None`` statt eines Fehlers.
     """
     sample_types = sample_types or {}
+    gdc_project_by_sample = gdc_project_by_sample or {}
     rows: list[dict[str, Any]] = []
     for sample_id, submitter_id in sample_case_map.items():
         case = cases_by_submitter.get(submitter_id, {})
         row: dict[str, Any] = {"sample_type": sample_types.get(sample_id)}
         for obs_col, case_key in _OBS_CASE_FIELDS:
             row[obs_col] = case.get(case_key)
-        row["cancer"] = cancer_code(case.get("project_id"))
+        # Fallback auf die GDC-Files-Abfrage, wenn der Case (noch) nicht im
+        # Wissensnetz liegt: project_id/cancer (und submitter_id) aus GDC, damit
+        # JEDE Probe nach Kohorte gefaerbt werden kann (siehe
+        # wissensnetz/HANDOFF_obs_fallback.md). Reichere Klinikfelder bleiben nur
+        # dort gefuellt, wo der Case im Graphen ist.
+        if not row.get("project_id"):
+            row["project_id"] = gdc_project_by_sample.get(sample_id)
+        if not row.get("submitter_id"):
+            row["submitter_id"] = submitter_id
+        row["cancer"] = cancer_code(row.get("project_id"))
         rows.append(row)
 
     obs = pd.DataFrame(rows, index=pd.Index(list(sample_case_map.keys()), name="sample_id"))

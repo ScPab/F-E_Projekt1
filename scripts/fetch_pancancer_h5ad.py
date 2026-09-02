@@ -154,8 +154,9 @@ def _run_balanced(base: str, projects: list[str], *, per_cohort_size: int,
                                 compute_tsne=False, gene_ids=gene_ids)
             f = _download(base, meta["download_url"], tmpdir / meta["filename"])
         except ExportError as exc:
-            skipped.append((proj, str(exc).splitlines()[0]))
-            print("übersprungen")
+            reason = "; ".join(l.strip() for l in str(exc).splitlines() if l.strip())
+            skipped.append((proj, reason))
+            print(f"übersprungen — {reason}")
             continue
         a = ad.read_h5ad(f)
         if gene_ids is None and a.n_vars:

@@ -508,6 +508,7 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     file_ids: list[str] = []
     sample_case_map: dict[str, str] = {}
     sample_types: dict[str, str] = {}
+    sample_project_map: dict[str, str] = {}
     file_names: dict[str, str] = {}
     for hit in hits:
         file_id = hit["file_id"]
@@ -517,6 +518,9 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         file_ids.append(file_id)
         file_names[file_id] = hit["file_name"]
         sample_case_map[sample_id] = case.get("submitter_id")
+        _proj = (case.get("project") or {}).get("project_id")
+        if _proj:
+            sample_project_map[sample_id] = _proj
         if sample.get("sample_type"):
             sample_types[sample_id] = sample["sample_type"]
 
@@ -564,6 +568,7 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
 
     sample_case_map = {sid: sub for sid, sub in sample_case_map.items() if sid in sample_files}
     sample_types = {sid: t for sid, t in sample_types.items() if sid in sample_files}
+    sample_project_map = {sid: p for sid, p in sample_project_map.items() if sid in sample_files}
 
     try:
         X, sample_ids, gene_ids, gene_labels = expression_export.assemble_matrix(
@@ -585,7 +590,7 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         )
     cases_by_submitter = {c["submitter_id"]: c for c in all_cases(store) if c.get("submitter_id")}
 
-    obs = expression_export.build_obs(sample_case_map, cases_by_submitter, sample_types=sample_types)
+    obs = expression_export.build_obs(sample_case_map, cases_by_submitter, sample_types=sample_types, gdc_project_by_sample=sample_project_map)
     obs = obs.loc[sample_ids]  # dieselbe Zeilenreihenfolge wie X sicherstellen
     var = expression_export.build_var(gene_ids, gene_labels)
 
