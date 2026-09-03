@@ -45,6 +45,7 @@ from bokeh.layouts import column, row
 from bokeh.models import (
     Button, ColumnDataSource, CustomJS, Div, HoverTool, Slider, TextInput,
 )
+from bokeh.events import DocumentReady
 from bokeh.plotting import curdoc, figure
 
 from wissensnetz import (
@@ -472,14 +473,54 @@ if plot.legend:
     plot.add_layout(_lg, "right")   # Legende rechts aus dem Plot legen
 
 # Hover = volle Oviedo-MP-Feldliste in exakter Reihenfolge (fehlend -> "--").
-plot.add_tools(HoverTool(tooltips=[
+_hover_fields = [
     ("Sample", "@tumor"), ("cancer", "@cancer"), ("type", "@sample_type"),
     ("race", "@race"), ("gender", "@gender"), ("ethnicity", "@ethnicity"),
     ("tumor_stage", "@tumor_stage"), ("morphology", "@morphology"),
     ("site_of_resection_or_biopsy", "@site_biopsy"),
     ("primary_diagnosis", "@primary_diagnosis"),
     ("has_metastasis", "@has_metastasis"), ("vital_status", "@vital_status"),
-]))
+]
+_tt = "".join(f"<b>{lbl}:</b> {ref}<br>" for lbl, ref in _hover_fields)
+
+# Aufgabe 12 — bei überdeckten Punkten nur das OBERSTE Sample im Hover zeigen.
+# Bokehs HoverTool rendert je getroffenem Punkt einen Tooltip-Block; liegen mehrere
+# Proben auf (fast) derselben Encoding-Position (typisch bei aktivem kategorialem
+# Slider, wo alle Proben einer Klasse auf denselben Kreispunkt fallen), stapeln sie
+# sich. Oviedos Trick (ein <style>-Block IM Tooltip-HTML) greift in Bokeh 3.10 NICHT:
+# Bokeh entfernt <style> aus dem Tooltip-String, und der Tooltip lebt in einem eigenen
+# Shadow-DOM (``div.bk-Tooltip`` direkt am <body>), das Dokument-/Plot-CSS nicht
+# erreicht. Deshalb injiziert ein kleiner MutationObserver (einmalig beim Laden via
+# DocumentReady installiert) das passende CSS in den Shadow-Root jedes Tooltips,
+# sobald er entsteht. DOM-Struktur/-Selektor live an Bokeh 3.10 verifiziert:
+# ``.bk-tooltip-content > div (Wrapper) > div (je Treffer)`` — alle außer dem ersten
+# ausblenden. Einzelne Punkte zeigen weiter alle Felder.
+_only_first_tooltip = CustomJS(code=r"""
+  if (window.__mp_only_first_tooltip) return;
+  window.__mp_only_first_tooltip = true;
+  const CSS = '.bk-tooltip-content > div > div:not(:first-child){display:none;}';
+  const styleTip = (host) => {
+    const sr = host && host.shadowRoot;
+    if (!sr || sr.querySelector('style.__mp_only_first')) return;
+    const st = document.createElement('style');
+    st.className = '__mp_only_first';
+    st.textContent = CSS;
+    sr.appendChild(st);
+  };
+  document.querySelectorAll('.bk-Tooltip').forEach(styleTip);
+  const obs = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.matches && n.matches('.bk-Tooltip')) styleTip(n);
+        if (n.querySelectorAll) n.querySelectorAll('.bk-Tooltip').forEach(styleTip);
+      }
+    }
+  });
+  obs.observe(document.body, {childList: true, subtree: true});
+""")
+plot.add_tools(HoverTool(tooltips=_tt))
+curdoc().js_on_event(DocumentReady, _only_first_tooltip)
 
 # --------------------------------------------------------------------------
 # Widgets (② Kontext + ③ Rückkanal + Status) — die Morph-Slider sind oben erzeugt.
