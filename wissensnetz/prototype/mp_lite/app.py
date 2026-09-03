@@ -13,6 +13,11 @@ Expressions-``.h5ad`` vor (Aufgabe 9), speisen sich „genes" aus der echten tSN
 synthetisch. Variablen ohne Daten erscheinen als deaktivierte Slider (ehrliche
 Datenlücke, siehe HANDOFF.md).
 
+Layout exakt an Oviedos ``demo.py`` angeglichen (Aufgabe 11): links der Plot mit
+Titel „Cancer map", Toolbar oben und der Kohorten-Legende rechts IM Plot; rechts
+daneben Oviedos 15 Slider (feste Reihenfolge/Benennung), datengetrieben aktiv/
+deaktiviert; Status, Kontext ② und Rückkanal ③ kompakt UNTER dem Plot.
+
 Kopplung an das Wissensnetz (Paket ``wissensnetz``, in-process — kein REST nötig):
   ② Anreicherung:  Auswahl/Selektion einer Probe → ``enrichment.case_context()``
                    → Kontext (Projekt, Diagnose, …) im Seitenpanel.
@@ -307,85 +312,122 @@ def _scale_layout(arr: np.ndarray, target: float = CIRCLE_SCALE) -> np.ndarray:
     return centered if peak == 0.0 else centered / peak * target
 
 
-# Basis-Views aufbauen. Titel deaktivierter Slider (Basis/Marker/Klinik) sammeln
-# wir in ``disabled_titles`` — damit macht das UI jede Datenlücke ehrlich sichtbar.
+# --------------------------------------------------------------------------
+# Encodings + Slider-Set exakt wie Oviedo (Aufgabe 11)
+# --------------------------------------------------------------------------
+# Genau Oviedos 15 Slider, in dieser Reihenfolge und Benennung (demo.py):
+#   genes, mirna, cancer, type, race, gender, ethnicity, primary_diagnosis,
+#   has_metastasis, vital_status, cancer (ver), tumor_stage (ver),
+#   miRNA-210-3p (hor), CA9 (ver), SAA1 (hor)
+# Ein Slider ist nur aktiv, wenn seine Encoding-Daten vorliegen; sonst wird er
+# deaktiviert angezeigt (Titel-Zusatz „(keine Daten)"), damit das Set optisch dem
+# Original entspricht. Nur die aktiven Slider (mit E-Array) treiben die Morph-Engine
+# — in genau ihrer Reihenfolge (der CustomJS erwartet E in Slider-Reihenfolge).
+# morphology/site_biopsy sind bei Oviedo KEINE Slider (nur Hover) und fehlen hier.
+
+# Basis-Views: im .h5ad-Pfad echte tSNE aus obsm, sonst synthetisch (Fallback).
+if H5AD_OK:
+    _g = layout(adata, "X_tsne_genes")
+    _genes_E = _scale_layout(_g) if (_g is not None and _g.shape[0] == N) else None
+    _m = layout(adata, "X_tsne_mirna")
+    _mirna_E = _scale_layout(_m) if (_m is not None and _m.shape[0] == N) else None
+else:
+    _genes_E = rng.normal(0.0, 2.5, size=(N, 2))
+    _mirna_E = rng.normal(0.0, 2.5, size=(N, 2))
+
+
+def _missing(v: object) -> bool:
+    return v is None or str(v).strip() in ("", "--")
+
+
+def _circ(field_key: str):
+    """Kreis-Encoding einer klinischen obs-Spalte (None, wenn nicht encodierbar)."""
+    vals = fields[field_key]
+    return CIRCLE_SCALE * circular_encoding(vals) if is_encodable(vals) else None
+
+
+def _ordinal_codes(values) -> list:
+    """Kategorie -> ganzzahliger Ordinal-Code (0..k-1, sortiert); fehlend -> None.
+    Entspricht Oviedos ``cancer#``/``tumor_stage#`` für die linearen (ver)-Encodings."""
+    classes = sorted({str(v).strip() for v in values if not _missing(v)})
+    idx = {c: i for i, c in enumerate(classes)}
+    return [None if _missing(v) else float(idx[str(v).strip()]) for v in values]
+
+
+def _lin_ordinal(field_key: str, direction: str):
+    """Lineares Encoding einer Kategorie über ihren Ordinal-Code (Oviedos ``linearEnc``
+    auf ``#``-Spalten). None, wenn nicht encodierbar."""
+    vals = fields[field_key]
+    if not is_encodable(vals):
+        return None
+    return CIRCLE_SCALE * linear_encoding(_ordinal_codes(vals), dir=direction)
+
+
+def _marker_enc(symbol: str, direction: str):
+    """Lineares Encoding einer Gen-/miRNA-Expressionsspalte aus ``X`` (None, wenn das
+    Symbol fehlt / keine ``.h5ad`` / konstant)."""
+    if not H5AD_OK:
+        return None
+    col = marker_column(adata, symbol)
+    if col is None or not is_encodable(col):
+        return None
+    return CIRCLE_SCALE * linear_encoding(col, dir=direction)
+
+
+# (Titel, Encoding-Array-oder-None, Startwert) — exakte Oviedo-Reihenfolge.
+_SLIDER_SPECS = [
+    ("genes", _genes_E, BASE_WEIGHT),
+    ("mirna", _mirna_E, 0.0),
+    ("cancer", _circ("cancer"), 0.0),
+    ("type", _circ("sample_type"), 0.0),
+    ("race", _circ("race"), 0.0),
+    ("gender", _circ("gender"), 0.0),
+    ("ethnicity", _circ("ethnicity"), 0.0),
+    ("primary_diagnosis", _circ("primary_diagnosis"), 0.0),
+    ("has_metastasis", _circ("has_metastasis"), 0.0),
+    ("vital_status", _circ("vital_status"), 0.0),
+    ("cancer (ver)", _lin_ordinal("cancer", "ver"), 0.0),
+    ("tumor_stage (ver)", _lin_ordinal("tumor_stage", "ver"), 0.0),
+    ("miRNA-210-3p (hor)", _marker_enc("miRNA-210-3p", "hor"), 0.0),
+    ("CA9 (ver)", _marker_enc("CA9", "ver"), 0.0),
+    ("SAA1 (hor)", _marker_enc("SAA1", "hor"), 0.0),
+]
+
 encoding_names: list[str] = []
 E_arrays: list[np.ndarray] = []
-slider_init: list[float] = []
-disabled_titles: list[str] = []
-
-if H5AD_OK:
-    # E[0] = „genes" aus obsm["X_tsne_genes"]; E[1] = „miRNA" aus X_tsne_mirna,
-    # falls vorhanden — sonst ehrlich als deaktivierter Slider (Fixture: nur RNA-Seq).
-    _genes = layout(adata, "X_tsne_genes")
-    if _genes is not None and _genes.shape[0] == N:
-        encoding_names.append("genes")
-        E_arrays.append(_scale_layout(_genes))
-        slider_init.append(BASE_WEIGHT)
+_active_init: list[float] = []
+morph_sliders: list[Slider] = []    # nur aktive Slider (treiben die Morph-Engine)
+display_sliders: list[Slider] = []  # alle 15 in Oviedo-Reihenfolge (für die Spalte)
+for _title, _E, _init in _SLIDER_SPECS:
+    if _E is not None:
+        sl = Slider(start=0.0, end=1.0, value=_init, step=0.01, width=200, title=_title)
+        morph_sliders.append(sl)
+        E_arrays.append(np.asarray(_E, dtype=float))
+        encoding_names.append(_title)
+        _active_init.append(_init)
     else:
-        disabled_titles.append("genes  (keine tSNE im .h5ad)")
-    _mirna = layout(adata, "X_tsne_mirna")
-    if _mirna is not None and _mirna.shape[0] == N:
-        encoding_names.append("miRNA")
-        E_arrays.append(_scale_layout(_mirna))
-        slider_init.append(0.0)
-    else:
-        disabled_titles.append("miRNA  (keine tSNE im .h5ad)")
+        sl = Slider(start=0.0, end=1.0, value=0.0, step=0.01, width=200,
+                    disabled=True, title=f"{_title}  (keine Daten)")
+    display_sliders.append(sl)
 
-    # Einzelmarker-Slider aus X-Spalten: konfigurierbare Gensymbole (ENV
-    # DATABRIDGE_MARKERS, Default CA9/SAA1). Slider nur aktiv, wenn das Symbol in
-    # ``var`` existiert und die Spalte morphen kann (is_encodable); sonst deaktiviert.
-    import os as _os
-    _marker_env = _os.environ.get("DATABRIDGE_MARKERS", "")
-    MARKER_SYMBOLS = ([s.strip() for s in _marker_env.split(",") if s.strip()]
-                      or ["CA9", "SAA1"])
-    for _sym in MARKER_SYMBOLS:
-        _col = marker_column(adata, _sym)
-        if _col is not None and is_encodable(_col):
-            encoding_names.append(f"marker:{_sym}")
-            E_arrays.append(CIRCLE_SCALE * linear_encoding(_col))
-            slider_init.append(0.0)
-        else:
-            _why = "nicht in var[symbol]" if _col is None else "konstant"
-            disabled_titles.append(f"marker:{_sym}  ({_why})")
-else:
-    # Nicht-h5ad-Pfad: Basis-Views „genes"/„miRNA" synthetisch wie bisher.
-    encoding_names.extend(["genes", "miRNA"])
-    E_arrays.extend([rng.normal(0.0, 2.5, size=(N, 2)),
-                     rng.normal(0.0, 2.5, size=(N, 2))])
-    slider_init.extend([BASE_WEIGHT, 0.0])
-
-# Klinische Variablen in Oviedo-Reihenfolge; Slider-Titel = Feldname wie im Hover.
-_CLINICAL_ORDER = ("cancer", "sample_type", "race", "gender", "ethnicity",
-                   "tumor_stage", "morphology", "site_biopsy",
-                   "primary_diagnosis", "has_metastasis", "vital_status")
-disabled_vars: list[str] = []
-for _var in _CLINICAL_ORDER:
-    _vals = fields[_var]
-    if is_encodable(_vals):
-        encoding_names.append(_var)
-        E_arrays.append(CIRCLE_SCALE * circular_encoding(_vals))
-        slider_init.append(0.0)
-    else:
-        disabled_vars.append(_var)
-disabled_titles.extend(f"{_var}  (keine Daten)" for _var in disabled_vars)
-
-# Sicherheitsnetz: bliebe (im Extremfall) gar keine Encoding-Variable übrig — etwa
-# ein ``.h5ad`` ohne tSNE und ohne encodierbare Klinik — braucht die Morph-Engine
-# trotzdem mindestens ein E, sonst schlüge das Stapeln fehl. Dann eine synthetische
-# Basis-View einziehen (ehrlich benannt), damit die App lauffähig bleibt.
+# Sicherheitsnetz: bliebe (Extremfall) kein aktives Encoding übrig, braucht die
+# Morph-Engine trotzdem ein E. Dann „genes" synthetisch aktivieren.
 if not E_arrays:
-    encoding_names.append("(synthetisch)")
+    sl = display_sliders[0]
+    sl.disabled = False
+    sl.title = "genes"
+    sl.value = BASE_WEIGHT
+    morph_sliders.append(sl)
     E_arrays.append(rng.normal(0.0, 2.5, size=(N, 2)))
-    slider_init.append(BASE_WEIGHT)
+    encoding_names.append("genes")
+    _active_init.append(BASE_WEIGHT)
 
-# E_stack: (N, 2·k) — je Zeile [E0x,E0y, E1x,E1y, …]; als Liste in die CDS,
-# damit der CustomJS-Callback clientseitig darauf zugreift.
+genes_slider = morph_sliders[0]  # erste aktive Encoding-Variable (i. d. R. „genes")
+
+# E_stack: (N, 2·k) — je Zeile [E0x,E0y, E1x,E1y, …]; Startpositionen serverseitig
+# passend zu den Default-Slider-Werten (CustomJS feuert erst bei Änderung).
 E_stack = np.concatenate(E_arrays, axis=1)
-
-# Startpositionen serverseitig mit den Default-Slider-Werten berechnen, damit der
-# erste Render zum CustomJS passt (der erst bei Slider-Änderung feuert).
-_a0 = _softmax(SENS * np.asarray(slider_init))
+_a0 = _softmax(SENS * np.asarray(_active_init))
 _Epos0 = np.zeros((N, 2))
 for _i, _arr in enumerate(E_arrays):
     _Epos0 += _a0[_i] * _arr
@@ -400,12 +442,35 @@ source = ColumnDataSource(dict(
 # Plot
 # --------------------------------------------------------------------------
 plot = figure(
-    width=760, height=620, title="MP-lite — Cancer Map (Multi-Variablen-Morph)",
+    width=820, height=640, title="Cancer map", toolbar_location="above",
     tools="pan,box_select,lasso_select,tap,wheel_zoom,reset,save",
     x_range=(-9, 9), y_range=(-9, 9), output_backend="webgl",
 )
-plot.scatter("pos_x", "pos_y", source=source, size=11, color="color",
-             alpha=0.75, nonselection_alpha=0.2, line_color="#333333")
+plot.scatter("pos_x", "pos_y", source=source, size=8, color="color",
+             alpha=0.6, nonselection_alpha=0.2, line_color="#333333")
+
+# Kohorten-Legende IN den Plot (rechts) — wie im Oviedo-Screenshot: je vorkommender
+# Kohorte (in OVIEDO_COHORTS-Reihenfolge) ein Eintrag mit COHORT_COLORS. Als Träger
+# der Farb-Swatches dienen leere Dummy-Glyphen (stören das Morphen nicht; das echte
+# Scatter oben trägt die Farbe schon per Punkt).
+for _c in present_cohorts:
+    plot.scatter(x=[], y=[], marker="circle", size=8, fill_alpha=0.8,
+                 fill_color=COHORT_COLORS[_c], line_color="#333333", legend_label=_c)
+if has_uncolored:
+    plot.scatter(x=[], y=[], marker="circle", size=8, fill_alpha=0.8,
+                 fill_color=GRAY, line_color="#333333", legend_label="ohne Kohorte")
+if plot.legend:
+    _lg = plot.legend[0]
+    _lg.title = "cancer"
+    _lg.label_text_font_size = "8pt"
+    _lg.spacing = 0
+    _lg.padding = 3
+    _lg.margin = 4
+    _lg.glyph_height = 13
+    _lg.glyph_width = 13
+    _lg.label_height = 13
+    plot.add_layout(_lg, "right")   # Legende rechts aus dem Plot legen
+
 # Hover = volle Oviedo-MP-Feldliste in exakter Reihenfolge (fehlend -> "--").
 plot.add_tools(HoverTool(tooltips=[
     ("Sample", "@tumor"), ("cancer", "@cancer"), ("type", "@sample_type"),
@@ -417,75 +482,21 @@ plot.add_tools(HoverTool(tooltips=[
 ]))
 
 # --------------------------------------------------------------------------
-# Widgets
+# Widgets (② Kontext + ③ Rückkanal + Status) — die Morph-Slider sind oben erzeugt.
 # --------------------------------------------------------------------------
-# Ein Slider je aufgenommener Encoding-Variable (Basis + encodierbare Klinik),
-# in E-Reihenfolge — der CustomJS-Callback erwartet exakt diese Reihenfolge.
-morph_sliders = [
-    Slider(start=0.0, end=1.0, value=slider_init[i], step=0.01, width=300,
-           title=name)
-    for i, name in enumerate(encoding_names)
-]
-genes_slider = morph_sliders[0]  # erste Encoding-Variable (i. d. R. „genes")
-# Deaktivierte Slider für Basis-/Marker-/Klinik-Variablen ohne (ausreichende)
-# Daten — macht die Lücke im UI sichtbar (Titel trägt den Grund).
-disabled_sliders = [
-    Slider(start=0.0, end=1.0, value=0.0, step=0.01, width=300, disabled=True,
-           title=title)
-    for title in disabled_titles
-]
-conf = Slider(start=0.0, end=1.0, value=0.7, step=0.05, width=300, title="Konfidenz")
-user_in = TextInput(title="Nutzer", value="marcel", width=300)
-from_in = TextInput(title="Hypothese: von (CURIE/IRI)", value="ncit:PAAD", width=300)
-to_in = TextInput(title="Hypothese: nach (CURIE/IRI)", value="ncit:PanNET", width=300)
-note_in = TextInput(title="Notiz", value="Common fate: driften gemeinsam", width=300)
-save_btn = Button(label="③  Selektion als Erkenntnis speichern", button_type="primary", width=300)
-refresh_btn = Button(label="Erkenntnisse aktualisieren", button_type="default", width=300)
+conf = Slider(start=0.0, end=1.0, value=0.7, step=0.05, width=240, title="Konfidenz")
+user_in = TextInput(title="Nutzer", value="marcel", width=240)
+from_in = TextInput(title="Hypothese: von (CURIE/IRI)", value="ncit:PAAD", width=240)
+to_in = TextInput(title="Hypothese: nach (CURIE/IRI)", value="ncit:PanNET", width=240)
+note_in = TextInput(title="Notiz", value="Common fate: driften gemeinsam", width=240)
+save_btn = Button(label="③  Selektion als Erkenntnis speichern", button_type="primary", width=240)
+refresh_btn = Button(label="Erkenntnisse aktualisieren", button_type="default", width=240)
 
-boot_div = Div(text=f"<b>Status:</b> {_boot_msg}", width=320)
-data_div = Div(text=f"<b>Daten:</b> {DATA_SOURCE}", width=320)
-
-
-def _legend_html() -> str:
-    """Kompakte Farb-Legende je Krebsart in OVIEDO_COHORTS-Reihenfolge."""
-    if not present_cohorts and not has_uncolored:
-        return "<i>keine Kohorten im Datensatz.</i>"
-
-    def _chip(hexcol: str, label: str) -> str:
-        return (
-            "<div style='display:flex;align-items:center;margin:1px 0'>"
-            f"<span style='display:inline-block;width:12px;height:12px;flex:0 0 auto;"
-            f"border:1px solid #333;background:{hexcol};margin-right:6px'></span>"
-            f"<span>{label}</span></div>"
-        )
-
-    rows = [_chip(COHORT_COLORS.get(c, GRAY), c) for c in present_cohorts]
-    if has_uncolored:
-        rows.append(_chip(GRAY, "<i>ohne Kohorte</i>"))
-    return (
-        f"<b>Krebsart ({len(present_cohorts)} Kohorte(n)):</b>"
-        "<div style='max-height:220px;overflow:auto;font-size:12px'>"
-        + "".join(rows) + "</div>"
-    )
-
-
-legend_div = Div(text=_legend_html(), width=320)
-ctx_div = Div(text="<i>Punkt(e) auswählen (Tap/Box-Select) für Kontext ②</i>", width=320)
-status_div = Div(text="", width=320)
-findings_div = Div(text="", width=320)
-
-# ③-fremd, aber Kern von Aufgabe 6/9: welche Variablen mangels Daten deaktiviert
-# sind (Basis-Views, Einzelmarker, Klinik) — macht die Datenlücke im UI ehrlich
-# sichtbar. Der Titel jedes deaktivierten Sliders trägt bereits den Grund.
-if disabled_titles:
-    _missing_text = (
-        "<b>Ohne Daten deaktiviert:</b> " + ", ".join(disabled_titles)
-        + " — sobald Mediator/Wrapper (bzw. ein reicheres <code>.h5ad</code>) die "
-        "Werte liefern, werden die Slider automatisch aktiv (siehe HANDOFF.md)."
-    )
-else:
-    _missing_text = "<i>Alle Variablen encodierbar.</i>"
-missing_div = Div(text=_missing_text, width=320)
+boot_div = Div(text=f"<b>Status:</b> {_boot_msg}", width=520)
+data_div = Div(text=f"<b>Daten:</b> {DATA_SOURCE}", width=520)
+ctx_div = Div(text="<i>Punkt(e) auswählen (Tap/Box-Select) für Kontext ②</i>", width=360)
+status_div = Div(text="", width=360)
+findings_div = Div(text="", width=360)
 
 
 # --------------------------------------------------------------------------
@@ -610,18 +621,20 @@ refresh_btn.on_click(_refresh_findings)
 _refresh_findings()
 
 # --------------------------------------------------------------------------
-# Layout
+# Layout (Aufgabe 11): wie Oviedo — links Plot (Titel „Cancer map", Toolbar oben,
+# Kohorten-Legende rechts im Plot), rechts die schlanke Slider-Spalte. Darunter
+# kompakt: Status + ② Kontext + ③ Rückkanal (nicht mehr die dominante Sidebar).
 # --------------------------------------------------------------------------
-sidebar = column(
-    boot_div, data_div,
-    Div(text="<hr><b>Legende — Krebsart</b>", width=320), legend_div,
-    Div(text="<hr><b>Morphing-Slider</b> (Σ softmax, sens=10)", width=320),
-    *morph_sliders, *disabled_sliders, missing_div,
-    Div(text="<hr><b>② Kontext</b>", width=320), ctx_div,
-    Div(text="<hr><b>③ Erkenntnis speichern</b>", width=320),
+slider_col = column(*display_sliders, width=220)
+main_row = row(plot, slider_col)
+
+context_panel = column(Div(text="<b>② Kontext</b>", width=360), ctx_div, width=380)
+feedback_panel = column(
+    Div(text="<b>③ Erkenntnis speichern</b>", width=360),
     user_in, from_in, to_in, note_in, conf, save_btn, status_div,
-    Div(text="<hr>", width=320), refresh_btn, findings_div,
-    width=340,
+    refresh_btn, findings_div, width=380,
 )
-curdoc().add_root(row(plot, sidebar))
+bottom = column(boot_div, data_div, row(context_panel, feedback_panel))
+
+curdoc().add_root(column(main_row, bottom))
 curdoc().title = "MP-lite × Wissensnetz (Prototyp)"
