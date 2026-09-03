@@ -13,9 +13,10 @@ Datenintegrationslogik. Diese folgt in späteren Schritten.
 - `mediator/` – Zentraler Mediator-Service (Python/FastAPI), nimmt Anfragen
   entgegen und delegiert an Wrapper-Module. Dependency-Management via
   Conda/Mamba (`environment.yml`), u. a. für anndata/scanpy.
-- `wrappers/` – Wrapper-Module je Datenquelle (Mediator-Wrapper-Muster).
-  Erste Quelle: `wrappers/gdc` (GDC Developer API / TCGA). Liegt als
-  Python-Package im Mediator-Container, siehe
+- `wrappers/` – Wrapper-Module je Datenquelle (Mediator-Wrapper-Muster):
+  `gdc` (GDC Developer API / TCGA), `geo` (Gene Expression Omnibus), `ena`
+  (European Nucleotide Archive), `cbioportal`. Liegen als Python-Packages im
+  Mediator-Container, siehe
   [ADR-0001](docs/adr/0001-wrapper-als-python-package.md).
 - `graph-db/` – Graph-Speicherung: Apache Jena Fuseki/TDB2 (RDF-Triple-Store
   mit OWL, RDF-star für Kanten-Metadaten), Entscheidung getroffen, siehe
@@ -117,4 +118,10 @@ das Laden erfolgt dann extern, z. B. über
 Ein vollständiges, lokal ausführbares Beispiel mit TCGA-BRCA-Beispieldaten
 (ohne laufenden Service) liegt unter
 [`mediator/scripts/example_gdc_to_rdf.py`](mediator/scripts/example_gdc_to_rdf.py).
+
+Seit Kurzem unterstützt `/transform` neben `"gdc"` auch `"geo"`, `"ena"` und
+`"cbioportal"` (je eigenes Mapping-Modul, teils dieselben `db:`-Klassen wie
+GDC wiederverwendet, z. B. für cBioPortal-Klinikdaten). Vollständige
+Label-Tabellen je Quelle + Wiederverwendungsprinzip + bekannte Grenzen:
+[`mediator/app/semantic/README.md`](mediator/app/semantic/README.md).
 Neue Quellen anbinden: [`docs/adding_new_sources.md`](docs/adding_new_sources.md).
