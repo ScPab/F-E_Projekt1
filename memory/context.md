@@ -37,9 +37,23 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 
 ## Offene Punkte
 
-- Mediator-Anbindung für die drei neuen Wrapper `geo`/`ena`/`cbioportal`
-  (Routing analog zu `/query`, `/schema/{endpoint}` für `gdc` in
-  `mediator/app/main.py`) — noch offen.
+- `POST /query` (GDC, alle Endpunkte) sowie die rohen `/geo/*`/`/ena/*`/
+  `/cbioportal/*`-Endpunkte bleiben weiterhin unübersetzt (nur `POST
+  /transform` übersetzt, je Quelle über ein eigenes `mapping_<source>.py`,
+  siehe `mediator/app/semantic/README.md`) — das ist so beabsichtigt
+  (Metadaten-Tier vs. semantische Schicht), kein offener Punkt mehr.
+- Kein Enum-Alignment für GEO/ENA/cBioPortal (nur GDCs `primary_diagnosis`
+  → NCIt); `db:organism`/`db:tumorStage`/`db:oncotreeCode` wären
+  Kandidaten für ein künftiges Alignment, siehe "Grenzen" in
+  `mediator/app/semantic/README.md`.
+- cBioPortal-`db:Diagnosis`-Knoten (aus `AJCC_PATHOLOGIC_TUMOR_STAGE`/
+  `TUMOR_STAGE`) erfüllen die `owl:minCardinality`-Restriktion auf
+  `db:primaryDiagnosisLabel` nicht (kein Primärdiagnose-Text in
+  cBioPortals Klinikdaten) — bekannte, dokumentierte Inkonsistenz, nur bei
+  aktiviertem OWL-Reasoning relevant.
+- Kein `owl:sameAs`-Abgleich zwischen GDC- und cBioPortal-`db:Case`-
+  Instanzen derselben Person (unterschiedliche IDs: `case_id` vs.
+  `patientId`) — offener nächster Schritt für echte Cross-Source-Queries.
 - Mediator muss die 7 neuen klinischen GDC-Felder + `sample_type` auf die
   bereits deklarierten `db:`-Properties mappen (`TRANSFORM_CASE_FIELDS` in
   `mediator/app/main.py`, `cases_to_graph` in
@@ -59,6 +73,40 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `gdc-client`-Bulk-Download.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
+
+## Umgesetzt seit letztem Stand (2026-09-02, Teil 2)
+
+- Semantische Mapping-Schicht für die drei bisher nur REST-durchgereichten
+  Wrapper `geo`/`ena`/`cbioportal` ergänzt (bisher nur GDC): drei neue
+  Module `mediator/app/semantic/mapping_geo.py`, `mapping_ena.py`,
+  `mapping_cbioportal.py`, alle mit derselben Rückgabeform wie
+  `mapping.cases_to_graph` (`(Graph, star_annotations)`), damit
+  `serialize_with_provenance` unverändert wiederverwendet wird. `POST
+  /transform` unterstützt jetzt `source` = `gdc`/`geo`/`ena`/`cbioportal`
+  (`mediator/app/main.py`, `mediator/app/schemas.py`).
+- Ontologie erweitert (`wissensnetz/ontology/databridge-core.ttl`): neue
+  Klassen `db:Series` (GEO), `db:Study` (ENA), gemeinsam genutztes `db:Run`
+  (GEO+ENA) mit `db:hasRun`/`db:isRunOf`; neue Properties `db:organism`,
+  `db:sampleCount`, `db:experimentType`, `db:releaseDate`, `db:ftpLink`,
+  `db:libraryStrategy`, `db:instrumentPlatform`, `db:readCount`, `db:age`,
+  `db:cancerType`, `db:oncotreeCode`. cBioPortal nutzt bewusst die
+  bestehenden GDC-Klassen/-Properties (`db:Project`/`db:Case`/
+  `db:Demographic`/`db:Diagnosis`/`db:Sample`, `db:gender`/`db:race`/
+  `db:ethnicity`/`db:vitalStatus`/`db:tumorStage`/`db:sampleType`) statt
+  Duplikate — cBioPortal-PATIENT-Attribute werden dafür (wie bei GDC) auf
+  `db:Demographic`/`db:Diagnosis`-Unterknoten verteilt statt direkt auf
+  `db:Case` geschrieben (erste Implementierung hatte das falsch direkt auf
+  Case gesetzt — Domain-Verletzung gegen die deklarierten `rdfs:domain`,
+  beim Live-Test gegen echte cBioPortal-Daten gefunden und korrigiert).
+- Neue Doku `mediator/app/semantic/README.md`: vollständige Label-Tabellen
+  je Quelle (GDC/GEO/ENA/cBioPortal), Wiederverwendungs-Übersicht, bekannte
+  Grenzen (kein Alignment für die drei neuen Quellen, cBioPortal-
+  `db:Diagnosis`-Cardinality nicht erfüllt, kein GDC↔cBioPortal-
+  `owl:sameAs`), Beispielaufrufe. Von Root-README verlinkt.
+- Alle vier `/transform`-Pfade live gegen die echten APIs verifiziert
+  (GDC-Regression + GEO/ENA/cBioPortal neu, inkl. Domain-Korrektheit der
+  cBioPortal-Tripel per rdflib-Introspektion geprüft); bestehende
+  `check_mediator.py`/Pytest-Suite weiterhin grün.
 
 ## Umgesetzt seit letztem Stand (2026-09-02)
 

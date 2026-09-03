@@ -1,11 +1,17 @@
 # Neue Datenquellen anbinden und pflegen
 
-Dieses Dokument beschreibt, wie eine neue Datenquelle (z. B. GEO, ENA) an die
+Dieses Dokument beschreibt, wie eine neue Datenquelle an die
 Mediator/Mapping-Ebene angebunden wird — nach demselben regelbasierten
-Muster wie der bestehende GDC-Ausschnitt (siehe
+Muster wie der GDC-Ausschnitt (siehe
 [`wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL`](../wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL%20-%20Kopie.pdf),
 Ontologie unter [`wissensnetz/ontology/`](../wissensnetz/ontology/), Mapping-Code
 unter [`mediator/app/semantic/`](../mediator/app/semantic/)).
+
+GEO, ENA und cBioPortal sind bereits nach genau diesem Muster umgesetzt —
+als konkrete Referenz für den nächsten neuen Quellen-Fall siehe
+[`mediator/app/semantic/README.md`](../mediator/app/semantic/README.md)
+(vollständige Label-Tabellen je Quelle, Wiederverwendungsprinzip, bekannte
+Grenzen) sowie `mapping_geo.py`/`mapping_ena.py`/`mapping_cbioportal.py`.
 
 **Dieser Prozess ist bewusst manuell.** Es gibt keine automatische Erkennung
 neuer Schemata — jemand muss für jede neue Quelle festlegen, welches

@@ -204,6 +204,138 @@ db:sampleType a owl:DatatypeProperty ;
     rdfs:range xsd:string .
 
 # ---------------------------------------------------------------------------
+# Erweiterung: GEO, ENA, cBioPortal (siehe mediator/app/semantic/mapping_geo.py,
+# mapping_ena.py, mapping_cbioportal.py sowie docs/adding_new_sources.md).
+#
+# Wiederverwendung statt Duplikat, wo das Konzept wirklich übereinstimmt:
+#   - cBioPortal-Studien/-Patienten/-Proben nutzen die bestehenden Klassen
+#     db:Project/db:Case/db:Sample (cBioPortal bereitet häufig dieselben
+#     TCGA/GDC-Ursprungsdaten auf, siehe wrappers/cbioportal/client.py).
+#   - GEO-Series und ENA-Runs teilen sich db:Run (ein einzelner
+#     experimenteller Lauf/Sample innerhalb einer Serie/Studie) sowie
+#     db:organism, db:hasRun/db:isRunOf — dieselbe Rolle, unabhängig davon,
+#     ob die Elternklasse db:Series (GEO) oder db:Study (ENA) heißt.
+#   - GEO-Series und ENA-Studien bleiben bewusst EIGENE Klassen (db:Series/
+#     db:Study) statt in db:Project hineingezwungen zu werden — anders als
+#     bei cBioPortal ist die Identifikator-/Feld-Semantik hier zu
+#     unterschiedlich (GSE-Accession + Organismus/Plattform-Metadaten vs.
+#     TCGA-Projekt-Code). Spätere Konsolidierung (gemeinsame Oberklasse für
+#     "benannter Container mit Proben") ist eine bewusst offen gelassene
+#     Ontologie-Entscheidung, keine implizite hier.
+# ---------------------------------------------------------------------------
+
+db:Series a owl:Class ;
+    rdfs:label "Series" ;
+    rdfs:comment "Entspricht einer GEO-Series (GSE): eine benannte Sammlung zusammengehöriger Experiment-Samples." .
+
+db:Study a owl:Class ;
+    rdfs:label "Study" ;
+    rdfs:comment "Entspricht einer ENA/SRA-Study (Project): eine benannte Sammlung zusammengehöriger Sequenzierläufe." .
+
+db:Run a owl:Class ;
+    rdfs:label "Run" ;
+    rdfs:comment "Ein einzelner experimenteller Lauf/Sample innerhalb einer Series (GEO) oder Study (ENA)." .
+
+# link: Series/Study -> Run, backref: Run -> Series/Study. Domain bewusst
+# NICHT auf eine einzelne Klasse eingeschränkt (rdfs:domain wäre bei zwei
+# Elternklassen als Konjunktion falsch, nicht als Disjunktion) — siehe
+# Kommentar oben.
+db:hasRun a owl:ObjectProperty ;
+    rdfs:label "hasRun" ;
+    rdfs:range db:Run ;
+    owl:inverseOf db:isRunOf .
+
+db:isRunOf a owl:ObjectProperty ;
+    rdfs:label "isRunOf" ;
+    rdfs:domain db:Run .
+
+db:seriesId a owl:DatatypeProperty ;
+    rdfs:label "seriesId" ;
+    rdfs:comment "GEO-Series-Accession, z. B. 'GSE345780' (esummary-Feld 'accession')." ;
+    rdfs:domain db:Series ;
+    rdfs:range xsd:string .
+
+db:studyId a owl:DatatypeProperty ;
+    rdfs:label "studyId" ;
+    rdfs:comment "ENA/SRA-Study-Accession, z. B. 'PRJEB1234' (Feld 'study_accession')." ;
+    rdfs:domain db:Study ;
+    rdfs:range xsd:string .
+
+db:runId a owl:DatatypeProperty ;
+    rdfs:label "runId" ;
+    rdfs:comment "GEO-GSM- bzw. ENA-Run-Accession (Feld 'accession' bzw. 'run_accession')." ;
+    rdfs:domain db:Run ;
+    rdfs:range xsd:string .
+
+# Wiederverwendbar über Series/Run (GEO: 'taxon'/'scientific_name' bei ENA).
+db:organism a owl:DatatypeProperty ;
+    rdfs:label "organism" ;
+    rdfs:comment "Taxonomischer Organismus, wie von der Quelle geliefert (GEO 'taxon', ENA 'scientific_name')." ;
+    rdfs:range xsd:string .
+
+db:experimentType a owl:DatatypeProperty ;
+    rdfs:label "experimentType" ;
+    rdfs:comment "Experiment-/Datentyp einer GEO-Series (Feld 'gdstype', z. B. 'Expression profiling by high throughput sequencing')." ;
+    rdfs:domain db:Series ;
+    rdfs:range xsd:string .
+
+db:releaseDate a owl:DatatypeProperty ;
+    rdfs:label "releaseDate" ;
+    rdfs:comment "Veröffentlichungsdatum einer GEO-Series, Rohtext wie von GEO geliefert (Feld 'pdat', kein ISO-8601 garantiert)." ;
+    rdfs:domain db:Series ;
+    rdfs:range xsd:string .
+
+db:ftpLink a owl:DatatypeProperty ;
+    rdfs:label "ftpLink" ;
+    rdfs:comment "FTP-/HTTPS-Verzeichnislink für Rohdaten einer GEO-Series (Feld 'ftplink')." ;
+    rdfs:domain db:Series ;
+    rdfs:range xsd:anyURI .
+
+# Wiederverwendbar über Series/Project (GEO 'n_samples', cBioPortal 'allSampleCount').
+db:sampleCount a owl:DatatypeProperty ;
+    rdfs:label "sampleCount" ;
+    rdfs:comment "Anzahl zugehöriger Samples, wie von der Quelle geliefert." ;
+    rdfs:range xsd:integer .
+
+db:libraryStrategy a owl:DatatypeProperty ;
+    rdfs:label "libraryStrategy" ;
+    rdfs:comment "Sequenzier-/Bibliotheksstrategie eines ENA-Runs (Feld 'library_strategy', z. B. 'RNA-Seq')." ;
+    rdfs:domain db:Run ;
+    rdfs:range xsd:string .
+
+db:instrumentPlatform a owl:DatatypeProperty ;
+    rdfs:label "instrumentPlatform" ;
+    rdfs:comment "Sequenzier-Plattform eines ENA-Runs (Feld 'instrument_platform', z. B. 'ILLUMINA')." ;
+    rdfs:domain db:Run ;
+    rdfs:range xsd:string .
+
+db:readCount a owl:DatatypeProperty ;
+    rdfs:label "readCount" ;
+    rdfs:comment "Anzahl Reads eines ENA-Runs (Feld 'read_count')." ;
+    rdfs:domain db:Run ;
+    rdfs:range xsd:integer .
+
+# Neue, cBioPortal-spezifische Properties auf wiederverwendeten Klassen
+# (db:Project/db:Case, siehe Wiederverwendungs-Hinweis oben).
+db:age a owl:DatatypeProperty ;
+    rdfs:label "age" ;
+    rdfs:comment "Alter des Patienten, wie von cBioPortal geliefert (clinicalAttributeId 'AGE') — anders als db:ageAtDiagnosis (GDC) nicht zwingend auf ein Diagnose-Ereignis bezogen." ;
+    rdfs:domain db:Case ;
+    rdfs:range xsd:integer .
+
+db:cancerType a owl:DatatypeProperty ;
+    rdfs:label "cancerType" ;
+    rdfs:comment "Krebsart-Kürzel einer cBioPortal-Studie (Feld 'cancerTypeId')." ;
+    rdfs:domain db:Project ;
+    rdfs:range xsd:string .
+
+db:oncotreeCode a owl:DatatypeProperty ;
+    rdfs:label "oncotreeCode" ;
+    rdfs:comment "OncoTree-Klassifikationscode einer Probe, wie von cBioPortal geliefert (clinicalAttributeId 'ONCOTREE_CODE')." ;
+    rdfs:domain db:Sample ;
+    rdfs:range xsd:string .
+
+# ---------------------------------------------------------------------------
 # Cardinality-Restriktion (required: [primary_diagnosis] im GDC-Schema)
 # ---------------------------------------------------------------------------
 

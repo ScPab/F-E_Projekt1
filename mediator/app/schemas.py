@@ -74,23 +74,64 @@ class CBioMolecularDataRequest(BaseModel):
 
 
 class TransformRequest(BaseModel):
-    """Anfrage für POST /transform (GDC-JSON -> RDF/OWL, siehe app/semantic/mapping.py).
+    """Anfrage für POST /transform (Quell-JSON -> RDF/OWL, siehe app/semantic/mapping*.py).
 
-    Entweder werden rohe `cases`-Treffer übergeben (z. B. aus einer
-    vorherigen POST /query-Antwort), oder sie werden — falls `cases` leer
-    ist — live über den GDC-Wrapper geholt.
+    `source` bestimmt, welches Mapping-Modul und welche Live-Abruf-Parameter
+    greifen — die Request-Felder sind bewusst je Quelle unterschiedlich
+    benannt (`cases` bei GDC, `organism` bei GEO, ...), weil die Quellen
+    strukturell zu verschieden sind, um sie hinter einem gemeinsamen Namen
+    zu verstecken (siehe docs/adding_new_sources.md).
+
+    Für jede Quelle gilt: entweder werden rohe Treffer übergeben (z. B. aus
+    einer vorherigen POST /query- bzw. /geo|ena|cbioportal/...-Antwort),
+    oder sie werden live über den jeweiligen Wrapper geholt.
     """
 
-    source: str = Field("gdc", description="Aktuell nur 'gdc' unterstützt.")
+    source: str = Field("gdc", description="'gdc', 'geo', 'ena' oder 'cbioportal'.")
+
+    # --- gdc (app/semantic/mapping.py) ---
     cases: Optional[list[dict]] = Field(
         None,
-        description="Rohe GDC-cases-Treffer (case_id, project.project_id, demographic.gender, "
-        "diagnoses[].primary_diagnosis, diagnoses[].age_at_diagnosis). Wenn nicht gesetzt, "
-        "wird live über GDCWrapper.search('cases', ...) geholt.",
+        description="[gdc] Rohe GDC-cases-Treffer (case_id, project.project_id, demographic.gender, "
+        "diagnoses[].primary_diagnosis, diagnoses[].age_at_diagnosis, ...). Ohne Angabe: live über "
+        "GDCWrapper.search('cases', ...) geholt (project_id/access/size).",
     )
-    project_id: Optional[StrOrList] = Field(None, description='z. B. "TCGA-BRCA" (nur relevant ohne "cases")')
-    access: Optional[StrOrList] = Field("open", description="Access-Level für den Live-Abruf")
-    size: int = Field(20, ge=1, le=2000, description="Trefferanzahl für den Live-Abruf")
+    project_id: Optional[StrOrList] = Field(None, description='[gdc] z. B. "TCGA-BRCA" (nur relevant ohne "cases")')
+    access: Optional[StrOrList] = Field("open", description="[gdc] Access-Level für den Live-Abruf")
+
+    # --- geo (app/semantic/mapping_geo.py) ---
+    series: Optional[list[dict]] = Field(
+        None,
+        description="[geo] Rohe GEO-Series-Treffer (esummary-DocumentSummaries, siehe GEOWrapper.search). "
+        "Ohne Angabe: live über GEOWrapper.search(entry_type='gse', ...) geholt (organism/size).",
+    )
+    organism: Optional[StrOrList] = Field(None, description='[geo] z. B. "Homo sapiens" (nur relevant ohne "series")')
+
+    # --- ena (app/semantic/mapping_ena.py) ---
+    runs: Optional[list[dict]] = Field(
+        None,
+        description="[ena] Rohe ENA-read_run-Treffer (siehe ENAWrapper.search). Ohne Angabe: live über "
+        "ENAWrapper.search(result='read_run', ...) geholt (study_accession/size).",
+    )
+    study_accession: Optional[StrOrList] = Field(
+        None, description='[ena] z. B. "PRJEB1234" (nur relevant ohne "runs")'
+    )
+
+    # --- cbioportal (app/semantic/mapping_cbioportal.py) ---
+    study_id: Optional[str] = Field(
+        None,
+        description="[cbioportal] Pflichtfeld für source='cbioportal' (z. B. \"acbc_mskcc_2015\"). Ohne "
+        "'patient_data'/'sample_data' werden die Klinikdaten live über CBioPortalWrapper.get_clinical_data(...) "
+        "geholt.",
+    )
+    patient_data: Optional[list[dict]] = Field(
+        None, description="[cbioportal] Rohe PATIENT-Klinikdaten (siehe CBioPortalWrapper.get_clinical_data)."
+    )
+    sample_data: Optional[list[dict]] = Field(
+        None, description="[cbioportal] Rohe SAMPLE-Klinikdaten (siehe CBioPortalWrapper.get_clinical_data)."
+    )
+
+    size: int = Field(20, ge=1, le=2000, description="Trefferanzahl für den Live-Abruf (gdc/geo/ena/cbioportal)")
     load: bool = Field(
         False,
         description="Bei true: das erzeugte Turtle zusätzlich direkt per Graph Store "

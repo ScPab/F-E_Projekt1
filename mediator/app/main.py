@@ -44,6 +44,7 @@ from .schemas import (
 )
 from .semantic import expression as expression_export
 from .semantic import mapping as semantic_mapping
+from .semantic import mapping_cbioportal, mapping_ena, mapping_geo
 from .semantic.paths import alignment_path, export_dir, ontology_path
 
 # Felder für den Live-Abruf von POST /transform (Kern-Ausschnitt
@@ -387,36 +388,108 @@ async def cbioportal_molecular_data(
 
 @app.post("/transform")
 async def transform(request: TransformRequest) -> dict:
-    """GDC-Cases -> RDF/OWL-Tripel (Turtle), gemäß wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL.
+    """Quell-JSON -> RDF/OWL-Tripel (Turtle), je `source` über ein eigenes Mapping-Modul.
 
-    Nimmt entweder rohe `cases`-Treffer entgegen oder holt sie live über den
-    GDC-Wrapper. Ausgabe ist immer der erzeugte Turtle-Text; bei `load=true`
-    wird er zusätzlich direkt per Graph Store Protocol in graph-db (Fuseki)
+    - `gdc`: GDC-Cases -> RDF/OWL, gemäß wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL
+      (`app/semantic/mapping.py`) — inkl. NCIt-Alignment mit RDF-star-Provenienz.
+    - `geo`: GEO-Series -> RDF/OWL (`app/semantic/mapping_geo.py`).
+    - `ena`: ENA-Runs -> RDF/OWL (`app/semantic/mapping_ena.py`).
+    - `cbioportal`: cBioPortal-Klinikdaten einer Studie -> RDF/OWL
+      (`app/semantic/mapping_cbioportal.py`), erfordert `study_id`.
+
+    Nimmt je Quelle entweder rohe Treffer entgegen oder holt sie live über
+    den passenden Wrapper (siehe TransformRequest-Feldbeschreibungen).
+    Ausgabe ist immer der erzeugte Turtle-Text; bei `load=true` wird er
+    zusätzlich direkt per Graph Store Protocol in graph-db (Fuseki)
     geschrieben (siehe `wissensnetz.GraphStore.load_turtle`, ADR-0002) — die
-    Turtle-Ausgabe bleibt roh erhalten, damit die angehängten RDF-star-Blöcke
-    (Provenienz/Konfidenz) nicht durch einen rdflib-Roundtrip verloren gehen.
+    Turtle-Ausgabe bleibt roh erhalten, damit bei `gdc` die angehängten
+    RDF-star-Blöcke (Provenienz/Konfidenz) nicht durch einen rdflib-Roundtrip
+    verloren gehen.
     """
-    if request.source != "gdc":
-        raise HTTPException(status_code=400, detail=f"Unbekannte Quelle: {request.source!r} (aktuell nur 'gdc')")
+    if request.source == "gdc":
+        if request.cases is not None:
+            cases = request.cases
+        else:
+            wrapper = get_gdc_wrapper()
+            try:
+                result = wrapper.search(
+                    "cases",
+                    project_id=request.project_id,
+                    access=request.access,
+                    fields=TRANSFORM_CASE_FIELDS,
+                    size=request.size,
+                )
+            except RequestException as exc:
+                raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
+            cases = result["results"]
 
-    if request.cases is not None:
-        cases = request.cases
+        alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
+        graph, star_annotations = semantic_mapping.cases_to_graph(cases, alignment=alignment)
+
+    elif request.source == "geo":
+        if request.series is not None:
+            series = request.series
+        else:
+            wrapper = get_geo_wrapper()
+            try:
+                result = wrapper.search(organism=request.organism, entry_type="gse", size=request.size)
+            except RequestException as exc:
+                raise HTTPException(status_code=502, detail=f"GEO-API nicht erreichbar oder Fehler: {exc}") from exc
+            series = result["results"]
+        graph, star_annotations = mapping_geo.series_to_graph(series)
+
+    elif request.source == "ena":
+        if request.runs is not None:
+            runs = request.runs
+        else:
+            wrapper = get_ena_wrapper()
+            try:
+                result = wrapper.search(
+                    result="read_run",
+                    study_accession=request.study_accession,
+                    fields=[
+                        "run_accession",
+                        "study_accession",
+                        "description",
+                        "library_strategy",
+                        "instrument_platform",
+                        "scientific_name",
+                        "read_count",
+                    ],
+                    size=request.size,
+                )
+            except RequestException as exc:
+                raise HTTPException(status_code=502, detail=f"ENA-API nicht erreichbar oder Fehler: {exc}") from exc
+            runs = result["results"]
+        graph, star_annotations = mapping_ena.runs_to_graph(runs)
+
+    elif request.source == "cbioportal":
+        if not request.study_id:
+            raise HTTPException(status_code=400, detail="source='cbioportal' erfordert 'study_id'.")
+        if request.patient_data is not None and request.sample_data is not None:
+            patient_data, sample_data = request.patient_data, request.sample_data
+        else:
+            wrapper = get_cbioportal_wrapper()
+            try:
+                patient_result = wrapper.get_clinical_data(
+                    request.study_id, clinical_data_type="PATIENT", size=request.size
+                )
+                sample_result = wrapper.get_clinical_data(
+                    request.study_id, clinical_data_type="SAMPLE", size=request.size
+                )
+            except RequestException as exc:
+                raise HTTPException(status_code=502, detail=f"cBioPortal-API nicht erreichbar oder Fehler: {exc}") from exc
+            patient_data, sample_data = patient_result["results"], sample_result["results"]
+        graph, star_annotations = mapping_cbioportal.clinical_data_to_graph(
+            patient_data, sample_data, study_id=request.study_id
+        )
+
     else:
-        wrapper = get_gdc_wrapper()
-        try:
-            result = wrapper.search(
-                "cases",
-                project_id=request.project_id,
-                access=request.access,
-                fields=TRANSFORM_CASE_FIELDS,
-                size=request.size,
-            )
-        except RequestException as exc:
-            raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
-        cases = result["results"]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unbekannte Quelle: {request.source!r} (erwartet: 'gdc', 'geo', 'ena', 'cbioportal')",
+        )
 
-    alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
-    graph, star_annotations = semantic_mapping.cases_to_graph(cases, alignment=alignment)
     turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
     response = {"format": "turtle", "triple_count": len(graph), "turtle": turtle, "loaded": False}
 
