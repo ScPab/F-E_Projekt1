@@ -443,9 +443,14 @@ source = ColumnDataSource(dict(
 # Plot
 # --------------------------------------------------------------------------
 plot = figure(
-    width=820, height=640, title="Cancer map", toolbar_location="above",
+    title="Cancer map", toolbar_location="above",
     tools="pan,box_select,lasso_select,tap,wheel_zoom,reset,save",
     x_range=(-9, 9), y_range=(-9, 9), output_backend="webgl",
+    # Responsiv: der Plot füllt den verfügbaren Platz (Fenster minus Slider-Spalte
+    # rechts, minus ②/③-Block unten) und skaliert beim Resize mit. min_height klein
+    # halten, damit der ②/③-Block darunter nicht überlappt (sonst erzwingt eine große
+    # min_height den Canvas und schiebt sich über den unteren Block).
+    sizing_mode="stretch_both", min_width=480, min_height=160,
 )
 plot.scatter("pos_x", "pos_y", source=source, size=8, color="color",
              alpha=0.6, nonselection_alpha=0.2, line_color="#333333")
@@ -666,16 +671,31 @@ _refresh_findings()
 # Kohorten-Legende rechts im Plot), rechts die schlanke Slider-Spalte. Darunter
 # kompakt: Status + ② Kontext + ③ Rückkanal (nicht mehr die dominante Sidebar).
 # --------------------------------------------------------------------------
-slider_col = column(*display_sliders, width=220)
-main_row = row(plot, slider_col)
+# Responsives Layout: der Plot füllt das Fenster (minus Slider-Spalte rechts) und
+# skaliert beim Resize; die Slider-Spalte behält ihre feste Breite ganz rechts, der
+# ②/③-Block bleibt in natürlicher Höhe darunter.
+# Slider-Spalte: feste Breite ganz rechts; volle Zeilenhöhe, bei vielen Sliders
+# intern scrollbar (statt die Zeile in die Höhe zu zwingen).
+slider_col = column(*display_sliders, width=230, sizing_mode="stretch_height",
+                    styles={"overflow-y": "auto"})
+main_row = row(plot, slider_col, sizing_mode="stretch_both")
 
-context_panel = column(Div(text="<b>② Kontext</b>", width=360), ctx_div, width=380)
+# ②/③ + Status KOMPAKT (horizontal, Eingaben in Zeilen), damit der Plot oben
+# möglichst viel Höhe behält (der Block bestimmt sonst über seine natürliche Höhe,
+# wie wenig Platz dem Plot bleibt).
+context_panel = column(Div(text="<b>② Kontext</b>", width=320), ctx_div, width=340)
 feedback_panel = column(
-    Div(text="<b>③ Erkenntnis speichern</b>", width=360),
-    user_in, from_in, to_in, note_in, conf, save_btn, status_div,
-    refresh_btn, findings_div, width=380,
+    Div(text="<b>③ Erkenntnis speichern</b>", width=500),
+    row(user_in, from_in, to_in),
+    row(note_in, conf),
+    row(save_btn, refresh_btn),
+    status_div, findings_div, width=740,
 )
-bottom = column(boot_div, data_div, row(context_panel, feedback_panel))
+bottom = column(
+    row(boot_div, data_div),
+    row(context_panel, feedback_panel),
+    sizing_mode="stretch_width",
+)
 
-curdoc().add_root(column(main_row, bottom))
+curdoc().add_root(column(main_row, bottom, sizing_mode="stretch_both"))
 curdoc().title = "MP-lite × Wissensnetz (Prototyp)"
