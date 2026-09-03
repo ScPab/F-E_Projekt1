@@ -26,7 +26,6 @@ Stelle, an der eine Mapping-Tabelle oder Ontologie-Anbindung andocken würde.
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
@@ -243,15 +242,21 @@ class GDCWrapper:
         recipe_key = self.cache.recipes.key_for(recipe)
         self.cache.recipes.set(recipe_key, recipe)
 
-        params: dict[str, Any] = {"from": from_, "size": size, "format": "json"}
+        # POST statt GET: bei umfangreichen Filtern (z. B. `files.file_id`-Listen
+        # mit hunderten Werten, wie sie ein Multi-Kohorten-Export erzeugt) wird
+        # die GET-Query-String-Länge von GDCs Server abgelehnt (HTTP 414 "Request-
+        # URI Too Long", live reproduziert bei ~320 IDs / ~13 KB Filter-JSON). Die
+        # GDC-API akzeptiert denselben Parametersatz unverändert auch per
+        # POST-Body — damit unabhängig von der Filtergröße robust.
+        body: dict[str, Any] = {"from": from_, "size": size, "format": "json"}
         if filters:
-            params["filters"] = json.dumps(filters)
+            body["filters"] = filters
         if fields:
-            params["fields"] = ",".join(fields)
+            body["fields"] = ",".join(fields)
         if sort:
-            params["sort"] = sort
+            body["sort"] = sort
 
-        response = self.session.get(f"{self.base_url}/{endpoint}", params=params, timeout=self.timeout)
+        response = self.session.post(f"{self.base_url}/{endpoint}", json=body, timeout=self.timeout)
         response.raise_for_status()
         payload = response.json()
 
@@ -340,12 +345,16 @@ class GDCWrapper:
         Manifest wird stattdessen über `/files` mit `return_type=manifest`
         erzeugt. Der Rückgabewert ist der rohe Manifest-Text, wie ihn
         `gdc-client` als Eingabedatei erwartet.
-        """
-        params: dict[str, Any] = {"return_type": "manifest", "size": size}
-        if filters:
-            params["filters"] = json.dumps(filters)
 
-        response = self.session.get(f"{self.base_url}/files", params=params, timeout=self.timeout)
+        POST statt GET (siehe `query()`): ein Manifest über hunderte
+        `file_id`s (z. B. Pancancer-Export) sprengt sonst die GET-Query-
+        String-Länge (HTTP 414, live reproduziert).
+        """
+        body: dict[str, Any] = {"return_type": "manifest", "size": size}
+        if filters:
+            body["filters"] = filters
+
+        response = self.session.post(f"{self.base_url}/files", json=body, timeout=self.timeout)
         response.raise_for_status()
         return response.text
 

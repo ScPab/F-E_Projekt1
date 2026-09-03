@@ -35,11 +35,22 @@ class FakeResponse:
 
 
 class FakeSession:
-    """Zeichnet den letzten GET-Aufruf auf und liefert eine vorbereitete Antwort."""
+    """Zeichnet den letzten Aufruf auf und liefert eine vorbereitete Antwort.
+
+    Bietet sowohl `.post()` (genutzt von `query()`/`build_manifest()` — siehe
+    client.py: umfangreiche Filter sprengen sonst die GET-Query-String-Länge,
+    HTTP 414, live gegen die echte GDC-API reproduziert; der JSON-Body landet
+    hier im `json`-Kwarg, nicht mehr in `params`) als auch `.get()` (weiterhin
+    genutzt von `get_schema()`, das keine Filter mitschickt).
+    """
 
     def __init__(self, response: FakeResponse):
         self._response = response
         self.last_call: dict | None = None
+
+    def post(self, url: str, json: dict | None = None, timeout: int | None = None):
+        self.last_call = {"url": url, "json": json, "timeout": timeout}
+        return self._response
 
     def get(self, url: str, params: dict | None = None, timeout: int | None = None):
         self.last_call = {"url": url, "params": params, "timeout": timeout}
@@ -119,11 +130,11 @@ def test_query_passes_fields_through_unchanged(wrapper):
     wrapper.query("cases", fields=fields, size=5, from_=10, sort="submitter_id:asc")
 
     assert fake_session.last_call["url"] == "https://api.gdc.cancer.gov/cases"
-    params = fake_session.last_call["params"]
-    assert params["fields"] == ",".join(fields)
-    assert params["size"] == 5
-    assert params["from"] == 10
-    assert params["sort"] == "submitter_id:asc"
+    body = fake_session.last_call["json"]
+    assert body["fields"] == ",".join(fields)
+    assert body["size"] == 5
+    assert body["from"] == 10
+    assert body["sort"] == "submitter_id:asc"
 
 
 def test_query_normalizes_response_shape(wrapper):
@@ -182,14 +193,12 @@ def test_search_builds_filters_and_delegates_to_query(wrapper):
         size=1,
     )
 
-    import json
-
-    params = fake_session.last_call["params"]
-    assert json.loads(params["filters"]) == {
+    body = fake_session.last_call["json"]
+    assert body["filters"] == {
         "op": "in",
         "content": {"field": "cases.project.project_id", "value": ["TCGA-BRCA"]},
     }
-    assert params["fields"] == "demographic.race"
+    assert body["fields"] == "demographic.race"
 
 
 # ---------------------------------------------------------------------
@@ -251,8 +260,8 @@ def test_search_expression_files_merges_default_fields(wrapper):
 
     wrapper.search_expression_files(assay="rna_seq", project_id="TCGA-BRCA", fields=["md5sum"])
 
-    params = fake_session.last_call["params"]
-    requested_fields = params["fields"].split(",")
+    body = fake_session.last_call["json"]
+    requested_fields = body["fields"].split(",")
     assert "md5sum" in requested_fields
     assert "file_id" in requested_fields
     assert "cases.samples.sample_id" in requested_fields
@@ -278,8 +287,8 @@ def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path
     class RoutingSession:
         """Liefert je nach Endpunkt eine andere vorbereitete Antwort."""
 
-        def get(self, url, params=None, timeout=None):
-            return manifest_response if params.get("return_type") == "manifest" else query_response
+        def post(self, url, json=None, timeout=None):
+            return manifest_response if (json or {}).get("return_type") == "manifest" else query_response
 
     wrapper.session = RoutingSession()
 
@@ -328,8 +337,8 @@ def test_download_expression_files_gdc_client_not_installed(wrapper, tmp_path, m
     manifest_response = FakeResponse(text="id\tfilename\nfile-1\ts-0001-01.rna_seq.gene_counts.tsv\n")
 
     class RoutingSession:
-        def get(self, url, params=None, timeout=None):
-            return manifest_response if params.get("return_type") == "manifest" else query_response
+        def post(self, url, json=None, timeout=None):
+            return manifest_response if (json or {}).get("return_type") == "manifest" else query_response
 
     wrapper.session = RoutingSession()
 

@@ -74,6 +74,28 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
 
+## Umgesetzt seit letztem Stand (2026-09-02, Teil 3)
+
+- **Bug behoben:** `.\start_all.ps1 -Size 100 -PancancerSize 10` (bzw. jeder
+  Pancancer-Export mit vielen Dateien) brach mit `GDC-API nicht erreichbar
+  oder Fehler: 414 Client Error: Request-URI Too Long` ab. Ursache: Das
+  seit dem Stratifizierungs-Fix (Teil 1) pro Kohorte gesammelte Datei-Set
+  (z. B. 32 Kohorten × 10 = bis zu 320 Dateien) landete komplett als
+  `files.file_id`-`in`-Liste im `filters`-Query-Parameter von
+  `GDCWrapper.build_manifest()`/`.query()` (GET, `wrappers/gdc/client.py`)
+  — bei ~320 IDs (~13 KB Filter-JSON) lehnt GDCs Server die resultierende
+  URL ab. Live reproduziert (32 sequenzielle Metadaten-Queries liefen
+  einwandfrei in 8s, der anschließende `build_manifest`-Call mit allen 320
+  IDs schlug mit 414 fehl) und live gegen die echte GDC-API verifiziert
+  behoben: `query()` und `build_manifest()` nutzen jetzt POST mit
+  JSON-Body statt GET mit Query-String (von GDC laut API-Doku für genau
+  diesen Fall vorgesehen, identische Response-Form) — unabhängig von der
+  Filtergröße robust. `wrappers/tests/test_gdc_client.py` entsprechend
+  angepasst (`FakeSession` bietet jetzt `.post()` und `.get()`, `get_schema()`
+  bleibt GET). Alle 21 Wrapper-Tests weiterhin grün; End-to-End-Reproduktion
+  des ursprünglichen 320-Datei-Falls über den echten (gefixten)
+  `build_manifest()` erfolgreich (321 Zeilen Manifest).
+
 ## Umgesetzt seit letztem Stand (2026-09-02, Teil 2)
 
 - Semantische Mapping-Schicht für die drei bisher nur REST-durchgereichten
