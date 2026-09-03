@@ -697,5 +697,10 @@ bottom = column(
     sizing_mode="stretch_width",
 )
 
-curdoc().add_root(column(main_row, bottom, sizing_mode="stretch_both"))
+# Zwei Roots: der Plot+Slider-Bereich (main_row, stretch_both) füllt das gesamte
+# Browserfenster (X-Achse über die volle Breite, minus Slider-Spalte); der Feedback-
+# Block (②/③ + Status) liegt DARUNTER und wird beim Runterscrollen sichtbar. So ist
+# das Diagramm maximal groß, ohne dass der Feedback-Block Höhe wegnimmt.
+curdoc().add_root(main_row)
+curdoc().add_root(bottom)
 curdoc().title = "MP-lite × Wissensnetz (Prototyp)"

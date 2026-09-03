@@ -37,7 +37,8 @@ Optionen:
 | Option | Wirkung |
 | --- | --- |
 | `-Size 100` | mehr Fälle **pro Kohorte** beim Graph-Load |
-| `-PancancerSize 80` | mehr Proben in der Pancancer-`.h5ad` (längere Downloads) |
+| `-PancancerSize 10` | Proben **pro Kohorte** in der Pancancer-`.h5ad` (×Kohortenzahl; Default 5) |
+| `-RebuildMediator` | Mediator-Image neu bauen — nach Änderungen an `mediator/` oder `environment.yml` |
 | `-SkipLoad` | Dienste starten, aber weder Graph-Load noch Pancancer-Abruf |
 | `-NoUi` | ohne Bokeh-Oberfläche (nur Dienste) |
 | `-SkipInstall` | `pip install` überspringen |
@@ -171,8 +172,8 @@ liefert die `obs`-Klinikfelder). Fehlt eins davon, meldet das Skript einen klare
 Fehler (meist HTTP 503) statt eines Stacktrace.
 
 ```powershell
-python scripts\fetch_pancancer_h5ad.py --size 20     # kleiner Smoke-Test zuerst!
-python scripts\fetch_pancancer_h5ad.py               # Default: alle Kohorten, size 160
+python scripts\fetch_pancancer_h5ad.py --size 3      # kleiner Smoke-Test zuerst! (3 je Kohorte)
+python scripts\fetch_pancancer_h5ad.py --size 5      # ~5 Proben je Kohorte (~160 gesamt)
 ```
 Legt `wissensnetz/data/pancancer.h5ad` an; der Report zeigt `n_obs`/`n_vars`,
 `obsm_keys` und die vertretenen Kohorten. **MP-Lite bevorzugt diese Datei
@@ -183,11 +184,19 @@ bokeh serve --show wissensnetz/prototype/mp_lite/app.py
 Die Statuszeile nennt dann `pancancer.h5ad`, der „genes"-Slider morpht entlang der
 globalen tSNE, Punkte sind nach Krebsart gefärbt, Marker-Slider (CA9/SAA1) aktiv.
 
-Optionen: `--size` (1..200, große RNA-Seq-Downloads dauern — klein anfangen),
+**Wichtig — `--size`-Bedeutung:** Bei mehreren Kohorten (Pancancer-Liste) holt der
+Mediator-Export seit der Stratifizierung `--size` Proben **PRO Kohorte** (Gesamtzahl =
+size × Kohortenzahl). Bei 32 Kohorten also klein halten (z. B. 5 → ~160). Der Endpoint
+verteilt gleichmäßig über die Kohorten und rechnet eine globale tSNE — die frühere
+unbalancierte „alles LUAD"-Situation ist damit weg.
+
+Optionen: `--size` (1..200, pro Kohorte bei Liste — klein anfangen),
 `--projects TCGA-ACC,TCGA-BRCA` (Teilmenge), `--out <pfad>`, `--mediator-url <url>`.
-Für eine **gleichmäßig über die Kohorten balancierte** Karte (Oviedo-treu, aber mehr
-Downloads): `--balanced --per-cohort-size 5` (pro Kohorte ein Abruf, danach eine
-globale tSNE im Skript). Ohne die Datei bleibt MP-Lite beim BRCA-Fixture (Aufgabe 9).
+Der Client-Modus `--balanced --per-cohort-size 5` macht dieselbe Stratifizierung
+zusätzlich client-seitig (meist nicht mehr nötig, seit der Endpoint es selbst kann).
+**Nach Änderungen am Mediator zuerst `.\start_all.ps1 -RebuildMediator`** (Container
+neu bauen), sonst greift die neue Logik nicht. Ohne die Datei bleibt MP-Lite beim
+BRCA-Fixture (Aufgabe 9).
 
 ## 7. Rückkanal per CLI testen
 ```powershell

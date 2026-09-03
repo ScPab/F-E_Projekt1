@@ -34,7 +34,9 @@
 .EXAMPLE
     .\start_all.ps1 -SkipLoad -NoUi
 .EXAMPLE
-    .\start_all.ps1 -PancancerSize 80
+    .\start_all.ps1 -RebuildMediator
+.EXAMPLE
+    .\start_all.ps1 -PancancerSize 10
 #>
 [CmdletBinding()]
 param(
@@ -43,7 +45,7 @@ param(
     [int]$UiPort = 5006,
     [switch]$SkipInstall,
     [switch]$SkipLoad,
-    [int]$PancancerSize = 40,
+    [int]$PancancerSize = 5,
     [switch]$RebuildMediator,
     [switch]$NoUi
 )
@@ -76,8 +78,11 @@ function Stop-PortProcess([int]$Port) {
 function Stop-All {
     Write-Host ""
     Info "Fahre alles herunter ..."
-    Stop-PortProcess $MediatorPort      # Mediator (uvicorn) + dessen Fenster
-    Stop-PortProcess $UiPort            # Bokeh-Server (falls noch aktiv)
+    # Mediator NICHT per Port-Kill stoppen: er laeuft jetzt im Container, und der
+    # Host-Port 8000 gehoert Docker Desktops Port-Weiterleitung - ein Force-Kill
+    # darauf wuerde Docker Desktop selbst beenden. "docker compose down" stoppt
+    # Mediator + graph-db sauber. Nur der Bokeh-Server ist ein Host-Prozess.
+    Stop-PortProcess $UiPort            # Bokeh-Server (Host-Prozess, falls aktiv)
     docker compose down *> $null
     Good "Alles gestoppt (Mediator, graph-db, Oberflaeche)."
 }
@@ -180,8 +185,9 @@ if ($SkipLoad) {
 # Erzeugt wissensnetz/data/pancancer.h5ad ueber POST /export/anndata; MP-lite
 # bevorzugt die Datei danach automatisch (echte Gene-Expression-Karte statt
 # BRCA-Fixture). Braucht den Mediator-Container mit gdc-client (Schritt 5) und
-# ein gefuelltes Fuseki (Schritt 6). Grosse RNA-Seq-Downloads dauern - -PancancerSize
-# steuert die Probenzahl (Default 40). Bei -SkipLoad ausgelassen (keine Daten laden).
+# ein gefuelltes Fuseki (Schritt 6). Grosse RNA-Seq-Downloads dauern - bei project_id
+# als Liste gilt --size PRO Kohorte, daher -PancancerSize = Proben je Kohorte
+# (Default 5; bei 32 Kohorten also ~5x32 Files). Bei -SkipLoad ausgelassen.
 if (-not $SkipLoad) {
     Step "Rufe Pancancer-Expressions-.h5ad ab (fetch_pancancer_h5ad.py --size $PancancerSize) ..."
     python scripts\fetch_pancancer_h5ad.py --size $PancancerSize --mediator-url "http://localhost:$MediatorPort"

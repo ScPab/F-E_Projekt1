@@ -23,7 +23,9 @@ function Stop-PortProcess([int]$Port) {
 }
 
 Write-Host "Stoppe DataBridge-Dienste ..." -ForegroundColor Yellow
-Stop-PortProcess $MediatorPort      # Mediator (uvicorn)
-Stop-PortProcess $UiPort            # Bokeh-Oberflaeche
+# Mediator laeuft im Container -> per "docker compose down" stoppen, NICHT per
+# Port-Kill: Host-Port 8000 gehoert Docker Desktops Weiterleitung, ein Force-Kill
+# darauf wuerde Docker Desktop selbst beenden.
+Stop-PortProcess $UiPort            # Bokeh-Oberflaeche (Host-Prozess)
 docker compose down
 Write-Host "Alles gestoppt (Mediator, Oberflaeche, graph-db)." -ForegroundColor Green
