@@ -1,6 +1,7 @@
 """Rückkanal (Aufgabe 4): Experten-Erkenntnisse aus MP zurück ins Wissensnetz.
 
-Ablauf (nach ``recherche/Rueckkanal-Konzept_MP-zu-RDF``, Abschnitt 6):
+Ablauf (nach ``recherche/_archiv/Rueckkanal-Konzept_MP-zu-RDF``, Abschnitt 6;
+zusammengefasst in ``recherche/DataBridge_Stand_und_Ausrichtung.md``, Teil A.3):
 ein simuliertes MP-Selektions-Event → RDF als ``oa:Annotation``/``db:ExpertFinding``
 mit PROV-O-Provenienz und **RDF-star** für die Kern-Aussage, geschrieben per
 **SPARQL Update** in einen **Named Graph pro Nutzer**.

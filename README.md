@@ -33,8 +33,14 @@ Datenintegrationslogik. Diese folgt in späteren Schritten.
 - `memory/` – Projekteigenes, fortlaufend aktualisiertes Gedächtnis
   (aktueller Kontext, offene Punkte), siehe `memory/README.md`.
 - `Orga/` – Ablage für organisatorische Themen und Absprachen.
-- `recherche/` – Literaturrecherche (Ontologien, Wissensrepräsentation,
-  RDF vs. Property Graph) als fachliche Grundlage.
+- `recherche/` – Fachliche Grundlage und Konzept. Führend ist
+  [`recherche/DataBridge_Stand_und_Ausrichtung.md`](recherche/DataBridge_Stand_und_Ausrichtung.md):
+  Teil A beschreibt den Stand der Umsetzung je Komponente mit Code-Belegen,
+  Teil B die geplante Scope-basierte Ausrichtung, Teil C ordnet die früheren
+  Einzeldokumente zu. Die zugehörigen Abbildungen liegen als
+  `Konzept_*.png` bzw. `Konzept_Wissensnetz-Navigation.drawio` daneben.
+  Die früheren Einzeldokumente (Literaturrecherche, Mapping- und
+  Rückkanal-Konzept, Gesamtüberblick) liegen unter `recherche/_archiv/`.
 
 ## Starten
 
@@ -90,7 +96,9 @@ Details zur Wrapper-Implementierung (Filter-Aufbau, Cache-Tiers,
 ### Beispielaufrufe: semantische Schicht (GDC → RDF/OWL)
 
 Testfall: TCGA-BRCA-Cases → RDF/OWL-Tripel (Turtle), Kern-Ausschnitt
-case/project/demographic/diagnosis. Konzept: [`wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL`](wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL%20-%20Kopie.pdf);
+case/project/demographic/diagnosis. Konzept:
+[`recherche/DataBridge_Stand_und_Ausrichtung.md`](recherche/DataBridge_Stand_und_Ausrichtung.md)
+(Teil A.2; das ursprüngliche Mapping-Konzept liegt unter `recherche/_archiv/`);
 Ontologie: [`wissensnetz/ontology/`](wissensnetz/ontology/).
 
 ```bash

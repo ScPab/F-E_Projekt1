@@ -103,7 +103,9 @@ wissensnetz context d-11111111             # -> Label, Alter, zugehöriger Case
 Expertenwissen aus Morphing Projections zurück ins Netz: ein Selektions-Event
 wird als `oa:Annotation`/`db:ExpertFinding` mit PROV-O-Provenienz und
 **RDF-star** für die Kern-Aussage modelliert (nach
-`recherche/Rueckkanal-Konzept_MP-zu-RDF`) und per SPARQL-Update in einen
+`recherche/_archiv/Rueckkanal-Konzept_MP-zu-RDF`, zusammengefasst in
+`recherche/DataBridge_Stand_und_Ausrichtung.md`, Teil A.3) und per
+SPARQL-Update in einen
 **Named Graph pro Nutzer** (`http://databridge.hka/graph/user/<id>`) geschrieben.
 So bleibt die Kern-TBox/ABox im Default-Graph unberührt und Erkenntnisse sind pro
 Nutzer isoliert und widerrufbar (`DROP GRAPH`).

@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="databridge-skriptkette" name="DataBridge Skript-Aufrufkette">
-        <mxGraphModel dx="840" dy="410" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+        <mxGraphModel dx="1235" dy="605" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -194,13 +194,13 @@
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="9JaBk3xOYrQ6urlOMlzV-2" value="&lt;span style=&quot;color: rgb(51, 51, 51); font-weight: 700; text-align: left;&quot;&gt;2) Datenfluss der Datenaufnahme: load_gdc.py → POST /transform → (Wrapper → GDC-API → Mapping) → Turtle → Fuseki&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+                <mxCell id="9JaBk3xOYrQ6urlOMlzV-2" value="&lt;span style=&quot;color: rgb(51, 51, 51); font-weight: 700; text-align: left;&quot;&gt;2) Dataflow from extraction: load_gdc.py → POST /transform → (Wrapper → GDC-API → Mapping) → Turtle → Fuseki&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="26" y="290" width="790" height="30" as="geometry"/>
                 </mxCell>
                 <mxCell id="9JaBk3xOYrQ6urlOMlzV-4" value="&lt;span style=&quot;color: rgb(176, 0, 32); font-size: 10px; text-wrap-mode: nowrap; background-color: rgb(255, 255, 255);&quot;&gt;Weg B: load=true (implementiert, in Startkette ungenutzt)&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="630" y="485" width="260" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="9JaBk3xOYrQ6urlOMlzV-5" value="&lt;span style=&quot;color: rgb(51, 51, 51); font-weight: 700; text-align: left;&quot;&gt;1) Laufkette — ein Befehl: ./start_all.ps1 (Marcel · Orchestrierung). Strg+C fährt am Ende alles herunter.&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+                <mxCell id="9JaBk3xOYrQ6urlOMlzV-5" value="&lt;span style=&quot;color: rgb(51, 51, 51); font-weight: 700; text-align: left;&quot;&gt;1) Running Command: ./start_all.ps1. Strg+C shutting down all processes&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="60" y="140" width="610" height="30" as="geometry"/>
                 </mxCell>
                 <mxCell id="ea1" value="1) POST /transform&#xa;{gdc, project, size}" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;strokeColor=#333333;fontSize=10;" parent="1" source="d_load" edge="1">

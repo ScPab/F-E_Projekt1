@@ -43,8 +43,11 @@ GEM-i). Arbeitsteilung im Team:
 - Turtle-Erzeugung von B (nur als Referenz): `mediator/app/semantic/mapping.py`,
   `mediator/app/main.py` (`/transform`, `/ontology`),
   `mediator/scripts/example_gdc_to_rdf.py`, `mediator/sample_data/cases_brca_sample.json`.
-- Konzepte (PDF, in `recherche/`): `Wissensnetz_Gesamtueberblick`,
-  `Mapping-Konzept_GDC-zu-RDF-OWL`, `Rueckkanal-Konzept_MP-zu-RDF`.
+- Konzepte: führend ist `recherche/DataBridge_Stand_und_Ausrichtung.md`
+  (Teil A = Stand mit Code-Belegen, Teil B = Scope-/Gruppen-Ausrichtung,
+  Teil C = Zuordnung der Altdokumente). Die früheren Einzeldokumente
+  (`Wissensnetz_Gesamtueberblick`, `Mapping-Konzept_GDC-zu-RDF-OWL`,
+  `Rueckkanal-Konzept_MP-zu-RDF`) liegen als PDF unter `recherche/_archiv/`.
 - Entscheidung Graph-Modell: `docs/adr/0002-graph-db-wahl-offen.md` (RDF/OWL + RDF-star).
 - Infrastruktur: `docker-compose.yml` (Service `graph-db`), `.env.example`, `graph-db/README.md`.
 

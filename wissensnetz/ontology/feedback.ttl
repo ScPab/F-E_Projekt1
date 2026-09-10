@@ -9,7 +9,7 @@
 # Rückkanal-Vokabular (Aufgabe 4) — Terme für Experten-Erkenntnisse aus
 # Morphing Projections. Bewusst getrennt von databridge-core.ttl gehalten
 # (Kern-TBox bleibt sauber; der Mediator liest nur databridge-core.ttl über
-# GET /ontology). Modellierung nach recherche/Rueckkanal-Konzept_MP-zu-RDF,
+# GET /ontology). Modellierung nach recherche/_archiv/Rueckkanal-Konzept_MP-zu-RDF,
 # Abschnitt 6: oa:Annotation + PROV-O + RDF-star, Named Graph pro Nutzer.
 # oa:- und prov:-Terme werden wiederverwendet, nicht neu definiert.
 

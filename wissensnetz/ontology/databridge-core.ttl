@@ -7,7 +7,8 @@
 
 # DataBridge Core Ontology (TBox) — erster Ausschnitt: case/project/demographic/
 # diagnosis. Setzt die Konstrukt-für-Konstrukt-Mapping-Tabelle aus
-# wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL um:
+# recherche/_archiv/Mapping-Konzept_GDC-zu-RDF-OWL um (zusammengefasst in
+# recherche/DataBridge_Stand_und_Ausrichtung.md, Teil A.2):
 #   node                  -> owl:Class
 #   property + type       -> owl:DatatypeProperty (xsd-Range)
 #   link + target_type    -> owl:ObjectProperty
@@ -87,7 +88,7 @@ db:isSampleOf a owl:ObjectProperty ;
     rdfs:range db:Case .
 
 # link: cases (Diagnosis -> Case), backref: diagnoses (Case -> Diagnosis) —
-# Namen exakt wie im Beispiel aus wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL.
+# Namen exakt wie im Beispiel aus recherche/_archiv/Mapping-Konzept_GDC-zu-RDF-OWL.
 db:describesCase a owl:ObjectProperty ;
     rdfs:label "describesCase" ;
     rdfs:domain db:Diagnosis ;
