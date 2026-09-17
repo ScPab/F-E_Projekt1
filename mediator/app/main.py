@@ -22,7 +22,7 @@ ist über POST /export/anndata angebunden (siehe app/semantic/expression.py).
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from cbioportal import CBioPortalWrapper
 from ena import ENAWrapper
@@ -40,6 +40,11 @@ from .schemas import (
     GeoQueryRequest,
     ManifestRequest,
     QueryRequest,
+    SelectionGenerateResponse,
+    SelectionLevelResult,
+    SelectionPreviewResponse,
+    SelectionRequest,
+    SingleSelection,
     TransformRequest,
 )
 from .semantic import expression as expression_export
@@ -47,32 +52,95 @@ from .semantic import mapping as semantic_mapping
 from .semantic import mapping_cbioportal, mapping_ena, mapping_geo
 from .semantic.paths import alignment_path, export_dir, ontology_path
 
-# Felder für den Live-Abruf von POST /transform (Kern-Ausschnitt
-# case/project/demographic/diagnosis/samples, siehe app/semantic/mapping.py).
-# Erweitert um die volle Oviedo-Hover-Feldliste (siehe
-# wissensnetz/prototype/mp_lite/HANDOFF.md, Teil 1/2): race/ethnicity/
-# vital_status (demographic), morphology/site_of_resection_or_biopsy/
-# ajcc_pathologic_stage/metastasis_at_diagnosis (diagnoses) sowie
-# sample_id/sample_type (samples) — live gegen die GDC-API verifiziert
-# (siehe HANDOFF.md-Checkliste, 2026-08-28); `diagnoses.tumor_stage`
-# existiert dort nicht, daher `diagnoses.ajcc_pathologic_stage`.
-TRANSFORM_CASE_FIELDS = [
-    "case_id",
-    "submitter_id",
-    "project.project_id",
-    "demographic.gender",
-    "demographic.race",
-    "demographic.ethnicity",
-    "demographic.vital_status",
-    "diagnoses.primary_diagnosis",
-    "diagnoses.age_at_diagnosis",
-    "diagnoses.morphology",
-    "diagnoses.site_of_resection_or_biopsy",
-    "diagnoses.ajcc_pathologic_stage",
-    "diagnoses.metastasis_at_diagnosis",
-    "samples.sample_id",
-    "samples.sample_type",
-]
+# Felder, die für JEDE Case-Abfrage strukturell nötig sind (Identität/
+# Join-Schlüssel bzw. Instanz-IRI-Bildung, siehe cases_to_graph) — unabhängig
+# davon, welche Attribute die UI zusätzlich anfordert.
+BASE_CASE_FIELDS = ["case_id", "submitter_id", "project.project_id", "samples.sample_id"]
+
+
+def resolve_case_fields(attributes: list[str]) -> list[str]:
+    """Leitet die bei GDC anzufragenden Felder aus UI-Attributen ab (M4, siehe
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, Abschnitt 3: "TRANSFORM_CASE_FIELDS
+    von Konstante zu abgeleitet ... Kern der Trigger-Idee").
+
+    `BASE_CASE_FIELDS` sind immer dabei; für jedes Attribut kommt das über
+    `semantic_mapping.resolve_attribute` aufgelöste GDC-Feld hinzu — bekannte
+    Oviedo-Attributnamen (KNOWN_ATTRIBUTES) ebenso wie neue, deren Property
+    laut Entscheidung 7.5 dynamisch entsteht.
+    """
+    fields = list(BASE_CASE_FIELDS)
+    for attr in attributes:
+        gdc_field = semantic_mapping.resolve_attribute(attr).gdc_field
+        if gdc_field not in fields:
+            fields.append(gdc_field)
+    return fields
+
+
+# Rückwärtskompatibler Default für POST /transform (unverändertes Verhalten:
+# derselbe Feldumfang wie die frühere feste Konstante — DEFAULT_ATTRIBUTES
+# deckt exakt dieselben 11 Attribute ab, siehe app/semantic/mapping.py).
+TRANSFORM_CASE_FIELDS = resolve_case_fields(semantic_mapping.DEFAULT_ATTRIBUTES)
+
+
+def fetch_selection_files(
+    wrapper: GDCWrapper,
+    *,
+    cohorts: list[str],
+    attributes: list[str],
+    experimental_strategy: str,
+    data_type: str,
+    size: int,
+    per_cohort_size: int | None,
+) -> tuple[list[dict], list[dict], list[str]]:
+    """Der gemeinsame Abrufschritt (M3, siehe
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, Abschnitt 1b/3):
+    EIN Files-Query pro Kohorte liefert gleichzeitig die Datei/Proben-Zuordnung
+    (Grundlage für anndata, siehe `_build_anndata_from_hits`) UND die
+    eingebetteten Case-Objekte (Grundlage für `cases_to_graph`) — GDC liefert
+    bei `cases.<feld>`-Feldern dieselbe verschachtelte Case-Struktur wie der
+    eigenständige `/cases`-Endpunkt direkt mit den Datei-Treffern mit (live
+    verifiziert). Ersetzt die früher zwei unabhängig gezogenen Stichproben
+    (`/transform`s eigener `search("cases", ...)` und `/export/anndata`s
+    `query("files", ...)` mit kleinerer Feldliste, siehe Modul-Docstring
+    Abschnitt 1b des Plans) durch einen einzigen Abruf, stratifiziert pro
+    Kohorte (siehe wissensnetz/HANDOFF_export_stratified.md).
+
+    Gibt `(hits, cases, failed_cohorts)` zurück: `hits` roh (Datei-Treffer,
+    für die Datei/Proben-Zuordnung und das Manifest), `cases` nach `case_id`/
+    `submitter_id` dedupliziert (direkt `cases_to_graph`-kompatibel, ohne
+    Umformung — dieselbe verschachtelte Form wie von GDCs `/cases`),
+    `failed_cohorts` für Kohorten, deren Query fehlschlug (killt nicht den
+    gesamten Abruf, siehe wissensnetz/HANDOFF_export_stratified.md).
+    """
+    file_fields = ["file_id", "file_name"] + [f"cases.{f}" for f in resolve_case_fields(attributes)]
+    n_each = per_cohort_size or size
+
+    hits: list[dict] = []
+    failed_cohorts: list[str] = []
+    for cohort in cohorts:
+        filters = build_filters(
+            project_id=cohort,
+            experimental_strategy=experimental_strategy,
+            access="open",
+            extra=[{"op": "in", "content": {"field": "files.data_type", "value": [data_type]}}],
+        )
+        try:
+            result = wrapper.query("files", filters=filters, fields=file_fields, size=n_each)
+        except RequestException:
+            # eine leere/kaputte Kohorte soll nicht den ganzen Abruf killen
+            failed_cohorts.append(cohort)
+            continue
+        hits.extend(result["results"])
+
+    cases_by_id: dict[str, dict] = {}
+    for hit in hits:
+        for case in hit.get("cases") or []:
+            case_key = case.get("case_id") or case.get("submitter_id")
+            if case_key and case_key not in cases_by_id:
+                cases_by_id[case_key] = case
+
+    return hits, list(cases_by_id.values()), failed_cohorts
+
 
 app = FastAPI(
     title="DataBridge Mediator",
@@ -518,83 +586,158 @@ async def ontology() -> Response:
     return Response(content=path.read_text(encoding="utf-8"), media_type="text/turtle")
 
 
-@app.post("/export/anndata")
-async def export_anndata(request: AnndataExportRequest) -> dict:
-    """GDC-Expressionsdateien -> anndata/.h5ad (Teil 3, siehe
-    wissensnetz/HANDOFF_anndata.md und app/semantic/expression.py).
+# ----------------------------------------------------------------------
+# UI-gesteuerte Akquise (M1/M2), siehe
+# recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf. Nimmt das
+# Auswahl-JSON aus dem geplanten Frontend-Panel entgegen und reicht es an
+# den Wrapper durch — der Mediator entscheidet hier bewusst NICHT über
+# Inhalte (Abschnitt 1a: "Er nimmt das JSON, ruft die Wrapper-Funktion, und
+# die Intelligenz liegt im JSON, nicht in ihm").
+# ----------------------------------------------------------------------
 
-    Ablauf: (1) passende Expressions-Files über den GDC-Wrapper suchen,
-    (2) sie über das bestehende Bulk-Tier (`build_manifest` +
-    `download_via_gdc_client`, benötigt `gdc-client` im Container)
-    herunterladen, (3) daraus X/var zusammenbauen, (4) `obs` aus dem
-    Wissensnetz (`enrichment.all_cases`) anreichern, (5) als `.h5ad`
-    schreiben. Bricht mit einem klaren Fehler ab, statt eine unvollständige
-    Matrix zurückzugeben, wenn `gdc-client` fehlt oder Fuseki nicht
-    erreichbar ist — siehe GET /export/anndata/download/{filename} für den
-    eigentlichen Datei-Download (Offener Punkt 4 im Handoff: Download-Endpoint).
+
+def _selection_recipe_key(level: SingleSelection, request: SelectionRequest) -> str:
+    """Recipe-Key als Auswahl-Identität (M7): dieselbe Auswahl liefert denselben
+    Schlüssel unabhängig davon, ob sie über /selection/preview oder
+    /selection/generate angefragt wird — Grundlage für Named Graph und
+    .h5ad-Dateiname. Nutzt denselben Cache-Mechanismus wie POST /export/anndata
+    (wrapper.cache.recipes.key_for). Fachlicher Join-Schlüssel über RDF und
+    anndata hinweg bleibt `db:submitterId` (siehe `_build_anndata_from_hits`/
+    `cases_to_graph`), dieser recipe_key ist nur die Anfrage-Identität.
     """
     wrapper = get_gdc_wrapper()
-
     recipe = {
-        "project_id": request.project_id,
-        "experimental_strategy": request.experimental_strategy,
-        "data_type": request.data_type,
-        "id_column": request.id_column,
-        "value_column": request.value_column,
-        "label_column": request.label_column,
+        "source": level.source,
+        "cohorts": sorted(level.cohorts),
+        "modality": level.modality,
+        "attributes": sorted(level.attributes),
         "size": request.size,
-        "per_project_size": request.per_project_size,
-        "gene_ids": request.gene_ids,
-        "compute_tsne": request.compute_tsne,
+        "per_cohort_size": request.per_cohort_size,
     }
-    recipe_key = wrapper.cache.recipes.key_for(recipe)
-    cached = wrapper.cache.materialized.get(recipe_key)
-    if cached and Path(cached["path"]).exists():
-        return cached
+    return wrapper.cache.recipes.key_for(recipe)
 
-    file_fields = [
-        "file_id",
-        "file_name",
-        "cases.submitter_id",
-        "cases.project.project_id",
-        "cases.samples.sample_id",
-        "cases.samples.sample_type",
-    ]
 
-    # Files PRO Projekt holen statt in einem Sammel-Query: GDC liefert `size`
-    # Treffer in eigener Default-Reihenfolge ohne Stratifizierung — bei
-    # project_id als Liste (Pancancer/Multi-Kohorten) kamen sonst alle Proben
-    # aus einer einzigen Kohorte, siehe wissensnetz/HANDOFF_export_stratified.md.
-    # Für ein einzelnes project_id ist das äquivalent zum bisherigen
-    # Ein-Query-Verhalten (Schleife über genau ein Projekt).
-    projects = request.project_id if isinstance(request.project_id, list) else [request.project_id]
-    n_each = request.per_project_size or request.size
+def _selection_fetch(level: SingleSelection, request: SelectionRequest) -> tuple[list[dict], list[dict], list[str]]:
+    """Ruft `fetch_selection_files` (M3) für eine einzelne Auswahl-Ebene auf.
 
-    hits: list[dict] = []
-    failed_projects: list[str] = []
-    for project in projects:
-        file_filters = build_filters(
-            project_id=project,
-            experimental_strategy=request.experimental_strategy,
-            access="open",
-            extra=[{"op": "in", "content": {"field": "files.data_type", "value": [request.data_type]}}],
+    Nur `source="gdc"` und `modality="gene_expression"` sind heute angebunden
+    (siehe Umsetzungsplan M9 bzw. W6 — beide "Später", nicht Teil dieses
+    Durchgangs); andere Werte lösen einen `ValueError` aus, den die Aufrufer
+    in einen Level-Fehler übersetzen, statt die ganze Anfrage abzubrechen
+    (Entscheidung 7.2: Ebenen sind unabhängig voneinander).
+    """
+    if level.source != "gdc":
+        raise ValueError(f"Datenquelle {level.source!r} noch nicht angebunden (siehe Umsetzungsplan M9).")
+    if level.modality != "gene_expression":
+        raise ValueError(f"Modalität {level.modality!r} noch nicht angebunden (siehe Umsetzungsplan W6).")
+    wrapper = get_gdc_wrapper()
+    return fetch_selection_files(
+        wrapper,
+        cohorts=level.cohorts,
+        attributes=level.attributes,
+        experimental_strategy="RNA-Seq",
+        data_type="Gene Expression Quantification",
+        size=request.size,
+        per_cohort_size=request.per_cohort_size,
+    )
+
+
+@app.post("/selection/preview")
+async def selection_preview(request: SelectionRequest) -> SelectionPreviewResponse:
+    """Billiger Vorschau-Endpunkt (Entscheidung 7.3: geteilter Abruf ohne Matrizen).
+
+    Pro Ebene EIN Files-Query (M3, `fetch_selection_files`), daraus
+    `cases_to_graph()` -> Turtle. Baut bewusst KEINE anndata-Matrix (siehe
+    `selection_generate` dafür) — das ist der Unterschied zwischen billig
+    und teuer laut Entscheidung 7.3. Eine fehlschlagende Ebene liefert
+    `status="error"`, ohne die anderen Ebenen der Anfrage zu beeinträchtigen.
+    """
+    alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
+    levels: list[SelectionLevelResult] = []
+    for level in request.levels:
+        result = SelectionLevelResult(
+            selection=level,
+            recipe_key=_selection_recipe_key(level, request),
+            requested_fields=resolve_case_fields(level.attributes),
         )
         try:
-            result = wrapper.query("files", filters=file_filters, fields=file_fields, size=n_each)
-        except RequestException:
-            # eine leere/kaputte Kohorte soll nicht den ganzen Multi-Kohorten-Export killen
-            failed_projects.append(project)
-            continue
-        hits.extend(result["results"])
+            _hits, cases, failed_cohorts = _selection_fetch(level, request)
+            result.failed_cohorts = failed_cohorts
+            if not cases:
+                raise ValueError(f"Keine Treffer für Kohorte(n) {level.cohorts!r}.")
+            graph, star_annotations = semantic_mapping.cases_to_graph(
+                cases, alignment=alignment, attributes=level.attributes
+            )
+            result.turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
+            result.triple_count = len(graph)
+        except (ValueError, HTTPException) as exc:
+            result.status = "error"
+            result.error = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        levels.append(result)
+    return SelectionPreviewResponse(levels=levels)
 
-    if not hits:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Keine Expressions-Files gefunden für project_id={request.project_id!r} "
-            f"(fehlgeschlagene Kohorten: {failed_projects!r}), "
-            f"experimental_strategy={request.experimental_strategy!r}, data_type={request.data_type!r}.",
+
+@app.post("/selection/generate")
+async def selection_generate(request: SelectionRequest) -> SelectionGenerateResponse:
+    """Teurer Generieren-Endpunkt: baut zusätzlich zur Turtle-Serialisierung ein
+    `.h5ad` je Ebene, auf demselben geteilten Proben-Set wie `selection_preview`
+    (M3+M6). Wie bei `selection_preview` beeinträchtigt eine fehlschlagende
+    Ebene (z. B. fehlendes `gdc-client` oder unerreichbares Fuseki, siehe
+    `_build_anndata_from_hits`) nicht die anderen Ebenen der Anfrage.
+    """
+    alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
+    wrapper = get_gdc_wrapper()
+    levels: list[SelectionLevelResult] = []
+    for level in request.levels:
+        recipe_key = _selection_recipe_key(level, request)
+        result = SelectionLevelResult(
+            selection=level,
+            recipe_key=recipe_key,
+            requested_fields=resolve_case_fields(level.attributes),
         )
+        try:
+            hits, cases, failed_cohorts = _selection_fetch(level, request)
+            result.failed_cohorts = failed_cohorts
+            if not hits:
+                raise ValueError(f"Keine Expressions-Files für Kohorte(n) {level.cohorts!r}.")
+            graph, star_annotations = semantic_mapping.cases_to_graph(
+                cases, alignment=alignment, attributes=level.attributes
+            )
+            result.turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
+            result.triple_count = len(graph)
+            result.anndata = _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True)
+        except (ValueError, HTTPException) as exc:
+            result.status = "error"
+            result.error = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        levels.append(result)
+    return SelectionGenerateResponse(levels=levels)
 
+
+def _build_anndata_from_hits(
+    wrapper: GDCWrapper,
+    hits: list[dict],
+    recipe_key: str,
+    *,
+    id_column: str = "gene_id",
+    value_column: str = "tpm_unstranded",
+    label_column: Optional[str] = "gene_name",
+    gene_ids: Optional[list[str]] = None,
+    compute_tsne: bool = False,
+    experimental_strategy: str = "RNA-Seq",
+    filename: Optional[str] = None,
+) -> dict:
+    """Baut aus Files-Treffern (siehe `fetch_selection_files`, M3) ein
+    anndata/.h5ad (M6, siehe wissensnetz/HANDOFF_anndata.md und
+    app/semantic/expression.py): Download über `gdc-client`, X/var aus den
+    Quantifizierungsdateien, `obs` aus dem Wissensnetz.
+
+    Gemeinsamer Kern für POST /export/anndata und POST /selection/generate —
+    arbeitet auf genau den `hits`, die der Aufrufer per
+    `fetch_selection_files()` ermittelt hat (M3: "ein Abruf, zwei
+    Serialisierungen"). Bricht mit einem klaren Fehler ab, statt eine
+    unvollständige Matrix zurückzugeben, wenn `gdc-client` fehlt oder Fuseki
+    nicht erreichbar ist.
+    """
     file_ids: list[str] = []
     sample_case_map: dict[str, str] = {}
     sample_types: dict[str, str] = {}
@@ -661,12 +804,12 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     sample_project_map = {sid: p for sid, p in sample_project_map.items() if sid in sample_files}
 
     try:
-        X, sample_ids, gene_ids, gene_labels = expression_export.assemble_matrix(
+        X, sample_ids, gene_ids_out, gene_labels = expression_export.assemble_matrix(
             sample_files,
-            id_column=request.id_column,
-            value_column=request.value_column,
-            label_column=request.label_column,
-            gene_ids=request.gene_ids,
+            id_column=id_column,
+            value_column=value_column,
+            label_column=label_column,
+            gene_ids=gene_ids,
         )
     except expression_export.ExpressionAssemblyError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -680,40 +823,114 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         )
     cases_by_submitter = {c["submitter_id"]: c for c in all_cases(store) if c.get("submitter_id")}
 
-    obs = expression_export.build_obs(sample_case_map, cases_by_submitter, sample_types=sample_types, gdc_project_by_sample=sample_project_map)
+    obs = expression_export.build_obs(
+        sample_case_map, cases_by_submitter, sample_types=sample_types, gdc_project_by_sample=sample_project_map
+    )
     obs = obs.loc[sample_ids]  # dieselbe Zeilenreihenfolge wie X sicherstellen
-    var = expression_export.build_var(gene_ids, gene_labels)
+    var = expression_export.build_var(gene_ids_out, gene_labels)
 
     obsm: dict[str, Any] = {}
-    if request.compute_tsne:
+    if compute_tsne:
         tsne = expression_export.compute_tsne(X)
         if tsne is not None:
-            obsm_key = "X_tsne_mirna" if request.experimental_strategy == "miRNA-Seq" else "X_tsne_genes"
+            obsm_key = "X_tsne_mirna" if experimental_strategy == "miRNA-Seq" else "X_tsne_genes"
             obsm[obsm_key] = tsne
 
     adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
 
-    filename = request.filename or f"{recipe_key}.h5ad"
-    filename = Path(filename).name  # nur Basisname, keine Pfad-Traversal
-    if not filename.endswith(".h5ad"):
-        filename += ".h5ad"
-    out_path = expression_export.write_h5ad(adata, export_dir() / filename)
+    out_filename = filename or f"{recipe_key}.h5ad"
+    out_filename = Path(out_filename).name  # nur Basisname, keine Pfad-Traversal
+    if not out_filename.endswith(".h5ad"):
+        out_filename += ".h5ad"
+    out_path = expression_export.write_h5ad(adata, export_dir() / out_filename)
 
     wrapper.cache.raw.purge(recipe_key)
 
-    metadata = {
-        "project_id": request.project_id,
-        "experimental_strategy": request.experimental_strategy,
+    return {
         "n_obs": int(adata.n_obs),
         "n_vars": int(adata.n_vars),
         "obs_columns": list(obs.columns),
         "var_columns": list(var.columns),
         "obsm_keys": list(obsm.keys()),
         "missing_files": missing_files,
-        "failed_projects": failed_projects,
-        "filename": filename,
+        "filename": out_filename,
         "path": str(out_path),
-        "download_url": f"/export/anndata/download/{filename}",
+        "download_url": f"/export/anndata/download/{out_filename}",
+    }
+
+
+@app.post("/export/anndata")
+async def export_anndata(request: AnndataExportRequest) -> dict:
+    """GDC-Expressionsdateien -> anndata/.h5ad (Teil 3, siehe
+    wissensnetz/HANDOFF_anndata.md und app/semantic/expression.py).
+
+    Holt die passenden Expressions-Files über den gemeinsamen Abrufschritt
+    (M3, `fetch_selection_files`) und baut daraus über `_build_anndata_from_hits`
+    (M6) das `.h5ad` — derselbe Kern, den auch POST /selection/generate nutzt.
+    Siehe GET /export/anndata/download/{filename} für den eigentlichen
+    Datei-Download.
+    """
+    wrapper = get_gdc_wrapper()
+
+    recipe = {
+        "project_id": request.project_id,
+        "experimental_strategy": request.experimental_strategy,
+        "data_type": request.data_type,
+        "id_column": request.id_column,
+        "value_column": request.value_column,
+        "label_column": request.label_column,
+        "size": request.size,
+        "per_project_size": request.per_project_size,
+        "gene_ids": request.gene_ids,
+        "compute_tsne": request.compute_tsne,
+    }
+    recipe_key = wrapper.cache.recipes.key_for(recipe)
+    cached = wrapper.cache.materialized.get(recipe_key)
+    if cached and Path(cached["path"]).exists():
+        return cached
+
+    # Files PRO Projekt holen statt in einem Sammel-Query (Stratifizierung,
+    # siehe wissensnetz/HANDOFF_export_stratified.md) — "sample_type" ist das
+    # einzige Attribut, das dieser Endpunkt traditionell anfordert (obs-Spalte
+    # "sample_type"); zusätzliche Klinikfelder kommen künftig über
+    # POST /selection/generate (M6), das beliebige `attributes[]` je Ebene kennt.
+    projects = request.project_id if isinstance(request.project_id, list) else [request.project_id]
+    hits, _shared_cases, failed_projects = fetch_selection_files(
+        wrapper,
+        cohorts=projects,
+        attributes=["sample_type"],
+        experimental_strategy=request.experimental_strategy,
+        data_type=request.data_type,
+        size=request.size,
+        per_cohort_size=request.per_project_size,
+    )
+
+    if not hits:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Keine Expressions-Files gefunden für project_id={request.project_id!r} "
+            f"(fehlgeschlagene Kohorten: {failed_projects!r}), "
+            f"experimental_strategy={request.experimental_strategy!r}, data_type={request.data_type!r}.",
+        )
+
+    result = _build_anndata_from_hits(
+        wrapper,
+        hits,
+        recipe_key,
+        id_column=request.id_column,
+        value_column=request.value_column,
+        label_column=request.label_column,
+        gene_ids=request.gene_ids,
+        compute_tsne=request.compute_tsne,
+        experimental_strategy=request.experimental_strategy,
+        filename=request.filename,
+    )
+
+    metadata = {
+        "project_id": request.project_id,
+        "experimental_strategy": request.experimental_strategy,
+        "failed_projects": failed_projects,
+        **result,
     }
     wrapper.cache.materialized.set(recipe_key, metadata)
     return metadata

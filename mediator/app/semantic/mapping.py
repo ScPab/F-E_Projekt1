@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from rdflib import RDF, Graph, Literal, Namespace, URIRef
-from rdflib.namespace import XSD
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 DB = Namespace("http://databridge.hka/onto#")
 NCIT = Namespace("http://purl.obolibrary.org/obo/NCIT_")
@@ -36,6 +37,151 @@ INSTANCE_BASE = "http://databridge.hka/instance/"
 # (Subjekt, Prädikat, Objekt, Quelle-als-Turtle-Term, Konfidenz) für eine noch
 # anzuhängende RDF-star-Provenienz-Annotation, siehe serialize_with_provenance.
 StarAnnotation = tuple[URIRef, URIRef, URIRef, str, float]
+
+
+# ---------------------------------------------------------------------------
+# Generisches Attribut-Mapping (M4/M5, siehe
+# recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, Abschnitt 3): ein
+# UI-"Obj"-Attribut (Trigger) wird auf ein GDC-Feld + eine db:-Property
+# abgebildet. Ersetzt die frühere feste if-Kaskade in cases_to_graph.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AttributeMapping:
+    """Wohin (Ziel-Entity/Property) und wie (Datentyp) ein Attribut übersetzt wird."""
+
+    gdc_field: str  # Punktpfad wie von GDC geliefert, z. B. "demographic.race"
+    entity: str  # "case" | "project" | "demographic" | "diagnosis" | "sample"
+    property_uri: URIRef
+    datatype: URIRef = XSD.string
+
+
+# Bekannte Attribute: Oviedo-/UI-Attributname (siehe Umsetzungsplan Abschnitt
+# 1, Teil 1a) -> GDC-Feld + bereits in databridge-core.ttl deklarierte
+# db:-Property. `primary_diagnosis` ist hier nur für die Feld-Ableitung
+# (resolve_case_fields) gelistet — die ABox-Erzeugung bleibt Sonderfall
+# (Alignment + Label-Fallback + RDF-star, siehe cases_to_graph).
+KNOWN_ATTRIBUTES: dict[str, AttributeMapping] = {
+    "gender": AttributeMapping("demographic.gender", "demographic", DB.gender),
+    "race": AttributeMapping("demographic.race", "demographic", DB.race),
+    "ethnicity": AttributeMapping("demographic.ethnicity", "demographic", DB.ethnicity),
+    "vital_status": AttributeMapping("demographic.vital_status", "demographic", DB.vitalStatus),
+    "primary_diagnosis": AttributeMapping("diagnoses.primary_diagnosis", "diagnosis", DB.primaryDiagnosisLabel),
+    "age_at_diagnosis": AttributeMapping("diagnoses.age_at_diagnosis", "diagnosis", DB.ageAtDiagnosis, XSD.integer),
+    "morphology": AttributeMapping("diagnoses.morphology", "diagnosis", DB.morphology),
+    "site_of_resection_or_biopsy": AttributeMapping(
+        "diagnoses.site_of_resection_or_biopsy", "diagnosis", DB.siteOfResectionOrBiopsy
+    ),
+    # Oviedo-Attributname "tumor_stage" <-> GDC-Feld "ajcc_pathologic_stage"
+    # (GDCs älteres "tumor_stage" existiert im aktuellen Schema nicht, siehe
+    # wissensnetz/prototype/mp_lite/HANDOFF.md).
+    "tumor_stage": AttributeMapping("diagnoses.ajcc_pathologic_stage", "diagnosis", DB.tumorStage),
+    "has_metastasis": AttributeMapping("diagnoses.metastasis_at_diagnosis", "diagnosis", DB.metastasisAtDiagnosis),
+    "sample_type": AttributeMapping("samples.sample_type", "sample", DB.sampleType),
+}
+
+# Rückwärtskompatibler Default für Aufrufer, die kein `attributes` angeben
+# (z. B. bestehendes POST /transform) — identisch zum bisherigen, fest
+# ausprogrammierten Feldumfang.
+DEFAULT_ATTRIBUTES: list[str] = list(KNOWN_ATTRIBUTES)
+
+_ENTITY_BY_GDC_PREFIX = {
+    "demographic": "demographic",
+    "diagnoses": "diagnosis",
+    "samples": "sample",
+    "project": "project",
+}
+_CLASS_BY_ENTITY = {
+    "case": DB.Case,
+    "project": DB.Project,
+    "demographic": DB.Demographic,
+    "diagnosis": DB.Diagnosis,
+    "sample": DB.Sample,
+}
+_CAMEL_CASE_RE = re.compile(r"_([a-zA-Z0-9])")
+
+
+def _to_camel_case(name: str) -> str:
+    """'prior_malignancy' -> 'priorMalignancy' (für dynamisch erzeugte Property-Namen)."""
+    return _CAMEL_CASE_RE.sub(lambda m: m.group(1).upper(), name)
+
+
+def _leaf_key(gdc_field: str) -> str:
+    """Letztes Pfadsegment eines GDC-Feldpfads, z. B. 'demographic.race' -> 'race'."""
+    return gdc_field.rsplit(".", 1)[-1]
+
+
+def resolve_attribute(attribute: str) -> AttributeMapping:
+    """Löst ein UI-Attribut (Obj-Trigger) auf ein `AttributeMapping` auf.
+
+    Bekannte Attribute (`KNOWN_ATTRIBUTES`) nutzen ihre feste, in
+    databridge-core.ttl deklarierte db:-Property. Für unbekannte Attribute
+    gilt laut Entscheidung 7.5 (Umsetzungsplan_UI-gesteuerte-Akquise.pdf,
+    Abschnitt 7.5: "dynamisch anlegen"): das Attribut wird als GDC-Feldpfad
+    interpretiert (z. B. "diagnoses.prior_malignancy"; ohne Punkt wird
+    "diagnoses.<attribut>" angenommen — die meisten neuen Oviedo-Obj-Felder
+    sind klinische Diagnose-Attribute, siehe KNOWN_ATTRIBUTES). Das letzte
+    Pfadsegment liefert camelCase den Property-Namen; die Property wird NICHT
+    in wissensnetz/ontology/databridge-core.ttl nachgetragen (Wissensnetz
+    bleibt Besitzer der kuratierten Basis-Ontologie, siehe wissensnetz/CLAUDE.md),
+    sondern inline in der jeweiligen Transform-Ausgabe deklariert (siehe
+    `_declare_dynamic_property`), damit der erzeugte Graph für sich genommen
+    gültig/selbstbeschreibend bleibt.
+    """
+    known = KNOWN_ATTRIBUTES.get(attribute)
+    if known:
+        return known
+    field = attribute if "." in attribute else f"diagnoses.{attribute}"
+    prefix, _, leaf = field.rpartition(".")
+    entity = _ENTITY_BY_GDC_PREFIX.get(prefix, "case")
+    return AttributeMapping(field, entity, DB[_to_camel_case(leaf)])
+
+
+def _declare_dynamic_property(graph: Graph, mapping: AttributeMapping, declared: set[str]) -> None:
+    """Deklariert eine zur Laufzeit erzeugte Property inline als owl:DatatypeProperty
+    (Entscheidung 7.5) — einmal pro Property und erzeugtem Graphen."""
+    local_name = str(mapping.property_uri).rsplit("#", 1)[-1]
+    if local_name in declared:
+        return
+    declared.add(local_name)
+    graph.add((mapping.property_uri, RDF.type, OWL.DatatypeProperty))
+    graph.add((mapping.property_uri, RDFS.label, Literal(local_name)))
+    graph.add((mapping.property_uri, RDFS.domain, _CLASS_BY_ENTITY[mapping.entity]))
+    graph.add((mapping.property_uri, RDFS.range, mapping.datatype))
+    graph.add(
+        (
+            mapping.property_uri,
+            RDFS.comment,
+            Literal(
+                f"Dynamisch erzeugt aus UI-Attribut (GDC-Feld '{mapping.gdc_field}'), "
+                "nicht in wissensnetz/ontology/databridge-core.ttl deklariert."
+            ),
+        )
+    )
+
+
+def _apply_attributes(
+    graph: Graph,
+    entity_iri: URIRef,
+    source: dict[str, Any],
+    mappings: list[tuple[str, AttributeMapping]],
+    declared_dynamic: set[str],
+) -> None:
+    """Schreibt alle für eine Entity-Instanz zuständigen Attribute generisch
+    als Literal-Tripel (M5) — ersetzt die frühere if-Kaskade pro Feld."""
+    for attr, mapping in mappings:
+        value = source.get(_leaf_key(mapping.gdc_field))
+        if value is None or value == "":
+            continue
+        if attr not in KNOWN_ATTRIBUTES:
+            _declare_dynamic_property(graph, mapping, declared_dynamic)
+        if mapping.datatype == XSD.integer:
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                continue
+        graph.add((entity_iri, mapping.property_uri, Literal(value, datatype=mapping.datatype)))
 
 
 def load_alignment_table(path: str | Path) -> dict[str, str]:
@@ -67,25 +213,39 @@ def cases_to_graph(
     cases: list[dict[str, Any]],
     *,
     alignment: dict[str, str] | None = None,
+    attributes: list[str] | None = None,
 ) -> tuple[Graph, list[StarAnnotation]]:
     """Übersetzt GDC-`cases`-Treffer in RDF-Tripel (case/project/demographic/diagnoses/samples).
 
     Erwartet die verschachtelte Form, wie sie GDCWrapper.search("cases",
-    fields=[...]) liefert (project.project_id, demographic.gender/race/
-    ethnicity/vital_status, diagnoses[].primary_diagnosis/age_at_diagnosis/
-    morphology/site_of_resection_or_biopsy/ajcc_pathologic_stage/
-    metastasis_at_diagnosis, samples[].sample_id/sample_type — siehe
-    TRANSFORM_CASE_FIELDS in app/main.py für die vollständige Feldliste).
+    fields=[...]) liefert. Welche Attribute (über die Case-/Projekt-Identität
+    hinaus) als Tripel geschrieben werden, bestimmt `attributes` — eine Liste
+    von UI-Attributnamen (Obj-Trigger, siehe
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf), aufgelöst über
+    `resolve_attribute()`. Ohne Angabe gilt `DEFAULT_ATTRIBUTES`
+    (rückwärtskompatibel zum bisherigen, fest ausprogrammierten Feldumfang).
 
     Gibt den Haupt-Graphen sowie eine Liste offener RDF-star-Annotationen
     zurück (Provenienz/Konfidenz für erfolgreiche NCIt-Alignments) — diese
     hängt serialize_with_provenance an die Turtle-Ausgabe an.
     """
     alignment = alignment or {}
+    attributes = list(attributes) if attributes is not None else DEFAULT_ATTRIBUTES
     graph = Graph()
     _bind_prefixes(graph)
     star_annotations: list[StarAnnotation] = []
     seen_projects: set[str] = set()
+    declared_dynamic: set[str] = set()
+
+    # primary_diagnosis bleibt Sonderfall (Alignment + Label-Fallback + RDF-star,
+    # siehe unten) — aus der generischen Mapping-Schleife ausgenommen.
+    resolved_by_entity: dict[str, list[tuple[str, AttributeMapping]]] = {}
+    for attr in attributes:
+        if attr == "primary_diagnosis":
+            continue
+        mapping = resolve_attribute(attr)
+        resolved_by_entity.setdefault(mapping.entity, []).append((attr, mapping))
+    include_primary_diagnosis = "primary_diagnosis" in attributes
 
     for case in cases:
         case_id = case.get("case_id") or case.get("submitter_id")
@@ -96,6 +256,7 @@ def cases_to_graph(
         graph.add((case_iri, DB.caseId, Literal(case_id, datatype=XSD.string)))
         if case.get("submitter_id"):
             graph.add((case_iri, DB.submitterId, Literal(case["submitter_id"], datatype=XSD.string)))
+        _apply_attributes(graph, case_iri, case, resolved_by_entity.get("case", []), declared_dynamic)
 
         project = case.get("project") or {}
         project_id = project.get("project_id")
@@ -104,6 +265,9 @@ def cases_to_graph(
             if project_id not in seen_projects:
                 graph.add((project_iri, RDF.type, DB.Project))
                 graph.add((project_iri, DB.projectId, Literal(project_id, datatype=XSD.string)))
+                _apply_attributes(
+                    graph, project_iri, project, resolved_by_entity.get("project", []), declared_dynamic
+                )
                 seen_projects.add(project_id)
             graph.add((case_iri, DB.belongsToProject, project_iri))
             graph.add((project_iri, DB.hasCase, case_iri))
@@ -112,14 +276,9 @@ def cases_to_graph(
         if demographic:
             demo_iri = URIRef(f"{INSTANCE_BASE}demographic/{_slug(case_id)}")
             graph.add((demo_iri, RDF.type, DB.Demographic))
-            if demographic.get("gender"):
-                graph.add((demo_iri, DB.gender, Literal(demographic["gender"], datatype=XSD.string)))
-            if demographic.get("race"):
-                graph.add((demo_iri, DB.race, Literal(demographic["race"], datatype=XSD.string)))
-            if demographic.get("ethnicity"):
-                graph.add((demo_iri, DB.ethnicity, Literal(demographic["ethnicity"], datatype=XSD.string)))
-            if demographic.get("vital_status"):
-                graph.add((demo_iri, DB.vitalStatus, Literal(demographic["vital_status"], datatype=XSD.string)))
+            _apply_attributes(
+                graph, demo_iri, demographic, resolved_by_entity.get("demographic", []), declared_dynamic
+            )
             graph.add((case_iri, DB.hasDemographic, demo_iri))
             graph.add((demo_iri, DB.isDemographicOf, case_iri))
 
@@ -127,8 +286,7 @@ def cases_to_graph(
             sample_key = sample.get("sample_id") or f"{case_id}-sample{idx}"
             sample_iri = URIRef(f"{INSTANCE_BASE}sample/{_slug(sample_key)}")
             graph.add((sample_iri, RDF.type, DB.Sample))
-            if sample.get("sample_type"):
-                graph.add((sample_iri, DB.sampleType, Literal(sample["sample_type"], datatype=XSD.string)))
+            _apply_attributes(graph, sample_iri, sample, resolved_by_entity.get("sample", []), declared_dynamic)
             graph.add((case_iri, DB.hasSample, sample_iri))
             graph.add((sample_iri, DB.isSampleOf, case_iri))
 
@@ -138,46 +296,19 @@ def cases_to_graph(
             graph.add((diag_iri, RDF.type, DB.Diagnosis))
             graph.add((diag_iri, DB.describesCase, case_iri))
             graph.add((case_iri, DB.hasDiagnosis, diag_iri))
+            _apply_attributes(graph, diag_iri, diagnosis, resolved_by_entity.get("diagnosis", []), declared_dynamic)
 
-            primary = diagnosis.get("primary_diagnosis")
-            if primary:
-                graph.add((diag_iri, DB.primaryDiagnosisLabel, Literal(primary, datatype=XSD.string)))
-                ncit_iri = alignment.get(primary)
-                if ncit_iri:
-                    concept_iri = URIRef(ncit_iri)
-                    graph.add((diag_iri, DB.primaryDiagnosis, concept_iri))
-                    star_annotations.append(
-                        (diag_iri, DB.primaryDiagnosis, concept_iri, "gdc:submission", 1.0)
-                    )
-
-            if diagnosis.get("age_at_diagnosis") is not None:
-                graph.add(
-                    (diag_iri, DB.ageAtDiagnosis, Literal(diagnosis["age_at_diagnosis"], datatype=XSD.integer))
-                )
-
-            if diagnosis.get("morphology"):
-                graph.add((diag_iri, DB.morphology, Literal(diagnosis["morphology"], datatype=XSD.string)))
-            if diagnosis.get("site_of_resection_or_biopsy"):
-                graph.add(
-                    (
-                        diag_iri,
-                        DB.siteOfResectionOrBiopsy,
-                        Literal(diagnosis["site_of_resection_or_biopsy"], datatype=XSD.string),
-                    )
-                )
-            # GDC liefert das Tumor-Stadium unter `ajcc_pathologic_stage`, nicht
-            # unter dem älteren `tumor_stage` (live gegen die GDC-API verifiziert,
-            # siehe wissensnetz/prototype/mp_lite/HANDOFF.md).
-            if diagnosis.get("ajcc_pathologic_stage"):
-                graph.add((diag_iri, DB.tumorStage, Literal(diagnosis["ajcc_pathologic_stage"], datatype=XSD.string)))
-            if diagnosis.get("metastasis_at_diagnosis"):
-                graph.add(
-                    (
-                        diag_iri,
-                        DB.metastasisAtDiagnosis,
-                        Literal(diagnosis["metastasis_at_diagnosis"], datatype=XSD.string),
-                    )
-                )
+            if include_primary_diagnosis:
+                primary = diagnosis.get("primary_diagnosis")
+                if primary:
+                    graph.add((diag_iri, DB.primaryDiagnosisLabel, Literal(primary, datatype=XSD.string)))
+                    ncit_iri = alignment.get(primary)
+                    if ncit_iri:
+                        concept_iri = URIRef(ncit_iri)
+                        graph.add((diag_iri, DB.primaryDiagnosis, concept_iri))
+                        star_annotations.append(
+                            (diag_iri, DB.primaryDiagnosis, concept_iri, "gdc:submission", 1.0)
+                        )
 
     return graph, star_annotations
 

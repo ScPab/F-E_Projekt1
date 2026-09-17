@@ -142,6 +142,99 @@ class TransformRequest(BaseModel):
     )
 
 
+class SingleSelection(BaseModel):
+    """Eine einzelne Auswahl-Ebene aus dem UI-Panel (siehe
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, Abschnitt 1, Punkte 1-3:
+    Krebs/Var/Obj/Datenquelle). Laut Entscheidung 7.2 (siehe SelectionRequest)
+    ist jede Ebene eine eigenständige, gleichrangige Auswahl — keine
+    Verfeinerung einer übergeordneten Auswahl.
+    """
+
+    source: str = Field("gdc", description='Panel-Zeile "Datenquelle" (aktuell nur "gdc" angebunden).')
+    cohorts: list[str] = Field(
+        ..., min_length=1, description='Panel-Zeile "Krebs" (Kohorte/Projekt-ID, mehrfach wählbar via "+").'
+    )
+    modality: str = Field(
+        "gene_expression",
+        description='Panel-Zeile "Var" (Modalität): "gene_expression" ist angebunden; "dna_methylation"/'
+        '"mutations" sind laut Umsetzungsplan (W6) noch nicht implementiert.',
+    )
+    attributes: list[str] = Field(
+        default_factory=list,
+        description='Panel-Zeile "Obj" (Trigger, keine Filter — jedes Attribut ERWEITERT den Auftrag). '
+        "Aufgelöst über app/semantic/mapping.py::resolve_attribute; bekannte Oviedo-Attributnamen "
+        "(siehe KNOWN_ATTRIBUTES) nutzen ihre feste db:-Property, unbekannte werden gemäß Entscheidung "
+        "7.5 dynamisch auf eine neue Property abgebildet.",
+    )
+
+
+class SelectionRequest(BaseModel):
+    """Abbild des UI-Auswahl-JSON (recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf,
+    Abschnitt 1, Punkt 6: "Aus der Auswahl wird ein JSON. Das ist der Suchauftrag
+    und damit der Vertrag."). Grundlage für POST /selection/preview und
+    POST /selection/generate (M1/M2).
+
+    `levels` entspricht den gestapelten Panel-Kopien ("weitere Ebene", Punkt 4).
+    **Entscheidung 7.5 (Umsetzungsplan, Abschnitt 7.2):** PARALLELE, gleichrangige
+    Auswahlen zum Vergleich — keine UND-verknüpfte Verfeinerung derselben Auswahl.
+    Jede Ebene bekommt entsprechend ihr eigenes Proben-Set und ihre eigene
+    Serialisierung, nicht eine gemeinsam geschnittene Teilmenge.
+    """
+
+    levels: list[SingleSelection] = Field(
+        ..., min_length=1, description="Eine oder mehrere parallele Auswahl-Ebenen (Entscheidung 7.2)."
+    )
+    size: int = Field(20, ge=1, le=200, description="Proben je Ebene (analog AnndataExportRequest.size).")
+    per_cohort_size: Optional[int] = Field(
+        None,
+        ge=1,
+        le=200,
+        description="Proben pro Kohorte je Ebene, falls eine Ebene mehrere cohorts hat "
+        "(analog AnndataExportRequest.per_project_size).",
+    )
+
+
+class SelectionLevelResult(BaseModel):
+    """Ergebnis EINER Auswahl-Ebene innerhalb einer Preview-/Generate-Antwort.
+
+    Eine Ebene kann unabhängig von den anderen fehlschlagen (Entscheidung 7.2:
+    parallele, gleichrangige Auswahlen) — `status="error"`/`error` statt eines
+    Abbruchs der gesamten Anfrage.
+    """
+
+    selection: SingleSelection
+    recipe_key: str = Field(
+        ..., description="Identität dieser Ebene über Vorschau, Named Graph und .h5ad hinweg (M7)."
+    )
+    requested_fields: list[str] = Field(..., description="Aus attributes[] abgeleitete GDC-Felder (M4).")
+    status: str = Field("ok", description='"ok" oder "error" (siehe `error`).')
+    failed_cohorts: list[str] = Field(
+        default_factory=list, description="Kohorten dieser Ebene, deren GDC-Query fehlschlug (killt nicht die Ebene)."
+    )
+    turtle: Optional[str] = Field(
+        None, description="RDF/OWL-Serialisierung dieser Ebene (M3 — geteilter Abruf, cases_to_graph)."
+    )
+    triple_count: Optional[int] = Field(None, description="Tripelanzahl von `turtle`.")
+    anndata: Optional[dict] = Field(
+        None,
+        description="Export-Metadaten wie POST /export/anndata (n_obs/n_vars/download_url/...), "
+        "nur bei POST /selection/generate (M6) — auf demselben Proben-Set wie `turtle`.",
+    )
+    error: Optional[str] = Field(None, description="Fehlermeldung, falls status='error'.")
+
+
+class SelectionPreviewResponse(BaseModel):
+    """Antwort von POST /selection/preview (billig — Entscheidung 7.3: geteilter Abruf ohne Matrizen)."""
+
+    levels: list[SelectionLevelResult]
+
+
+class SelectionGenerateResponse(BaseModel):
+    """Antwort von POST /selection/generate (teuer — schreibt zusätzlich .h5ad je Ebene, sobald M3/M6 stehen)."""
+
+    levels: list[SelectionLevelResult]
+
+
 class AnndataExportRequest(BaseModel):
     """Anfrage für POST /export/anndata (GDC-Expressionsdaten -> anndata/.h5ad,
     Teil 3 aus wissensnetz/HANDOFF_anndata.md).

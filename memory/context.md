@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-09-02
+Stand: 2026-09-17
 
 ## Ziel
 
@@ -73,6 +73,106 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `gdc-client`-Bulk-Download.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
+
+## Umgesetzt seit letztem Stand (2026-09-17, Teil 2)
+
+- **M3/M6/M7 real verdrahtet** (den im vorherigen Durchgang bewusst
+  zurückgestellten "größten Eingriff" aus `recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf`
+  jetzt umgesetzt, da er die Basis für Frontend/Wissensnetz ist):
+  - **M3** — `fetch_selection_files()` (`mediator/app/main.py`): EIN
+    Files-Query pro Kohorte liefert gleichzeitig die Datei/Proben-Zuordnung
+    UND die eingebetteten Case-Objekte für `cases_to_graph` — live
+    verifiziert, dass GDC bei `cases.<feld>`-Feldern an `/files` dieselbe
+    verschachtelte Case-Struktur liefert wie der eigenständige
+    `/cases`-Endpunkt. Ersetzt die früher zwei unabhängig gezogenen
+    Stichproben von `/transform` und `/export/anndata`.
+  - **M6** — `_build_anndata_from_hits()`: der komplette Download-/Matrix-/
+    obs-Aufbau aus `export_anndata` in eine wiederverwendbare Funktion
+    extrahiert; sowohl `POST /export/anndata` als auch `POST
+    /selection/generate` bauen jetzt auf demselben Kern und denselben
+    `hits` auf.
+  - **M7** — `_selection_recipe_key()`: derselbe `recipe_key` für dieselbe
+    Auswahl unabhängig von preview/generate (live verifiziert, identisch
+    zwischen beiden Endpunkten).
+  - `POST /selection/preview` und `POST /selection/generate` sind jetzt
+    keine Stubs mehr: `preview` macht den geteilten Abruf + RDF-Serialisierung
+    ohne Matrizen (Entscheidung 7.3), `generate` zusätzlich `.h5ad` (inkl.
+    tSNE) aus denselben `hits`. Jede Auswahl-Ebene scheitert unabhängig von
+    den anderen (`status="error"` + `error`-Feld statt Gesamtabbruch,
+    Entscheidung 7.2) — live verifiziert mit einer funktionierenden
+    GDC-Ebene neben einer absichtlich nicht angebundenen `source="geo"`-Ebene.
+  - `POST /export/anndata` intern auf `fetch_selection_files` +
+    `_build_anndata_from_hits` umgestellt — Regressionstest bestätigt
+    identisches Verhalten (gleiche `n_obs`/`n_vars`/Metadaten-Form wie vor
+    dem Refactor, gegen den neu gebauten Container verifiziert).
+  - End-to-End gegen den echten, neu gebauten Container verifiziert (nicht
+    nur TestClient/Mock): `/export/anndata` (2 Kohorten × 2 Dateien, 4 Proben,
+    60660 Gene), `/selection/preview` (inkl. dynamisch erzeugter Property
+    `db:priorMalignancy` aus einem GDC-Feld, das gar nicht in
+    KNOWN_ATTRIBUTES steht), `/selection/generate` (Turtle + `.h5ad` inkl.
+    `X_tsne_genes` aus derselben Stichprobe). Alle 21 Wrapper-Tests und
+    `scripts/check_mediator.py` weiterhin grün.
+  - Dabei aufgefallen (kein Bug, dokumentiert): GDC lässt das gesamte
+    `demographic`-Objekt weg, wenn das einzige angefragte
+    Demographic-Feld für einen Case null ist (statt `{"gender": null}` zu
+    liefern) — identisch reproduzierbar sowohl über `/files` (neuer M3-Weg)
+    als auch direkt über `/cases` (alter `/transform`-Weg), also keine
+    Regression, sondern eine bereits vorher bestehende GDC-Eigenheit.
+- **Bewusst weiterhin nicht Teil dieses Durchgangs** (liegt bei anderen/ist
+  laut Plan selbst "Später"): **M8** (build_obs verliert GDC-Fallback —
+  braucht K1/K2 von Marcel, die es noch nicht gibt), **M9** (Quellen-Routing
+  vereinheitlichen, `POST /query` kann weiterhin nur GDC — `SingleSelection.source`
+  ist strukturell vorbereitet, liefert für `!= "gdc"` aber einen klaren
+  Level-Fehler statt eines Absturzes), **W3–W7** (Julian: Facetten,
+  DNA-Methylierung/Mutationen), **K1–K7** (Marcel: Named Graph je Auswahl,
+  Vorschau-Lesefunktion, CLI, Attributkatalog aus der TBox, NCIt-Alignment,
+  MP-lite-Anbindung).
+
+## Umgesetzt seit letztem Stand (2026-09-17)
+
+- Erster Durchgang von `recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf`
+  Abschnitt 3 (Mediator-Teil, Pablo) umgesetzt: **M1** (`SingleSelection`/
+  `SelectionRequest`/`SelectionLevelResult`/`Selection{Preview,Generate}Response`
+  in `mediator/app/schemas.py`), **M2** (`POST /selection/preview` und
+  `POST /selection/generate` in `mediator/app/main.py`, bewusst als Stub —
+  `status: "stub"`, noch kein echter Abruf), **M4** (`TRANSFORM_CASE_FIELDS`
+  ersetzt durch `resolve_case_fields()`, aus Attributen abgeleitet statt fest
+  einprogrammiert) und **M5** (`cases_to_graph` nutzt jetzt eine generische
+  Attribut-Mapping-Tabelle, `app/semantic/mapping.py::KNOWN_ATTRIBUTES`/
+  `resolve_attribute()`, statt der früheren if-Kaskade).
+- Drei offene Entscheidungen aus Abschnitt 7 des Plans mit dem Nutzer
+  getroffen (bestimmen M1/M5 direkt):
+  - **7.2 "weitere Ebene":** parallele, gleichrangige Auswahlen zum
+    Vergleich (nicht UND-Verfeinerung derselben Auswahl) — `levels` in
+    `SelectionRequest` ist entsprechend eine Liste unabhängiger
+    `SingleSelection`-Objekte.
+  - **7.3 "Was macht Vorschau":** geteilter Abruf ohne Matrizen (Generieren
+    baut später auf demselben Ergebnis auf) — Grundlage für M3.
+  - **7.5 Undeklarierte Properties:** dynamisch erlaubt. Unbekannte
+    UI-Attribute erzeugen zur Laufzeit eine neue `db:`-Property inline im
+    erzeugten Graphen (`owl:DatatypeProperty` + `rdfs:domain/range/label/
+    comment`, live getestet: `diagnoses.prior_malignancy` -> `db:priorMalignancy`)
+    statt in `wissensnetz/ontology/databridge-core.ttl` nachgetragen zu
+    werden — macht K4 (Wissensnetz muss TBox vorab erweitern) unkritisch,
+    schwächt aber die in `wissensnetz/CLAUDE.md` festgelegte alleinige
+    TBox-Besitzerschaft des Wissensnetzes ab; das sollte dem Team bewusst
+    sein.
+  - Rückwärtskompatibilität verifiziert: `cases_to_graph()`/
+    `TRANSFORM_CASE_FIELDS` ohne `attributes` liefern exakt denselben
+    Tripel-/Feldumfang wie vor dem Refactor (113 Tripel für die BRCA-Fixture,
+    unverändert; `POST /transform` und `scripts/check_mediator.py` weiterhin
+    grün, alle 21 Wrapper-Tests grün).
+- **Bewusst NICHT umgesetzt in diesem Durchgang:** M3 (gemeinsamer
+  Abrufschritt, der `/transform` und `/export/anndata` auf ein Proben-Set
+  zusammenführt), M6, M7 real verdrahtet — der Plan selbst nennt M3 den
+  "größten Eingriff"; `/selection/preview`/`/selection/generate` liefern
+  bislang nur `recipe_key`/`requested_fields` je Ebene, keinen echten Abruf.
+  Folgt als eigener, separat verifizierter Schritt, um die aktuell
+  produktiv laufenden Pfade `/transform`/`/export/anndata` nicht ungeprüft
+  zu brechen. M9 (Quellen-Routing vereinheitlichen, `POST /query` kann
+  bisher nur GDC) ebenfalls offen. Wrapper-Teil (Julian, W1–W7) und
+  Wissensnetz-Teil (Marcel, K1–K7) des Plans sind nicht Teil dieses
+  Durchgangs.
 
 ## Umgesetzt seit letztem Stand (2026-09-02, Teil 3)
 
