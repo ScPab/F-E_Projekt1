@@ -7,6 +7,12 @@
 Naht zum Mediator (Aufgabe 13, HANDOFF_pablo_store_waechst.md):
 
     from wissensnetz import write_selection, cases_for_selection
+
+Naht zum Mediator (Aufgabe 14, HANDOFF_pablo_P4_ersetzen.md): ``load_knowledge``
+ersetzt dort ``store.load_turtle(turtle)`` und macht daraus ein Upsert je
+Property — gelöscht wird nur, was die aktuelle Nutzlast auch schreibt.
+
+    from wissensnetz import load_knowledge
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ from .feedback import (
 )
 from .graphstore import GraphStore, GraphStoreError
 from .init import initialize
+from .knowledge import load_knowledge, replace_case_properties
 from .selection import (
     SELECTION_GRAPH_BASE,
     drop_selection,
@@ -62,5 +69,7 @@ __all__ = [
     "write_selection",
     "drop_selection",
     "list_selections",
+    "load_knowledge",
+    "replace_case_properties",
 ]
 __version__ = "0.1.0"
