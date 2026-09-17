@@ -9,6 +9,10 @@ Ablauf von :func:`initialize`:
    Admin-API nachgezogen — so ist ``wissensnetz init`` in sich abgeschlossen.
 2. TBox ``ontology/databridge-core.ttl`` in den Default-Graph laden
    (idempotent: bei bereits vorhandener TBox übersprungen, außer ``force``).
+3. Die Nebenvokabulare ``ontology/feedback.ttl`` (Rückkanal) und
+   ``ontology/selection.ttl`` (Auswahl-Manifeste) ebenso — jeweils über eine
+   eigene Marker-Abfrage, damit ein nachgereichtes Vokabular auch in einem
+   bestehenden Store noch ankommt.
 
 Die TBox liegt bewusst im selben (Default-)Graph wie später die ABox, damit
 einfache SPARQL-Abfragen Klassen und Instanzen ohne ``GRAPH``-Klausel sehen.
@@ -26,10 +30,13 @@ _ONTOLOGY_DIR = Path(__file__).resolve().parents[2] / "ontology"
 TBOX_PATH = _ONTOLOGY_DIR / "databridge-core.ttl"
 # Rückkanal-Vokabular (Aufgabe 4), separat von der Kern-TBox gehalten.
 FEEDBACK_PATH = _ONTOLOGY_DIR / "feedback.ttl"
+# Auswahl-Vokabular (Aufgabe 13), ebenfalls separat — siehe selection.py.
+SELECTION_PATH = _ONTOLOGY_DIR / "selection.ttl"
 
 # Marker-Abfragen: Ist die jeweilige TBox/das Vokabular bereits geladen?
 _TBOX_PRESENT = PREFIXES + "ASK { db:Case a owl:Class }"
 _FEEDBACK_PRESENT = PREFIXES + "ASK { db:ExpertFinding a owl:Class }"
+_SELECTION_PRESENT = PREFIXES + "ASK { db:Selection a owl:Class }"
 
 
 def tbox_loaded(store: GraphStore) -> bool:
@@ -40,6 +47,21 @@ def tbox_loaded(store: GraphStore) -> bool:
 def feedback_vocab_loaded(store: GraphStore) -> bool:
     """True, wenn das Rückkanal-Vokabular (``db:ExpertFinding``) vorhanden ist."""
     return store.ask(_FEEDBACK_PRESENT)
+
+
+def selection_vocab_loaded(store: GraphStore) -> bool:
+    """True, wenn das Auswahl-Vokabular (``db:Selection``) vorhanden ist."""
+    return store.ask(_SELECTION_PRESENT)
+
+
+def _load_vocab(store: GraphStore, path: Path, loaded: bool, *, force: bool) -> str:
+    """Ein Nebenvokabular idempotent laden; gibt den Kurzbericht-Text zurück."""
+    if not path.exists():
+        return "not found"
+    if loaded and not force:
+        return "skipped (bereits vorhanden)"
+    store.load_turtle(path)
+    return "reloaded (force)" if loaded else "loaded"
 
 
 def initialize(
@@ -63,15 +85,13 @@ def initialize(
         store.load_turtle(tbox_path)
         tbox_action = "reloaded (force)" if already else "loaded"
 
-    # Rückkanal-Vokabular (Aufgabe 4) mitladen, sofern vorhanden.
-    feedback_action = "not found"
-    if FEEDBACK_PATH.exists():
-        already_fb = feedback_vocab_loaded(store)
-        if already_fb and not force:
-            feedback_action = "skipped (bereits vorhanden)"
-        else:
-            store.load_turtle(FEEDBACK_PATH)
-            feedback_action = "reloaded (force)" if already_fb else "loaded"
+    # Nebenvokabulare (Aufgabe 4 Rückkanal, Aufgabe 13 Auswahl) mitladen.
+    feedback_action = _load_vocab(
+        store, FEEDBACK_PATH, feedback_vocab_loaded(store), force=force
+    )
+    selection_action = _load_vocab(
+        store, SELECTION_PATH, selection_vocab_loaded(store), force=force
+    )
 
     class_count = store.query(
         PREFIXES + "SELECT (COUNT(DISTINCT ?c) AS ?n) WHERE { ?c a owl:Class }"
@@ -83,5 +103,6 @@ def initialize(
         "dataset_created": dataset_created,
         "tbox": tbox_action,
         "feedback_vocab": feedback_action,
+        "selection_vocab": selection_action,
         "owl_classes": n_classes,
     }
