@@ -1,75 +1,292 @@
-<mxfile host="app.diagrams.net" modified="2026-09-10T10:00:00.000Z" agent="DataBridge-Konzept" version="24.0.0" type="device"><diagram name="1 · Gesamtbild" id="konzept-gesamt"><mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1400" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="n2" value="DataBridge · Scope-basierte Navigation über das Wissensnetz" style="text;html=1;fontSize=22;fontStyle=1;fontColor=#101827;align=left;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="-60" width="1620" height="40" as="geometry"/></mxCell>
-<mxCell id="n3" value="Konzeptentwurf 2026-09-10 · Auswahl statt Voll-Ladung · Zahlen und Namen beispielhaft" style="text;html=1;fontSize=13;fontColor=#6b7280;align=left;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="-26" width="1620" height="26" as="geometry"/></mxCell>
-<mxCell id="n4" value="① Frontend · MP-lite   (Marcel)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f2f6fe;strokeColor=#c3d6f7;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#1d4ed8;dashed=0;" vertex="1" parent="1"><mxGeometry x="40" y="40" width="1620" height="180" as="geometry"/></mxCell>
-<mxCell id="n5" value="② Wissensnetz   (Marcel)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f1faf6;strokeColor=#b9e2d1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#0d8a5f;dashed=0;" vertex="1" parent="1"><mxGeometry x="40" y="250" width="1620" height="300" as="geometry"/></mxCell>
-<mxCell id="n6" value="③ Mediator   (Pablo)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f7f4fe;strokeColor=#d7c8f5;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#6d3bd1;dashed=0;" vertex="1" parent="1"><mxGeometry x="40" y="580" width="1620" height="200" as="geometry"/></mxCell>
-<mxCell id="n7" value="④ Wrapper   (Julian)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#fdf8ef;strokeColor=#f0dcb8;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#b45309;dashed=0;" vertex="1" parent="1"><mxGeometry x="40" y="810" width="1620" height="150" as="geometry"/></mxCell>
-<mxCell id="n8" value="⑤ Quellen" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f6f7f9;strokeColor=#dfe3e9;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#4b5563;dashed=0;" vertex="1" parent="1"><mxGeometry x="40" y="990" width="1620" height="130" as="geometry"/></mxCell>
-<mxCell id="n9" value="1 · Kohorte&lt;br&gt;(obs-Achse)" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" vertex="1" parent="1"><mxGeometry x="80" y="100" width="250" height="84" as="geometry"/></mxCell>
-<mxCell id="n10" value="2 · Modalität&lt;br&gt;(var-Achse / Layer)" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" vertex="1" parent="1"><mxGeometry x="350" y="100" width="250" height="84" as="geometry"/></mxCell>
-<mxCell id="n11" value="3 · Verfeinerung&lt;br&gt;(klinisch, mehrstufig)" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" vertex="1" parent="1"><mxGeometry x="620" y="100" width="250" height="84" as="geometry"/></mxCell>
-<mxCell id="n12" value="Cancer map (MP-lite)&lt;br&gt;&lt;br&gt;zeigt nur die Proben und Merkmale des Scopes,&lt;br&gt;Slider und Hover ergeben sich daraus" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="1150" y="92" width="470" height="100" as="geometry"/></mxCell>
-<mxCell id="n13" value="→  Blatt erreicht  →" style="text;html=1;fontSize=13;fontStyle=1;fontColor=#0d8a5f;align=center;" vertex="1" parent="1"><mxGeometry x="900" y="128" width="220" height="30" as="geometry"/></mxCell>
-<mxCell id="n14" value="Katalogschicht   (permanent, klein)&lt;br&gt;&lt;br&gt;· db:Group-Baum mit memberCount&lt;br&gt;· NCIt-Hierarchie für die obs-Achse&lt;br&gt;· GO-Hierarchie für die var-Achse&lt;br&gt;· Drill-down-Regel als SPARQL-Abfrage" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="80" y="310" width="520" height="210" as="geometry"/></mxCell>
-<mxCell id="n15" value="Detailschicht   (je Scope, verwerfbar)&lt;br&gt;&lt;br&gt;· Named Graph .../graph/scope/&lt;id&gt;&lt;br&gt;· Sicht per CONSTRUCT (Relevanzhorizont)&lt;br&gt;· Rückkanal: Findings hängen an db:Group&lt;br&gt;· DROP GRAPH räumt einen Scope weg" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="640" y="310" width="500" height="210" as="geometry"/></mxCell>
-<mxCell id="n16" value="graph-db · Apache Jena Fuseki / TDB2&lt;br&gt;&lt;br&gt;RDF + OWL + RDF-star&lt;br&gt;ADR-0002 bleibt unverändert gültig&lt;br&gt;&lt;br&gt;Beide Schichten liegen hier,&lt;br&gt;getrennt über Named Graphs" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#cfd4db;fontSize=13;fontColor=#6b7280;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="1180" y="310" width="440" height="210" as="geometry"/></mxCell>
-<mxCell id="n17" value="Scope-Auflösung   (NEU)&lt;br&gt;&lt;br&gt;Pfad → Ladeauftrag je Komponente" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="80" y="640" width="330" height="110" as="geometry"/></mxCell>
-<mxCell id="n18" value="Mapping → RDF/Turtle&lt;br&gt;&lt;br&gt;mapping_*.py, unverändert" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="440" y="640" width="330" height="110" as="geometry"/></mxCell>
-<mxCell id="n19" value="anndata-Export je Scope&lt;br&gt;&lt;br&gt;statt eines globalen Pancancer-Files" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="800" y="640" width="330" height="110" as="geometry"/></mxCell>
-<mxCell id="n20" value="Recipe-Cache&lt;br&gt;&lt;br&gt;Schlüssel wird die Scope-ID:&lt;br&gt;derselbe Pfad → kein API-Aufruf" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="1160" y="640" width="460" height="110" as="geometry"/></mxCell>
-<mxCell id="n21" value="Facetten / Counts   (NEU)&lt;br&gt;zählt, ohne Nutzdaten zu holen" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#fdf0dc;strokeColor=#b45309;fontSize=13;fontColor=#7c3d06;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="80" y="860" width="460" height="80" as="geometry"/></mxCell>
-<mxCell id="n22" value="Metadaten-Query&lt;br&gt;vorhanden, wird nur enger gefiltert" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="570" y="860" width="460" height="80" as="geometry"/></mxCell>
-<mxCell id="n23" value="Bulk / Manifest&lt;br&gt;vorhanden; 414-Problem entfällt durch kleine Scopes" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="1060" y="860" width="560" height="80" as="geometry"/></mxCell>
-<mxCell id="n24" value="GDC / TCGA" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" vertex="1" parent="1"><mxGeometry x="80" y="1030" width="240" height="64" as="geometry"/></mxCell>
-<mxCell id="n25" value="GEO" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" vertex="1" parent="1"><mxGeometry x="340" y="1030" width="180" height="64" as="geometry"/></mxCell>
-<mxCell id="n26" value="ENA" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" vertex="1" parent="1"><mxGeometry x="540" y="1030" width="180" height="64" as="geometry"/></mxCell>
-<mxCell id="n27" value="cBioPortal" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" vertex="1" parent="1"><mxGeometry x="740" y="1030" width="220" height="64" as="geometry"/></mxCell>
-<mxCell id="n28" value="UCSC Xena · vorharmonisierte Matrizen   —   ENTSCHEIDUNG OFFEN, ohne sie hat die Modalitäts-Achse nur einen Wert" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#fdf0dc;strokeColor=#b45309;fontSize=13;fontColor=#7c3d06;align=center;" vertex="1" parent="1"><mxGeometry x="980" y="1030" width="640" height="64" as="geometry"/></mxCell>
-<mxCell id="n29" value="Ebene wählen" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n9" target="n14"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n30" value="Optionen + Counts" style="exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n14" target="n10"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n31" value="nächste Ebene" style="exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n14" target="n11"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n32" value="Counts einmalig / periodisch" style="exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9aa3af;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6b7280;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n21" target="n14"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="425" y="820"/><mxPoint x="425" y="560"/><mxPoint x="340" y="560"/></Array></mxGeometry></mxCell>
-<mxCell id="n33" value="Scope, erst jetzt" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n11" target="n17"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="745" y="210"/><mxPoint x="610" y="210"/><mxPoint x="610" y="610"/><mxPoint x="245" y="610"/></Array></mxGeometry></mxCell>
-<mxCell id="n34" value="eingegrenzte Abfrage" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n17" target="n22"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="245" y="800"/><mxPoint x="800" y="800"/></Array></mxGeometry></mxCell>
-<mxCell id="n35" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9aa3af;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6b7280;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n22" target="n24"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="800" y="985"/><mxPoint x="200" y="985"/></Array></mxGeometry></mxCell>
-<mxCell id="n36" value="Turtle in den Scope-Graph" style="exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n18" target="n15"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="605" y="565"/><mxPoint x="890" y="565"/></Array></mxGeometry></mxCell>
-<mxCell id="n37" value=".h5ad des Scopes" style="exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n19" target="n12"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="965" y="565"/><mxPoint x="1160" y="565"/><mxPoint x="1160" y="232"/><mxPoint x="1268" y="232"/></Array></mxGeometry></mxCell>
-<mxCell id="n38" value="Cache-Prüfung" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9aa3af;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6b7280;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n17" target="n20"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="245" y="768"/><mxPoint x="1390" y="768"/></Array></mxGeometry></mxCell>
-<mxCell id="n39" value="Finding an db:Group" style="exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n12" target="n15"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1120" y="142"/><mxPoint x="1120" y="282"/><mxPoint x="1015" y="282"/></Array></mxGeometry></mxCell>
-<mxCell id="n40" value="Legende" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" vertex="1" parent="1"><mxGeometry x="40" y="1160" width="1620" height="118" as="geometry"/></mxCell>
-<mxCell id="n41" value="▬  blau:  Navigation — läuft nur gegen die Katalogschicht, lädt nichts" style="text;html=1;fontSize=12.5;fontColor=#2563eb;align=left;" vertex="1" parent="1"><mxGeometry x="70" y="1200" width="500" height="26" as="geometry"/></mxCell>
-<mxCell id="n42" value="▬  grün:  Materialisierung — erst wenn der Pfad am Blatt angekommen ist" style="text;html=1;fontSize=12.5;fontColor=#0d8a5f;align=left;" vertex="1" parent="1"><mxGeometry x="70" y="1228" width="560" height="26" as="geometry"/></mxCell>
-<mxCell id="n43" value="▬  violett:  Rückkanal — Erkenntnis hängt an der Gruppe, nicht an einer Selektion" style="text;html=1;fontSize=12.5;fontColor=#6d3bd1;align=left;" vertex="1" parent="1"><mxGeometry x="600" y="1200" width="600" height="26" as="geometry"/></mxCell>
-<mxCell id="n44" value="▬  grau gestrichelt:  Aufbau und Infrastruktur, kein Nutzerpfad" style="text;html=1;fontSize=12.5;fontColor=#6b7280;align=left;" vertex="1" parent="1"><mxGeometry x="600" y="1228" width="600" height="26" as="geometry"/></mxCell>
-<mxCell id="n45" value="NEU markiert = neue Bausteine.&lt;br&gt;Alles andere existiert bereits und wird nur enger aufgerufen." style="text;html=1;fontSize=12.5;fontColor=#4b5563;align=left;" vertex="1" parent="1"><mxGeometry x="1230" y="1198" width="400" height="60" as="geometry"/></mxCell></root></mxGraphModel></diagram><diagram name="2 · Gruppen-Modell" id="konzept-gruppen"><mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1400" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="n2" value="Gruppen-Modell: jedes anndata-Element ist eine Gruppe im Netz" style="text;html=1;fontSize=22;fontStyle=1;fontColor=#101827;align=left;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="-60" width="1620" height="40" as="geometry"/></mxCell>
-<mxCell id="n3" value="Eine Gruppe wird durch ihren Pfad definiert, nicht durch eine Liste von Proben" style="text;html=1;fontSize=13;fontColor=#6b7280;align=left;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="-26" width="1620" height="26" as="geometry"/></mxCell>
-<mxCell id="n4" value="db:Group   (Vorschlag für databridge-core.ttl)&lt;br&gt;&lt;br&gt;db:selector  ·  SPARQL-Pfad, definiert die Gruppe&lt;br&gt;db:parentGroup  ·  Gruppe → Obergruppe&lt;br&gt;db:partitionBy  ·  Relation, die zerlegt hat&lt;br&gt;db:memberCount  ·  Anzahl, für die Auswahlliste&lt;br&gt;db:onAxis  ·  obs | var | layer&lt;br&gt;&lt;br&gt;db:Scope aus dem ersten Entwurf entfällt:&lt;br&gt;ein Scope ist Gruppe(obs) × Gruppe(var) × Modalität" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="40" y="30" width="470" height="300" as="geometry"/></mxCell>
-<mxCell id="n5" value="Drill-down-Regel&lt;br&gt;&lt;br&gt;Biete an einem Knoten genau die Relationen an,&lt;br&gt;die die aktuelle Gruppe in mindestens zwei&lt;br&gt;nichtleere Untergruppen zerlegen.&lt;br&gt;&lt;br&gt;Folge: keine Sackgassen, rein datengetrieben.&lt;br&gt;Gleiche Logik wie die Slider-Aktivierung,&lt;br&gt;die MP-lite heute schon verwendet." style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="40" y="350" width="470" height="210" as="geometry"/></mxCell>
-<mxCell id="n6" value="obs-Achse · Proben · NCIt" style="text;html=1;fontSize=14;fontStyle=1;fontColor=#2563eb;align=left;" vertex="1" parent="1"><mxGeometry x="560" y="30" width="480" height="34" as="geometry"/></mxCell>
-<mxCell id="n7" value="TCGA&lt;br&gt;33 Kohorten" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" vertex="1" parent="1"><mxGeometry x="560" y="74" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n8" value="TCGA-KIRC&lt;br&gt;537 Fälle" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" vertex="1" parent="1"><mxGeometry x="560" y="178" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n9" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n10" value="Clear cell adenocarcinoma&lt;br&gt;168 Fälle" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" vertex="1" parent="1"><mxGeometry x="560" y="282" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n11" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n8" target="n10"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n12" value="Stage III&lt;br&gt;47 Proben" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=center;" vertex="1" parent="1"><mxGeometry x="560" y="386" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n13" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n10" target="n12"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n14" value="rdfs:subClassOf* trägt die Tiefe" style="text;html=1;fontSize=12;fontColor=#6b7280;align=center;" vertex="1" parent="1"><mxGeometry x="560" y="500" width="480" height="40" as="geometry"/></mxCell>
-<mxCell id="n15" value="var-Achse · Merkmale · GO" style="text;html=1;fontSize=14;fontStyle=1;fontColor=#6d3bd1;align=left;" vertex="1" parent="1"><mxGeometry x="1090" y="30" width="480" height="34" as="geometry"/></mxCell>
-<mxCell id="n16" value="Alle Gene&lt;br&gt;20.531 var" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" vertex="1" parent="1"><mxGeometry x="1090" y="74" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n17" value="GO: Apoptotischer Prozess&lt;br&gt;312 Gene" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=center;" vertex="1" parent="1"><mxGeometry x="1090" y="178" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n18" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n16" target="n17"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n19" value="GO: Intrinsischer Signalweg&lt;br&gt;84 Gene" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=center;" vertex="1" parent="1"><mxGeometry x="1090" y="282" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n20" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n17" target="n19"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n21" value="BAX · CASP3 · BCL2 …&lt;br&gt;84 Spalten" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=center;" vertex="1" parent="1"><mxGeometry x="1090" y="386" width="480" height="66" as="geometry"/></mxCell>
-<mxCell id="n22" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n19" target="n21"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-<mxCell id="n23" value="dieselbe Traversierung, andere Ontologie" style="text;html=1;fontSize=12;fontColor=#6b7280;align=center;" vertex="1" parent="1"><mxGeometry x="1090" y="500" width="480" height="40" as="geometry"/></mxCell>
-<mxCell id="n24" value="Der Schnitt beider Pfade ist der Ladeauftrag&lt;br&gt;&lt;br&gt;47 Proben × 84 Merkmale   statt   11.315 × 20.531&lt;br&gt;&lt;br&gt;Erst hier wird materialisiert. Alles davor war Navigation über die Katalogschicht." style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" vertex="1" parent="1"><mxGeometry x="560" y="560" width="1010" height="130" as="geometry"/></mxCell>
-<mxCell id="n25" value="Was das für die bestehenden Artefakte bedeutet" style="text;html=1;fontSize=16;fontStyle=1;fontColor=#101827;align=left;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="40" y="722" width="1530" height="34" as="geometry"/></mxCell>
-<mxCell id="n26" value="bleibt" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=center;" vertex="1" parent="1"><mxGeometry x="40" y="786" width="200" height="50" as="geometry"/></mxCell>
-<mxCell id="n27" value="Mediator-Wrapper-Muster · RDF/OWL auf Fuseki (ADR-0002) · anndata-Seitenkanal · Rückkanal" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" vertex="1" parent="1"><mxGeometry x="255" y="786" width="1315" height="50" as="geometry"/></mxCell>
-<mxCell id="n28" value="ändert sich" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#fdf0dc;strokeColor=#b45309;fontSize=13;fontColor=#7c3d06;align=center;" vertex="1" parent="1"><mxGeometry x="40" y="848" width="200" height="50" as="geometry"/></mxCell>
-<mxCell id="n29" value="load_gdc.py --pancancer wird scope-basiert · /export/anndata bekommt einen Scope · MP-lite bekommt die Auswahl davor" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" vertex="1" parent="1"><mxGeometry x="255" y="848" width="1315" height="50" as="geometry"/></mxCell>
-<mxCell id="n30" value="entfällt" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#cfd4db;fontSize=13;fontColor=#6b7280;align=center;" vertex="1" parent="1"><mxGeometry x="40" y="910" width="200" height="50" as="geometry"/></mxCell>
-<mxCell id="n31" value="pancancer.h5ad (45 MB) als Standardweg · der separate Katalog-Begriff aus dem ersten Entwurf" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" vertex="1" parent="1"><mxGeometry x="255" y="910" width="1315" height="50" as="geometry"/></mxCell>
-<mxCell id="n32" value="wird dringend" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=center;" vertex="1" parent="1"><mxGeometry x="40" y="972" width="200" height="50" as="geometry"/></mxCell>
-<mxCell id="n33" value="ncit_primary_diagnosis.json füllen — ohne NCIt-Hierarchie hat die Navigation ab Ebene 2 keine Semantik" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" vertex="1" parent="1"><mxGeometry x="255" y="972" width="1315" height="50" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>
+<mxfile host="65bd71144e">
+    <diagram name="1 · Gesamtbild" id="konzept-gesamt">
+        <mxGraphModel dx="1397" dy="2383" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1400" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="n2" value="DataBridge · Scope-basierte Navigation über das Wissensnetz" style="text;html=1;fontSize=22;fontStyle=1;fontColor=#101827;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="-60" width="1620" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="n3" value="Konzeptentwurf 2026-09-10 · Auswahl statt Voll-Ladung · Zahlen und Namen beispielhaft" style="text;html=1;fontSize=13;fontColor=#6b7280;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="-26" width="1620" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="n4" value="① Frontend · MP-lite   (Marcel)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f2f6fe;strokeColor=#c3d6f7;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#1d4ed8;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="40" width="1620" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="n5" value="② Wissensnetz   (Marcel)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f1faf6;strokeColor=#b9e2d1;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#0d8a5f;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="250" width="1620" height="300" as="geometry"/>
+                </mxCell>
+                <mxCell id="n6" value="③ Mediator   (Pablo)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f7f4fe;strokeColor=#d7c8f5;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#6d3bd1;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="580" width="1620" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="n7" value="④ Wrapper   (Julian)" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#fdf8ef;strokeColor=#f0dcb8;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#b45309;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="810" width="1620" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="n8" value="⑤ Quellen" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#f6f7f9;strokeColor=#dfe3e9;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontSize=15;fontStyle=1;fontColor=#4b5563;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="990" width="1620" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="n9" value="1 · Kohorte&lt;br&gt;(obs-Achse)" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="100" width="250" height="84" as="geometry"/>
+                </mxCell>
+                <mxCell id="n10" value="2 · Modalität&lt;br&gt;(var-Achse / Layer)" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="350" y="100" width="250" height="84" as="geometry"/>
+                </mxCell>
+                <mxCell id="n11" value="3 · Verfeinerung&lt;br&gt;(klinisch, mehrstufig)" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="100" width="250" height="84" as="geometry"/>
+                </mxCell>
+                <mxCell id="n12" value="Cancer map (MP-lite)&lt;br&gt;&lt;br&gt;zeigt nur die Proben und Merkmale des Scopes,&lt;br&gt;Slider und Hover ergeben sich daraus" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="1150" y="92" width="470" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="n13" value="→  Blatt erreicht  →" style="text;html=1;fontSize=13;fontStyle=1;fontColor=#0d8a5f;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="128" width="220" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="n14" value="Katalogschicht   (permanent, klein)&lt;br&gt;&lt;br&gt;· db:Group-Baum mit memberCount&lt;br&gt;· NCIt-Hierarchie für die obs-Achse&lt;br&gt;· GO-Hierarchie für die var-Achse&lt;br&gt;· Drill-down-Regel als SPARQL-Abfrage" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="310" width="520" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="n15" value="Detailschicht   (je Scope, verwerfbar)&lt;br&gt;&lt;br&gt;· Named Graph .../graph/scope/&lt;id&gt;&lt;br&gt;· Sicht per CONSTRUCT (Relevanzhorizont)&lt;br&gt;· Rückkanal: Findings hängen an db:Group&lt;br&gt;· DROP GRAPH räumt einen Scope weg" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="640" y="310" width="500" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="n16" value="graph-db · Apache Jena Fuseki / TDB2&lt;br&gt;&lt;br&gt;RDF + OWL + RDF-star&lt;br&gt;ADR-0002 bleibt unverändert gültig&lt;br&gt;&lt;br&gt;Beide Schichten liegen hier,&lt;br&gt;getrennt über Named Graphs" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#cfd4db;fontSize=13;fontColor=#6b7280;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="1180" y="310" width="440" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="n17" value="Scope-Auflösung   (NEU)&lt;br&gt;&lt;br&gt;Pfad → Ladeauftrag je Komponente" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="640" width="330" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="n18" value="Mapping → RDF/Turtle&lt;br&gt;&lt;br&gt;mapping_*.py, unverändert" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="640" width="330" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="n19" value="anndata-Export je Scope&lt;br&gt;&lt;br&gt;statt eines globalen Pancancer-Files" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="640" width="330" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="n20" value="Recipe-Cache&lt;br&gt;&lt;br&gt;Schlüssel wird die Scope-ID:&lt;br&gt;derselbe Pfad → kein API-Aufruf" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="1160" y="640" width="460" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="n21" value="Facetten / Counts   (NEU)&lt;br&gt;zählt, ohne Nutzdaten zu holen" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#fdf0dc;strokeColor=#b45309;fontSize=13;fontColor=#7c3d06;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="860" width="460" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="n22" value="Metadaten-Query&lt;br&gt;vorhanden, wird nur enger gefiltert" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="570" y="860" width="460" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="n23" value="Bulk / Manifest&lt;br&gt;vorhanden; 414-Problem entfällt durch kleine Scopes" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="1060" y="860" width="560" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="n24" value="GDC / TCGA" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="1030" width="240" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="n25" value="GEO" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="1030" width="180" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="n26" value="ENA" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="1030" width="180" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="n27" value="cBioPortal" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="740" y="1030" width="220" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="n28" value="UCSC Xena · vorharmonisierte Matrizen   —   ENTSCHEIDUNG OFFEN, ohne sie hat die Modalitäts-Achse nur einen Wert" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#fdf0dc;strokeColor=#b45309;fontSize=13;fontColor=#7c3d06;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="1030" width="640" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="n29" value="Ebene wählen" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" parent="1" source="n9" target="n14" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n30" value="Optionen + Counts" style="exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" parent="1" source="n14" target="n10" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n31" value="nächste Ebene" style="exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" parent="1" source="n14" target="n11" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n32" value="Counts einmalig / periodisch" style="exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9aa3af;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6b7280;labelBackgroundColor=#ffffff;" parent="1" source="n21" target="n14" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="425" y="820"/>
+                            <mxPoint x="425" y="560"/>
+                            <mxPoint x="340" y="560"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n33" value="Scope, erst jetzt" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" parent="1" source="n11" target="n17" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="745" y="210"/>
+                            <mxPoint x="610" y="210"/>
+                            <mxPoint x="610" y="610"/>
+                            <mxPoint x="245" y="610"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n34" value="eingegrenzte Abfrage" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" parent="1" source="n17" target="n22" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="245" y="800"/>
+                            <mxPoint x="800" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n35" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9aa3af;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6b7280;labelBackgroundColor=#ffffff;" parent="1" source="n22" target="n24" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="800" y="985"/>
+                            <mxPoint x="200" y="985"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n36" value="Turtle in den Scope-Graph" style="exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" parent="1" source="n18" target="n15" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="605" y="565"/>
+                            <mxPoint x="890" y="565"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n37" value=".h5ad des Scopes" style="exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0d8a5f;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#0d8a5f;labelBackgroundColor=#ffffff;" parent="1" source="n19" target="n12" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="965" y="565"/>
+                            <mxPoint x="1160" y="565"/>
+                            <mxPoint x="1160" y="232"/>
+                            <mxPoint x="1268" y="232"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n38" value="Cache-Prüfung" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9aa3af;strokeWidth=1.5;dashed=1;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6b7280;labelBackgroundColor=#ffffff;" parent="1" source="n17" target="n20" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="245" y="768"/>
+                            <mxPoint x="1390" y="768"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n39" value="Finding an db:Group" style="exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" parent="1" source="n12" target="n15" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1120" y="142"/>
+                            <mxPoint x="1120" y="282"/>
+                            <mxPoint x="1015" y="282"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="n40" value="Legende" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="1160" width="1620" height="118" as="geometry"/>
+                </mxCell>
+                <mxCell id="n41" value="▬  blau:  Navigation — läuft nur gegen die Katalogschicht, lädt nichts" style="text;html=1;fontSize=12.5;fontColor=#2563eb;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="70" y="1200" width="500" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="n42" value="▬  grün:  Materialisierung — erst wenn der Pfad am Blatt angekommen ist" style="text;html=1;fontSize=12.5;fontColor=#0d8a5f;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="70" y="1228" width="560" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="n43" value="▬  violett:  Rückkanal — Erkenntnis hängt an der Gruppe, nicht an einer Selektion" style="text;html=1;fontSize=12.5;fontColor=#6d3bd1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="1200" width="600" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="n44" value="▬  grau gestrichelt:  Aufbau und Infrastruktur, kein Nutzerpfad" style="text;html=1;fontSize=12.5;fontColor=#6b7280;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="1228" width="600" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="n45" value="NEU markiert = neue Bausteine.&lt;br&gt;Alles andere existiert bereits und wird nur enger aufgerufen." style="text;html=1;fontSize=12.5;fontColor=#4b5563;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="1230" y="1198" width="400" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="2 · Gruppen-Modell" id="konzept-gruppen">
+        <mxGraphModel dx="1862" dy="2711" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1400" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="n2" value="Gruppen-Modell: jedes anndata-Element ist eine Gruppe im Netz" style="text;html=1;fontSize=22;fontStyle=1;fontColor=#101827;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="-60" width="1620" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="n3" value="Eine Gruppe wird durch ihren Pfad definiert, nicht durch eine Liste von Proben" style="text;html=1;fontSize=13;fontColor=#6b7280;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="-26" width="1620" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="n4" value="db:Group   (Vorschlag für databridge-core.ttl)&lt;br&gt;&lt;br&gt;db:selector  ·  SPARQL-Pfad, definiert die Gruppe&lt;br&gt;db:parentGroup  ·  Gruppe → Obergruppe&lt;br&gt;db:partitionBy  ·  Relation, die zerlegt hat&lt;br&gt;db:memberCount  ·  Anzahl, für die Auswahlliste&lt;br&gt;db:onAxis  ·  obs | var | layer&lt;br&gt;&lt;br&gt;db:Scope aus dem ersten Entwurf entfällt:&lt;br&gt;ein Scope ist Gruppe(obs) × Gruppe(var) × Modalität" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;fontSize=13;fontColor=#1b2230;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="30" width="470" height="300" as="geometry"/>
+                </mxCell>
+                <mxCell id="n5" value="Drill-down-Regel&lt;br&gt;&lt;br&gt;Biete an einem Knoten genau die Relationen an,&lt;br&gt;die die aktuelle Gruppe in mindestens zwei&lt;br&gt;nichtleere Untergruppen zerlegen.&lt;br&gt;&lt;br&gt;Folge: keine Sackgassen, rein datengetrieben.&lt;br&gt;Gleiche Logik wie die Slider-Aktivierung,&lt;br&gt;die MP-lite heute schon verwendet." style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="350" width="470" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="n6" value="obs-Achse · Proben · NCIt" style="text;html=1;fontSize=14;fontStyle=1;fontColor=#2563eb;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="30" width="480" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="n7" value="TCGA&lt;br&gt;33 Kohorten" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="74" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n8" value="TCGA-KIRC&lt;br&gt;537 Fälle" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="178" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n9" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" parent="1" source="n7" target="n8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n10" value="Clear cell adenocarcinoma&lt;br&gt;168 Fälle" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#e6eefc;strokeColor=#2563eb;fontSize=13;fontColor=#12327a;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="282" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n11" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" parent="1" source="n8" target="n10" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n12" value="Stage III&lt;br&gt;47 Proben" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="386" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n13" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#2563eb;labelBackgroundColor=#ffffff;" parent="1" source="n10" target="n12" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n14" value="rdfs:subClassOf* trägt die Tiefe" style="text;html=1;fontSize=12;fontColor=#6b7280;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="500" width="480" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="n15" value="var-Achse · Merkmale · GO" style="text;html=1;fontSize=14;fontStyle=1;fontColor=#6d3bd1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="1090" y="30" width="480" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="n16" value="Alle Gene&lt;br&gt;20.531 var" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=13;fontColor=#1b2230;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1090" y="74" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n17" value="GO: Apoptotischer Prozess&lt;br&gt;312 Gene" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1090" y="178" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n18" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" parent="1" source="n16" target="n17" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n19" value="GO: Intrinsischer Signalweg&lt;br&gt;84 Gene" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1090" y="282" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n20" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" parent="1" source="n17" target="n19" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n21" value="BAX · CASP3 · BCL2 …&lt;br&gt;84 Spalten" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1090" y="386" width="480" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="n22" value="" style="exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6d3bd1;strokeWidth=2;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#6d3bd1;labelBackgroundColor=#ffffff;" parent="1" source="n19" target="n21" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="n23" value="dieselbe Traversierung, andere Ontologie" style="text;html=1;fontSize=12;fontColor=#6b7280;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1090" y="500" width="480" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="n24" value="Der Schnitt beider Pfade ist der Ladeauftrag&lt;br&gt;&lt;br&gt;47 Proben × 84 Merkmale   statt   11.315 × 20.531&lt;br&gt;&lt;br&gt;Erst hier wird materialisiert. Alles davor war Navigation über die Katalogschicht." style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=left;spacingLeft=12;spacingRight=10;verticalAlign=top;spacingTop=6;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="560" width="1010" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="n25" value="Was das für die bestehenden Artefakte bedeutet" style="text;html=1;fontSize=16;fontStyle=1;fontColor=#101827;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="722" width="1530" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="n26" value="bleibt" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#dff5ec;strokeColor=#0d8a5f;fontSize=13;fontColor=#0a5c40;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="786" width="200" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n27" value="Mediator-Wrapper-Muster · RDF/OWL auf Fuseki (ADR-0002) · anndata-Seitenkanal · Rückkanal" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="255" y="786" width="1315" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n28" value="ändert sich" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#fdf0dc;strokeColor=#b45309;fontSize=13;fontColor=#7c3d06;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="848" width="200" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n29" value="load_gdc.py --pancancer wird scope-basiert · /export/anndata bekommt einen Scope · MP-lite bekommt die Auswahl davor" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="255" y="848" width="1315" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n30" value="entfällt" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#cfd4db;fontSize=13;fontColor=#6b7280;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="910" width="200" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n31" value="pancancer.h5ad (45 MB) als Standardweg · der separate Katalog-Begriff aus dem ersten Entwurf" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="255" y="910" width="1315" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n32" value="wird dringend" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ece5fb;strokeColor=#6d3bd1;fontSize=13;fontColor=#43217f;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="972" width="200" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="n33" value="ncit_primary_diagnosis.json füllen — ohne NCIt-Hierarchie hat die Navigation ab Ebene 2 keine Semantik" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cfd4db;fontSize=12;fontColor=#4b5563;align=left;spacingLeft=12;verticalAlign=top;spacingTop=8;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="255" y="972" width="1315" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
