@@ -6,15 +6,22 @@
       1. Abhaengigkeiten sicherstellen (pip install -r requirements.txt, falls noetig)
       2. Docker pruefen - laeuft er nicht, Docker Desktop starten und warten
       3. Triple-Store (Fuseki / graph-db) starten und auf Bereitschaft warten
-      4. Wissensnetz initialisieren (Dataset + TBox + Rueckkanal-Vokabular)
+      4. Wissensnetz initialisieren (Dataset + TBox + Vokabulare (Rueckkanal, Auswahl))
       5. Mediator (FastAPI) als Container starten (docker compose, enthaelt
          gdc-client) und auf /health warten
-      6. Alle Oviedo-Kohorten (Pancancer) ueber die API abrufen und ins
-         Wissensnetz laden - Basis fuer die Kohorten-Faerbung der obs
-      6c. Pancancer-Expressions-.h5ad ueber den Mediator-Export abrufen
-          (wissensnetz/data/pancancer.h5ad -> MP-lite bevorzugt sie automatisch)
+      6. EINEN Demo-Scope ueber POST /selection/preview abrufen - der Store
+         waechst mit den Aufrufen (ADR-0003), es wird NICHT mehr global
+         vorgeladen. Vorlage: scripts/selection_demo.json
       6b. Graph-Visualisierung (pyvis, graph_view.html) erzeugen und oeffnen
       7. Oberflaeche (MP-lite, Bokeh) starten - Browser oeffnet sich
+
+    Schritt 6 kennt drei Betriebsarten:
+      Standard      ein Scope ueber /selection/preview (-DemoCohort/-DemoSize)
+      -DemoGenerate wie Standard, aber /selection/generate mit Rohdaten-Download
+                    und .h5ad nach wissensnetz\data\selection_demo.h5ad
+      -FullLoad     ALTWEG vor ADR-0003: load_gdc.py --pancancer plus
+                    fetch_pancancer_h5ad.py, fuellt den Store global
+      -SkipLoad     gar kein Abruf; der Store bleibt leer (nur TBox+Vokabulare)
 
     Strg+C in diesem Fenster stoppt die Oberflaeche und faehrt danach automatisch
     Mediator, graph-db (Docker) und die Oberflaeche herunter - und schliesst dieses
@@ -28,26 +35,37 @@
         .\start_all.ps1
 
 .EXAMPLE
+    # Standard: ein Demo-Scope (TCGA-BRCA, 20 Proben) ueber /selection/preview
     .\start_all.ps1
 .EXAMPLE
-    .\start_all.ps1 -Size 100
+    # anderer Scope
+    .\start_all.ps1 -DemoCohort TCGA-KIRC -DemoSize 50
 .EXAMPLE
+    # mit Rohdaten und .h5ad; MP-lite zeigt danach selection_demo.h5ad
+    .\start_all.ps1 -DemoGenerate
+.EXAMPLE
+    # leerer Store: MP-lite faellt auf das BRCA-Fixture zurueck
     .\start_all.ps1 -SkipLoad -NoUi
 .EXAMPLE
-    .\start_all.ps1 -RebuildMediator
+    # ALTWEG vor ADR-0003: alle 32 Kohorten laden + globales pancancer.h5ad
+    .\start_all.ps1 -FullLoad -Size 50 -PancancerSize 5
 .EXAMPLE
-    .\start_all.ps1 -PancancerSize 10
+    .\start_all.ps1 -RebuildMediator
 #>
 [CmdletBinding()]
 param(
-    [int]$Size = 50,
+    [int]$Size = 50,                    # nur mit -FullLoad wirksam (Faelle je Kohorte)
     [int]$MediatorPort = 8000,
     [int]$UiPort = 5006,
     [switch]$SkipInstall,
     [switch]$SkipLoad,
-    [int]$PancancerSize = 5,
+    [int]$PancancerSize = 5,            # nur mit -FullLoad wirksam (Proben je Kohorte)
     [switch]$RebuildMediator,
-    [switch]$NoUi
+    [switch]$NoUi,
+    [string]$DemoCohort = "TCGA-BRCA",  # Kohorte des Demo-Scopes (ADR-0003)
+    [int]$DemoSize = 20,                # Proben im Demo-Scope
+    [switch]$DemoGenerate,              # /selection/generate statt /preview (mit .h5ad)
+    [switch]$FullLoad                   # ALTWEG vor ADR-0003 (global vorladen)
 )
 
 $ErrorActionPreference = "Stop"
@@ -140,7 +158,7 @@ Write-Host ""
 Good "Fuseki bereit (http://localhost:3030, Login admin/admin)."
 
 # --- 4) Wissensnetz initialisieren -----------------------------------------
-Step "Initialisiere Wissensnetz (Dataset + TBox + Rueckkanal-Vokabular) ..."
+Step "Initialisiere Wissensnetz (Dataset + TBox + Vokabulare (Rueckkanal, Auswahl)) ..."
 wissensnetz init
 if ($LASTEXITCODE -ne 0) { Fail "wissensnetz init fehlgeschlagen."; Stop-All; exit 1 }
 Good "Wissensnetz initialisiert."
@@ -171,28 +189,94 @@ if ($medUp) {
     Good "Mediator bereit ($medHealth) - Container mit gdc-client."
 }
 
-# --- 6) TCGA/GDC-Daten abrufen und laden -----------------------------------
+# --- 6) Daten abrufen ------------------------------------------------------
+# Seit ADR-0003 startet der Store LEER und waechst mit den Aufrufen: der
+# Standardweg laedt EINEN Scope ueber POST /selection/preview, nicht mehr alle 32
+# Kohorten. Nur das macht den Abnahmetest aus HANDOFF_pablo_store_waechst.md
+# ueberhaupt moeglich (Schritt 6 dort: eine Auswahl sieht nur ihre eigenen Faelle).
+# Der alte Vollweg bleibt unter -FullLoad erhalten.
+$demoH5ad = $null
+
+if ($SkipLoad -and $FullLoad) {
+    Fail "-SkipLoad und -FullLoad schliessen sich aus - es wird nichts abgerufen (-SkipLoad gewinnt)."
+}
+if (-not $FullLoad -and ($PSBoundParameters.ContainsKey('Size') -or $PSBoundParameters.ContainsKey('PancancerSize'))) {
+    Info "   Hinweis: -Size/-PancancerSize wirken nur mit -FullLoad und werden hier ignoriert."
+    Info "            Der Demo-Scope nutzt -DemoCohort/-DemoSize."
+}
+
 if ($SkipLoad) {
-    Good "GDC-Datenabruf uebersprungen (-SkipLoad)."
-} else {
-    Step "Lade ALLE Oviedo-Kohorten aus GDC ins Wissensnetz (Pancancer, size=$Size je Kohorte) - Basis der Kohorten-Faerbung ..."
+    Good "Datenabruf uebersprungen (-SkipLoad). Der Store enthaelt nur TBox und Vokabulare."
+    Info "   MP-lite faellt damit auf das BRCA-Fixture zurueck (mediator/sample_data)."
+} elseif ($FullLoad) {
+    Write-Host "   ACHTUNG: -FullLoad ist der Weg VOR ADR-0003. Er fuellt den Store GLOBAL" -ForegroundColor Magenta
+    Write-Host "            (alle 32 Kohorten) und erzeugt ein globales pancancer.h5ad." -ForegroundColor Magenta
+    Write-Host "            Der Abnahmetest 'eine Auswahl sieht nur ihre Faelle' ist danach" -ForegroundColor Magenta
+    Write-Host "            nicht mehr aussagekraeftig. Regulaer: ohne -FullLoad starten." -ForegroundColor Magenta
+
+    Step "ALTWEG: Lade ALLE Oviedo-Kohorten aus GDC ins Wissensnetz (Pancancer, size=$Size je Kohorte) ..."
     python scripts\load_gdc.py --pancancer --size $Size --mediator-url "http://localhost:$MediatorPort"
     if ($LASTEXITCODE -ne 0) { Fail "GDC-Load fehlgeschlagen (Beispieldaten bleiben nutzbar)." }
     else { Good "GDC-Daten geladen (alle Kohorten)." }
-}
 
-# --- 6c) Pancancer-Expressions-.h5ad abrufen (fester Pipeline-Schritt) ------
-# Erzeugt wissensnetz/data/pancancer.h5ad ueber POST /export/anndata; MP-lite
-# bevorzugt die Datei danach automatisch (echte Gene-Expression-Karte statt
-# BRCA-Fixture). Braucht den Mediator-Container mit gdc-client (Schritt 5) und
-# ein gefuelltes Fuseki (Schritt 6). Grosse RNA-Seq-Downloads dauern - bei project_id
-# als Liste gilt --size PRO Kohorte, daher -PancancerSize = Proben je Kohorte
-# (Default 5; bei 32 Kohorten also ~5x32 Files). Bei -SkipLoad ausgelassen.
-if (-not $SkipLoad) {
-    Step "Rufe Pancancer-Expressions-.h5ad ab (fetch_pancancer_h5ad.py --size $PancancerSize) ..."
+    # Erzeugt wissensnetz/data/pancancer.h5ad ueber POST /export/anndata; MP-lite
+    # bevorzugt die Datei danach automatisch. Braucht den Mediator-Container mit
+    # gdc-client (Schritt 5) und ein gefuelltes Fuseki. Bei project_id als Liste
+    # gilt --size PRO Kohorte, daher -PancancerSize = Proben je Kohorte.
+    Step "ALTWEG: Rufe Pancancer-Expressions-.h5ad ab (fetch_pancancer_h5ad.py --size $PancancerSize) ..."
     python scripts\fetch_pancancer_h5ad.py --size $PancancerSize --mediator-url "http://localhost:$MediatorPort"
     if ($LASTEXITCODE -ne 0) { Fail "Pancancer-Abruf fehlgeschlagen (MP-lite bleibt beim BRCA-Fixture)." }
     else { Good "pancancer.h5ad erzeugt - MP-lite bevorzugt sie automatisch." }
+} else {
+    # Vorlage nur in cohorts/size anpassen - alles andere (Modalitaet, Attribute)
+    # bleibt so, wie es in der versionierten Referenz-Auswahl steht.
+    $demoTemplate = Join-Path $PSScriptRoot "scripts\selection_demo.json"
+    $tmpJson = Join-Path ([System.IO.Path]::GetTempPath()) "databridge_selection_$PID.json"
+    try {
+        $sel = Get-Content -Raw -Encoding UTF8 $demoTemplate | ConvertFrom-Json
+        $sel.levels[0].cohorts = @($DemoCohort)
+        $sel.size = $DemoSize
+        # Kein Out-File: Windows PowerShell 5.1 schreibt dort UTF-8 MIT BOM,
+        # und ein BOM ist in JSON nicht erlaubt.
+        [System.IO.File]::WriteAllText($tmpJson, ($sel | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+
+        $mode = if ($DemoGenerate) { "generate (mit Rohdaten und .h5ad)" } else { "preview (nur Metadaten)" }
+        Step "Lade EINEN Scope ins Wissensnetz: $DemoCohort, $DemoSize Proben - $mode ..."
+        if ($DemoGenerate) {
+            $demoH5ad = Join-Path $PSScriptRoot "wissensnetz\data\selection_demo.h5ad"
+            python scripts\run_selection.py $tmpJson --mediator-url "http://localhost:$MediatorPort" --generate --out "wissensnetz\data\selection_demo.h5ad"
+        } else {
+            python scripts\run_selection.py $tmpJson --mediator-url "http://localhost:$MediatorPort"
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Auswahl-Abruf fehlgeschlagen (MP-lite faellt auf das BRCA-Fixture zurueck)."
+            $demoH5ad = $null
+        } else {
+            Good "Scope geladen - der Store enthaelt jetzt genau diese Auswahl."
+            Info "   Pruefen mit:  wissensnetz selections   bzw.  wissensnetz selection <recipe_key>"
+        }
+    } catch {
+        Fail "Demo-Auswahl konnte nicht vorbereitet werden: $($_.Exception.Message)"
+        $demoH5ad = $null
+    } finally {
+        Remove-Item $tmpJson -ErrorAction SilentlyContinue
+    }
+}
+
+# --- 6a) .h5ad an MP-lite uebergeben ---------------------------------------
+# Vorgesehene Schnittstelle (h5ad_source.resolve_h5ad_path): explizites Argument,
+# dann DATABRIDGE_H5AD, dann pancancer.h5ad, dann das BRCA-Fixture. Kein Eingriff
+# in app.py noetig. Ohne -DemoGenerate wird die Variable NICHT gesetzt.
+if ($demoH5ad -and (Test-Path $demoH5ad)) {
+    $env:DATABRIDGE_H5AD = (Resolve-Path $demoH5ad).Path
+    Good "MP-lite nutzt selection_demo.h5ad (DATABRIDGE_H5AD gesetzt)."
+} elseif (-not $FullLoad) {
+    $stalePancancer = Join-Path $PSScriptRoot "wissensnetz\data\pancancer.h5ad"
+    if (Test-Path $stalePancancer) {
+        Info "   Hinweis: wissensnetz\data\pancancer.h5ad liegt noch aus einem frueheren Lauf herum."
+        Info "            MP-lite zieht sie dem Fixture weiterhin vor. Fuer den Auswahl-Scope"
+        Info "            entweder mit -DemoGenerate starten oder die Datei wegraeumen."
+    }
 }
 
 # --- 6b) Wissensnetz visualisieren (pyvis) ---------------------------------
