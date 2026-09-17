@@ -1,0 +1,72 @@
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix db:   <http://databridge.hka/onto#> .
+
+# Auswahl-Vokabular (Aufgabe 13) — Terme für das Auswahl-Manifest einer
+# UI-gesteuerten Akquise (ADR-0003, docs/adr/0003-ui-gesteuerte-akquise.md).
+# Bewusst getrennt von databridge-core.ttl gehalten, wie feedback.ttl: die
+# Kern-TBox beschreibt den Wissensbestand (Case/Demographic/Diagnosis/Sample),
+# dieses Vokabular nur die Zugehörigkeit zu einer Auswahl.
+#
+# Zwei Ebenen (siehe HANDOFF_pablo_store_waechst.md, "Zwei Ebenen im Store"):
+#   Wissensbestand   -> Default-Graph, wächst mit den Aufrufen, bleibt.
+#   Auswahl-Manifest -> Named Graph http://databridge.hka/graph/selection/<id>,
+#                       je Aufruf, per DROP GRAPH verwerfbar.
+# Läge der Wissensbestand je Auswahl in einem eigenen Named Graph, stünden
+# dieselben Case-Tripel als Quads mehrfach im Store, und ein DROP GRAPH würde
+# Wissen löschen, das eine andere Auswahl noch braucht.
+#
+# prov:- und rdfs:-Terme werden wiederverwendet, nicht neu definiert
+# (Provenienz über prov:generatedAtTime).
+
+# --- Klassen ---------------------------------------------------------------
+db:Selection a owl:Class ;
+    rdfs:label "Selection" ;
+    rdfs:comment "Eine Auswahl aus der Oberfläche (ADR-0003): das Manifest eines /selection/*-Aufrufs — welche Proben und Fälle dazugehören, plus die Auswahlparameter. Der Wissensbestand selbst liegt im Default-Graph, nicht hier." .
+
+# --- Object Properties -----------------------------------------------------
+db:hasMember a owl:ObjectProperty ;
+    rdfs:label "hasMember" ;
+    rdfs:domain db:Selection ;
+    rdfs:range db:Sample ;
+    rdfs:comment "Probe, die zu dieser Auswahl gehört. Die Sample-IRI folgt derselben Bildungsregel wie das Mediator-Mapping (INSTANCE_BASE + 'sample/' + slug(sample_id))." .
+
+db:selectionCase a owl:ObjectProperty ;
+    rdfs:label "selectionCase" ;
+    rdfs:domain db:Selection ;
+    rdfs:range db:Case ;
+    rdfs:comment "Fall, der zu dieser Auswahl gehört. Heißt nicht db:hasCase, weil dieser Term in der Kern-TBox bereits für db:Project -> db:Case belegt ist." .
+
+# --- Datatype Properties ---------------------------------------------------
+db:selectionId a owl:DatatypeProperty ;
+    rdfs:label "selectionId" ;
+    rdfs:domain db:Selection ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Identität der Auswahl über Vorschau, Named Graph und .h5ad hinweg — der recipe_key des Mediators (mediator/app/main.py::_selection_recipe_key)." .
+
+db:selectedCohort a owl:DatatypeProperty ;
+    rdfs:label "selectedCohort" ;
+    rdfs:domain db:Selection ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Gewählte Kohorte/Projekt-ID (Panel-Zeile 'Krebs'), mehrfach möglich." .
+
+db:selectedModality a owl:DatatypeProperty ;
+    rdfs:label "selectedModality" ;
+    rdfs:domain db:Selection ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Gewählte Modalität (Panel-Zeile 'Var'), z. B. 'gene_expression'." .
+
+db:selectedAttribute a owl:DatatypeProperty ;
+    rdfs:label "selectedAttribute" ;
+    rdfs:domain db:Selection ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Gewähltes klinisches Attribut (Panel-Zeile 'Obj', Trigger statt Filter), mehrfach möglich." .
+
+db:source a owl:DatatypeProperty ;
+    rdfs:label "source" ;
+    rdfs:domain db:Selection ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Datenquelle der Auswahl (Panel-Zeile 'Datenquelle'), z. B. 'gdc'." .
