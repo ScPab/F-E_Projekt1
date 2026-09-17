@@ -12,6 +12,11 @@ interaktives HTML-Netz und faerbt die Knoten nach Bereich:
   * Externe Konzepte (NCIt ...)  - lila
 Zweck: ein Gefuehl, wie das Netz waechst. Einfach erneut ausfuehren zum Aktualisieren.
 
+Diagnosewerkzeug, kein Teil des Starts: seit Aufgabe 16 erzeugt `start_all.ps1` die
+Ansicht nur noch mit `-WithGraphView`. Die versionierte `graph_view.html` in der
+Projektwurzel ist deshalb potenziell veraltet - sie zeigt den Store-Stand des
+letzten Laufs, nicht den aktuellen.
+
 Projekt-Skript (nutzt nur wissensnetz.GraphStore ueber SPARQL; keine Kopplung an
 mediator/wrappers). Zusatz-Abhaengigkeit: pyvis.
 """
@@ -139,7 +144,11 @@ def build(store: GraphStore, limit: int, output: str) -> tuple[int, int]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Wissensnetz als interaktives HTML (pyvis) visualisieren.")
+    p = argparse.ArgumentParser(
+        description="Wissensnetz als interaktives HTML (pyvis) visualisieren. "
+                    "Die erzeugte graph_view.html zeigt den Store-Stand dieses Laufs; "
+                    "start_all.ps1 aktualisiert sie nur noch mit -WithGraphView."
+    )
     p.add_argument("--limit", type=int, default=500, help="max. Tripel je Abfrage (Default: 500)")
     p.add_argument("--output", default="graph_view.html", help="Ausgabedatei (Default: graph_view.html)")
     p.add_argument("--no-open", action="store_true", help="HTML nicht automatisch im Browser oeffnen")
