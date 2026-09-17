@@ -642,15 +642,43 @@ def _selection_fetch(level: SingleSelection, request: SelectionRequest) -> tuple
     )
 
 
+def _load_selection_knowledge(turtle: str) -> None:
+    """Lädt den Wissensbestand einer Auswahl in den Default-Graph (P1, siehe
+    wissensnetz/HANDOFF_pablo_store_waechst.md): der Store ist leer beim
+    Start und wächst mit jedem `/selection/*`-Aufruf — läuft bei `preview`
+    UND `generate` (beantwortet Entscheidung 7.3: `preview` = Abruf +
+    Übersetzung + Laden, ohne Rohdaten/Matrix). `load_turtle` sendet den
+    Text roh an Fuseki (kein rdflib-Roundtrip), damit die angehängten
+    RDF-star-Blöcke erhalten bleiben (siehe `serialize_with_provenance`,
+    ADR-0002, `wissensnetz/CLAUDE.md` "RDF-star-Falle").
+
+    BEWUSSTE, DOKUMENTIERTE SCHULD (P4 im Handoff): reines Anhängen, kein
+    `DELETE WHERE` je Fall vor dem Laden. RDF ist eine Menge — identische
+    Aussagen (Instanz-IRIs sind deterministisch aus `case_id` gebildet)
+    kollabieren von selbst und richten nichts an. Ändert sich aber ein Wert
+    für denselben Fall zwischen zwei Aufrufen (z. B. GDC aktualisiert
+    `gender`), entstehen zwei Werte für dieselbe Property, bis Marcel die
+    Ersetzungslogik liefert (siehe Handoff, P4) — absichtlich noch nicht
+    selbst nachgebaut, damit es nicht zwei Varianten davon gibt.
+    """
+    store = get_graph_store()
+    try:
+        store.load_turtle(turtle)
+    except GraphStoreError as exc:
+        raise HTTPException(status_code=502, detail=f"Wissensnetz-Import fehlgeschlagen: {exc}") from exc
+
+
 @app.post("/selection/preview")
 async def selection_preview(request: SelectionRequest) -> SelectionPreviewResponse:
-    """Billiger Vorschau-Endpunkt (Entscheidung 7.3: geteilter Abruf ohne Matrizen).
+    """Billiger Vorschau-Endpunkt (Entscheidung 7.3: geteilter Abruf ohne Matrizen,
+    aber MIT Laden — siehe `_load_selection_knowledge`/P1).
 
     Pro Ebene EIN Files-Query (M3, `fetch_selection_files`), daraus
-    `cases_to_graph()` -> Turtle. Baut bewusst KEINE anndata-Matrix (siehe
-    `selection_generate` dafür) — das ist der Unterschied zwischen billig
-    und teuer laut Entscheidung 7.3. Eine fehlschlagende Ebene liefert
-    `status="error"`, ohne die anderen Ebenen der Anfrage zu beeinträchtigen.
+    `cases_to_graph()` -> Turtle -> (bei `request.load`) in den Store.
+    Baut bewusst KEINE anndata-Matrix (siehe `selection_generate` dafür) —
+    das ist der Unterschied zwischen billig und teuer. Eine fehlschlagende
+    Ebene liefert `status="error"`, ohne die anderen Ebenen der Anfrage zu
+    beeinträchtigen.
     """
     alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
     levels: list[SelectionLevelResult] = []
@@ -670,6 +698,8 @@ async def selection_preview(request: SelectionRequest) -> SelectionPreviewRespon
             )
             result.turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
             result.triple_count = len(graph)
+            if request.load:
+                _load_selection_knowledge(result.turtle)
         except (ValueError, HTTPException) as exc:
             result.status = "error"
             result.error = exc.detail if isinstance(exc, HTTPException) else str(exc)
@@ -679,11 +709,17 @@ async def selection_preview(request: SelectionRequest) -> SelectionPreviewRespon
 
 @app.post("/selection/generate")
 async def selection_generate(request: SelectionRequest) -> SelectionGenerateResponse:
-    """Teurer Generieren-Endpunkt: baut zusätzlich zur Turtle-Serialisierung ein
-    `.h5ad` je Ebene, auf demselben geteilten Proben-Set wie `selection_preview`
-    (M3+M6). Wie bei `selection_preview` beeinträchtigt eine fehlschlagende
-    Ebene (z. B. fehlendes `gdc-client` oder unerreichbares Fuseki, siehe
-    `_build_anndata_from_hits`) nicht die anderen Ebenen der Anfrage.
+    """Teurer Generieren-Endpunkt: baut zusätzlich zur Turtle-Serialisierung/dem
+    Laden (siehe `selection_preview`) ein `.h5ad` je Ebene, auf demselben
+    geteilten Proben-Set (M3+M6). Wie bei `selection_preview` beeinträchtigt
+    eine fehlschlagende Ebene (z. B. fehlendes `gdc-client` oder
+    unerreichbares Fuseki, siehe `_build_anndata_from_hits`) nicht die
+    anderen Ebenen der Anfrage.
+
+    P5 (siehe wissensnetz/HANDOFF_pablo_store_waechst.md): eine bereits
+    erzeugte Auswahl (identischer `recipe_key`) wird weder erneut
+    heruntergeladen noch erneut gebaut — derselbe Cache-Kurzschluss wie in
+    `POST /export/anndata`, jetzt auch hier.
     """
     alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
     wrapper = get_gdc_wrapper()
@@ -696,6 +732,12 @@ async def selection_generate(request: SelectionRequest) -> SelectionGenerateResp
             requested_fields=resolve_case_fields(level.attributes),
         )
         try:
+            cached = wrapper.cache.materialized.get(recipe_key)
+            if cached and Path(cached.get("path", "")).exists():
+                result.anndata = cached
+                levels.append(result)
+                continue
+
             hits, cases, failed_cohorts = _selection_fetch(level, request)
             result.failed_cohorts = failed_cohorts
             if not hits:
@@ -705,7 +747,11 @@ async def selection_generate(request: SelectionRequest) -> SelectionGenerateResp
             )
             result.turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
             result.triple_count = len(graph)
-            result.anndata = _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True)
+            if request.load:
+                _load_selection_knowledge(result.turtle)
+            anndata_meta = _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True)
+            wrapper.cache.materialized.set(recipe_key, anndata_meta)
+            result.anndata = anndata_meta
         except (ValueError, HTTPException) as exc:
             result.status = "error"
             result.error = exc.detail if isinstance(exc, HTTPException) else str(exc)
@@ -821,7 +867,18 @@ def _build_anndata_from_hits(
             detail=f"Wissensnetz (Fuseki) nicht erreichbar unter {store.settings.base_url} — "
             "obs kann nicht befüllt werden.",
         )
-    cases_by_submitter = {c["submitter_id"]: c for c in all_cases(store) if c.get("submitter_id")}
+    # Übergangslösung für P3 (siehe wissensnetz/HANDOFF_pablo_store_waechst.md):
+    # `all_cases(store)` liefert noch den GESAMTEN Bestand, nicht auf diese
+    # Auswahl begrenzt — `wissensnetz.cases_for_selection(store, selection_id)`
+    # existiert noch nicht (Marcel liefert sie mit P2). Bis dahin auf die
+    # submitter_ids filtern, die wir aus dem geteilten Abruf ohnehin haben
+    # (sample_case_map) — gleiches Ergebnis für den Moment (build_obs griff
+    # ohnehin nur einzeln über sample_case_map zu), austauschbar gegen
+    # cases_for_selection, sobald verfügbar.
+    selected_submitters = {sub for sub in sample_case_map.values() if sub}
+    cases_by_submitter = {
+        c["submitter_id"]: c for c in all_cases(store) if c.get("submitter_id") in selected_submitters
+    }
 
     obs = expression_export.build_obs(
         sample_case_map, cases_by_submitter, sample_types=sample_types, gdc_project_by_sample=sample_project_map

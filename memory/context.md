@@ -74,6 +74,47 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
 
+## Umgesetzt seit letztem Stand (2026-09-17, Teil 3)
+
+- **"Der Store wächst mit den Aufrufen"** umgesetzt (Handoff von Marcel:
+  `wissensnetz/HANDOFF_pablo_store_waechst.md`, ersetzt die B1/B2-Vorschläge
+  aus `wissensnetz/HANDOFF_review_selection.md`). Store ist leer beim Start,
+  wächst mit jedem `/selection/*`-Aufruf:
+  - **P1** — `SelectionRequest.load: bool = True` + neuer Helper
+    `_load_selection_knowledge()`: sowohl `/selection/preview` als auch
+    `/selection/generate` laden ihren übersetzten Wissensbestand jetzt in
+    den Default-Graph (Reihenfolge: Abruf → Übersetzung → **Laden** → obs →
+    Matrix). Beantwortet Entscheidung 7.3 endgültig: `preview` = Abruf +
+    Übersetzung + Laden ohne Matrix, `generate` zusätzlich Download + `.h5ad`.
+  - **P3 (Übergangslösung)** — `_build_anndata_from_hits` filtert
+    `all_cases(store)` jetzt auf die `submitter_ids` aus dem geteilten Abruf,
+    statt den kompletten Bestand zu nehmen (funktional identisch zu vorher,
+    da `build_obs` ohnehin nur einzeln nachschlägt — reine Vorbereitung auf
+    den Austausch gegen `cases_for_selection`, sobald Marcel liefert).
+  - **P5** — `/selection/generate` hat jetzt denselben
+    `wrapper.cache.materialized`-Kurzschluss wie `/export/anndata`: eine
+    Auswahl mit identischem `recipe_key` wird weder erneut heruntergeladen
+    noch erneut gebaut (`turtle`/`triple_count` bleiben dabei bewusst leer
+    in der Antwort — kompletter Kurzschluss statt teilweiser Neuberechnung).
+  - **P4 (Entscheidung, NICHT selbst gebaut):** Laden ist reines Anhängen,
+    kein `DELETE WHERE` je Fall vor dem Laden — dokumentierte, bewusste
+    Schuld direkt im Code (`_load_selection_knowledge`-Docstring). **Bitte an
+    Marcel:** die Ersetzungslogik wie in P4 vorgeschlagen liefern (Vokabular/
+    Store-Semantik ist seins, siehe seine eigene Begründung zu P2) — sonst
+    entstehen bei geänderten GDC-Werten für denselben Fall zwei Werte an
+    derselben Property.
+  - **P2 und die finale P3-Lösung bleiben blockiert**: `wissensnetz.selection`
+    (`write_selection`) und `wissensnetz.cases_for_selection` existieren noch
+    nicht (geprüft, `__init__.py` exportiert sie nicht) — warten auf Marcels
+    Lieferung, wie im Handoff selbst vorgesehen.
+  - Live gegen einen wirklich leeren Store verifiziert (`docker compose down`
+    + `docker volume rm` für `graph-db-data`, `wissensnetz init`, dann
+    `db:Case`-Anzahl 0 → 3 nach `/selection/generate` (TCGA-ACC) → 8 nach
+    zusätzlichem `/selection/preview` (TCGA-LUAD), inkl. `obs`-Werte aus dem
+    frisch geladenen Store nachgewiesen). Cache-Kurzschluss (P5) separat
+    verifiziert (Cache-Datei entfernt → Turtle wieder frisch berechnet).
+    Alle 22 Wrapper-Tests weiterhin grün.
+
 ## Umgesetzt seit letztem Stand (2026-09-17, Teil 2)
 
 - **M3/M6/M7 real verdrahtet** (den im vorherigen Durchgang bewusst
