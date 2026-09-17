@@ -8,6 +8,11 @@ Ablauf:
     1. POST <mediator>/transform  (GDC-JSON -> RDF/Turtle; Kollege B)
     2. graphstore.load_turtle()   (Turtle -> Fuseki; Wissensnetz)
 
+ALTWEG (Stand vor ADR-0003): ``--pancancer`` fuellt den Store **global** mit allen
+32 Kohorten. Seit ADR-0003 waechst der Store mit den Aufrufen, der regulaere Weg
+ist ``scripts/run_selection.py`` (POST /selection/preview). Dieses Skript bleibt
+fuer Vergleichsmessungen und den Bericht erhalten.
+
 Bewusst ein PROJEKT-Skript (nicht im wissensnetz-Paket): das Paket bleibt
 „nur graph-db", dieses Skript orchestriert Mediator (HTTP) + Wissensnetz.
 Konfiguration: --mediator-url oder ENV MEDIATOR_URL (Default http://localhost:8000);
@@ -76,7 +81,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--projects", default=None,
                    help="explizite Liste, kommagetrennt (z. B. TCGA-ACC,TCGA-BRCA)")
     p.add_argument("--pancancer", action="store_true",
-                   help="alle 32 Oviedo-Kohorten laden (OVIEDO_COHORTS)")
+                   help="ALTWEG (vor ADR-0003): alle 32 Oviedo-Kohorten laden (OVIEDO_COHORTS) "
+                        "und damit den Store global fuellen. Regulaer: scripts/run_selection.py")
     p.add_argument("--size", type=int, default=50,
                    help="Anzahl Fälle PRO Projekt (Default: 50)")
     p.add_argument("--access", default="open", help="Access-Level (Default: open)")
@@ -87,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
 
     base = args.mediator_url.rstrip("/")
     projects = _resolve_projects(args)
+
+    if args.pancancer:
+        print("Hinweis: --pancancer fuellt den Store GLOBAL (Stand vor ADR-0003). "
+              "Der regulaere Weg ist scripts/run_selection.py (ein Scope je Aufruf).",
+              file=sys.stderr)
 
     # 1) Mediator erreichbar?
     try:

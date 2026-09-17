@@ -20,6 +20,11 @@ Phase 2 (``--balanced``, optional — gleichmäßige Kohorten, Oviedo-treu):
     (scikit-learn, hier im Skript) rechnen und als ``obsm["X_tsne_genes"]`` ablegen.
     Kostet mehr Downloads, verteilt die Proben aber gleichmäßig über die Kohorten.
 
+ALTWEG (Stand vor ADR-0003): erzeugt ein **globales** ``pancancer.h5ad`` ueber alle
+32 Kohorten. Seit ADR-0003 entsteht das ``.h5ad`` je Auswahl, der regulaere Weg ist
+``scripts/run_selection.py --generate --out <pfad>``. Dieses Skript bleibt fuer
+Vergleichsmessungen und den Bericht erhalten.
+
 Bewusst ein PROJEKT-Skript (nicht im wissensnetz-Paket): es orchestriert nur den
 Mediator per HTTP. ``mediator/``/``wrappers/`` werden NICHT angefasst; das `.h5ad`
 wird nur heruntergeladen/gelesen. Konfiguration: --mediator-url oder ENV MEDIATOR_URL
@@ -228,8 +233,10 @@ def _report(out_path: Path, meta: dict) -> None:
 # --------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
-        description="Pancancer-Expressions-.h5ad über den Mediator-Export abrufen "
-                    "und für MP-Lite ablegen (Aufgabe 10).",
+        description="ALTWEG (vor ADR-0003): globales Pancancer-Expressions-.h5ad über den "
+                    "Mediator-Export abrufen und für MP-Lite ablegen (Aufgabe 10). "
+                    "Regulär entsteht das .h5ad je Auswahl — scripts/run_selection.py "
+                    "--generate --out <pfad>.",
     )
     p.add_argument("--mediator-url", default=os.environ.get("MEDIATOR_URL", "http://localhost:8000"),
                    help="Basis-URL des Mediators (Default: ENV MEDIATOR_URL / http://localhost:8000)")
@@ -252,6 +259,9 @@ def main(argv: list[str] | None = None) -> int:
     base = args.mediator_url.rstrip("/")
     out_path = Path(args.out)
     projects = _resolve_projects(args.projects)
+
+    _err("Hinweis: dieses Skript erzeugt ein GLOBALES .h5ad (Stand vor ADR-0003). "
+         "Der reguläre Weg ist scripts/run_selection.py --generate --out <pfad>.")
 
     # size-Grenzen prüfen (Endpoint erzwingt 1..200; hier vorab klar melden).
     size_to_check = args.per_cohort_size if args.balanced else args.size
