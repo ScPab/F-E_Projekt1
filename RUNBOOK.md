@@ -16,8 +16,8 @@ Kurzreferenz, um das Projekt und alle Skripte zum Laufen zu bringen.
 
 Ein Skript fährt die **komplette Pipeline** hoch: prüft/startet Docker, startet
 Fuseki, initialisiert das Wissensnetz, baut/startet den Mediator-**Container**
-(mit `gdc-client`), lädt alle Kohorten in den Graphen, ruft die Pancancer-
-Expressions-`.h5ad` ab und öffnet zum Schluss die Oberfläche (MP-lite).
+(mit `gdc-client`), lädt **einen Scope** in den Graphen und öffnet zum Schluss die
+Oberfläche (MP-lite).
 
 ```powershell
 conda activate F+E
@@ -28,21 +28,36 @@ powershell -ExecutionPolicy Bypass -File .\start_all.ps1
 Was das Skript der Reihe nach macht: (1) Abhängigkeiten sicherstellen →
 (2) Docker prüfen, ggf. Docker Desktop starten und warten → (3) Fuseki starten →
 (4) `wissensnetz init` → (5) Mediator-Container bauen/starten (`docker compose`,
-enthält `gdc-client`) → (6) alle Oviedo-Kohorten laden (`load_gdc.py --pancancer`,
-Basis der Kohorten-Färbung) → (6c) Pancancer-`.h5ad` abrufen
-(`fetch_pancancer_h5ad.py` → `wissensnetz/data/pancancer.h5ad`) → (7) Bokeh öffnen.
+enthält `gdc-client`) → (6) **einen** Demo-Scope über `POST /selection/preview`
+laden (`run_selection.py`, Vorlage `scripts/selection_demo.json`) → (6b) pyvis-
+Graphbild → (7) Bokeh öffnen.
+
+> **Seit [ADR-0003](docs/adr/0003-ui-gesteuerte-akquise.md) wird nicht mehr global
+> vorgeladen.** Der Store startet leer und **wächst mit den Aufrufen**. Der
+> Standardstart holt deshalb genau eine Auswahl (Default `TCGA-BRCA`, 20 Proben)
+> statt aller 32 Kohorten. Nur so bleibt sichtbar, dass eine Auswahl nur ihre
+> eigenen Fälle sieht (`wissensnetz selection <recipe_key>`).
 
 Optionen:
 
 | Option | Wirkung |
 | --- | --- |
-| `-Size 100` | mehr Fälle **pro Kohorte** beim Graph-Load |
-| `-PancancerSize 10` | Proben **pro Kohorte** in der Pancancer-`.h5ad` (×Kohortenzahl; Default 5) |
+| `-DemoCohort TCGA-KIRC` | Kohorte des Demo-Scopes (Default `TCGA-BRCA`) |
+| `-DemoSize 50` | Proben im Demo-Scope (Default 20) |
+| `-DemoGenerate` | statt `preview` ein `generate`: mit Rohdaten und `.h5ad` nach `wissensnetz\data\selection_demo.h5ad`; MP-lite bekommt sie über `DATABRIDGE_H5AD` |
+| `-SkipLoad` | gar kein Abruf — der Store bleibt leer (nur TBox + Vokabulare), MP-lite zeigt das BRCA-Fixture |
+| `-FullLoad` | **Altweg vor ADR-0003:** alle 32 Kohorten laden (`load_gdc.py --pancancer`) **plus** globales `pancancer.h5ad` (`fetch_pancancer_h5ad.py`). Füllt den Store global; das Skript warnt vorher |
+| `-Size 100` | Fälle **pro Kohorte** — **nur mit `-FullLoad`**, sonst ignoriert (mit Hinweis) |
+| `-PancancerSize 10` | Proben **pro Kohorte** in der Pancancer-`.h5ad` — **nur mit `-FullLoad`** |
 | `-RebuildMediator` | Mediator-Image neu bauen — nach Änderungen an `mediator/` oder `environment.yml` |
-| `-SkipLoad` | Dienste starten, aber weder Graph-Load noch Pancancer-Abruf |
 | `-NoUi` | ohne Bokeh-Oberfläche (nur Dienste) |
 | `-SkipInstall` | `pip install` überspringen |
 | `-MediatorPort 8001` | anderen Mediator-Port verwenden |
+
+Liegt noch ein altes `wissensnetz/data/pancancer.h5ad` aus früheren Läufen herum,
+**zieht MP-lite es weiterhin vor** — das Skript weist darauf hin, löscht die Datei
+aber nicht. Für den Auswahl-Scope entweder mit `-DemoGenerate` starten oder die
+Datei wegräumen.
 
 Hinweise: Der **Mediator** läuft jetzt als **Docker-Container** (kein eigenes
 Fenster mehr; Logs via `docker compose logs -f mediator`); die **Oberfläche** läuft
@@ -111,7 +126,10 @@ python scripts/load_gdc.py --project TCGA-BRCA --size 50
 ```
 Optionen: `--size`, `--project`, `--graph <IRI>`, `--mediator-url <url>`.
 
-**Alle 32 Oviedo-Kohorten (Pancancer)** für die Krebsarten-Ansicht in MP-Lite:
+**Alle 32 Oviedo-Kohorten (Pancancer)** — **Altweg vor ADR-0003**, füllt den Store
+global. Regulär lädt eine Auswahl ihren eigenen Scope
+(`python scripts/run_selection.py scripts/selection_demo.json`, entspricht dem
+Standardstart). Für Vergleichsmessungen und den Bericht bleibt er erhalten:
 ```powershell
 python scripts/load_gdc.py --pancancer --size 50
 ```
@@ -161,7 +179,12 @@ TCGA-Instanzen (grün), Rückkanal/Annotationen (rot), externe Konzepte wie NCIt
 (lila). Einfach erneut ausführen, um das Wachstum zu sehen. `start_all.ps1` ruft
 das beim Start automatisch auf. Optionen: `--limit`, `--output`, `--no-open`.
 
-## 6c. Pancancer-Expressions-Karte erzeugen (Aufgabe 10)
+## 6c. Pancancer-Expressions-Karte erzeugen (Aufgabe 10) — Altweg
+> **Altweg vor ADR-0003.** Regulär entsteht das `.h5ad` je Auswahl:
+> `python scripts\run_selection.py scripts\selection_demo.json --generate --out wissensnetz\data\selection_demo.h5ad`
+> (im Startskript: `.\start_all.ps1 -DemoGenerate`). Dieser Abschnitt bleibt für
+> Vergleichsmessungen und den Bericht.
+
 Statt des kleinen BRCA-Referenz-`.h5ad` eine **Pancancer**-Expressions-Landkarte
 (echte Gene-Expression über viele TCGA-Kohorten, globale tSNE) live über den
 Mediator-Export (`POST /export/anndata`) beschaffen.
