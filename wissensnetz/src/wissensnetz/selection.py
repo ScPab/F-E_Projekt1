@@ -76,7 +76,13 @@ def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-") or "unbekannt"
 
 
-def _is_iri(ref: str) -> bool:
+def is_iri(ref: str) -> bool:
+    """True, wenn ``ref`` eine volle IRI ist (und keine blanke Kennung).
+
+    Öffentlich, weil ``knowledge.py`` damit die Rückgabe von
+    :func:`resolve_case_iris` in aufgelöste und nicht aufgelöste Einträge
+    trennt.
+    """
     r = ref.strip()
     return r.startswith("http://") or r.startswith("https://") or r.startswith("urn:")
 
@@ -88,7 +94,7 @@ def sample_iri(sample_id: str) -> str:
     Aufrufer auch IRIs statt Kennungen übergeben kann.
     """
     ref = sample_id.strip()
-    return ref if _is_iri(ref) else f"{_SAMPLE_BASE}{_slug(ref)}"
+    return ref if is_iri(ref) else f"{_SAMPLE_BASE}{_slug(ref)}"
 
 
 def case_iri(case_ref: str) -> str:
@@ -99,7 +105,7 @@ def case_iri(case_ref: str) -> str:
     ein Notnagel — :func:`write_selection` löst ihn vorher über den Store auf.
     """
     ref = case_ref.strip()
-    return ref if _is_iri(ref) else f"{_CASE_BASE}{_slug(ref)}"
+    return ref if is_iri(ref) else f"{_CASE_BASE}{_slug(ref)}"
 
 
 def graph_iri_for_selection(selection_id: str) -> str:
@@ -196,7 +202,7 @@ def resolve_case_iris(store: GraphStore, submitter_ids: list[str]) -> list[str]:
     ids = _unique(submitter_ids)
     if not ids:
         return []
-    values = " ".join(_string_literal(i) for i in ids if not _is_iri(i))
+    values = " ".join(_string_literal(i) for i in ids if not is_iri(i))
     resolved: dict[str, str] = {}
     if values:
         rows = store.query(
