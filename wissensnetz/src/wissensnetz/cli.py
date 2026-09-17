@@ -7,8 +7,18 @@ Aktuell umgesetzt (Aufgabe 1 + 2):
     wissensnetz load <datei.ttl|->     Turtle laden (Default- oder Named Graph)
     wissensnetz query "<SPARQL>"       SELECT/ASK ausführen (Tabellen-Ausgabe)
 
-Die Unterbefehle für Anreicherung (Aufgabe 3) und Rückkanal (Aufgabe 4)
-folgen in eigenen Modulen und werden hier ergänzt.
+Anreicherung (Aufgabe 3) und Rückkanal (Aufgabe 4):
+
+    wissensnetz hierarchy <klasse>     Unter-/Oberklassen via rdfs:subClassOf*
+    wissensnetz context <ref>          Kontext zu einem Case/einer Diagnose
+    wissensnetz feedback <event.json>  MP-Selektions-Event schreiben
+    wissensnetz findings               Experten-Erkenntnisse auflisten
+
+Auswahl-Graphen (Aufgabe 13) — prüfbar ohne Oberfläche:
+
+    wissensnetz selections             alle Auswahlen im Store auflisten
+    wissensnetz selection <id>         eine Auswahl samt ihrer Fälle zeigen
+    wissensnetz drop-selection <id>    Manifest einer Auswahl verwerfen
 """
 
 from __future__ import annotations
@@ -17,7 +27,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import enrichment, feedback
+from . import enrichment, feedback, selection
 from .config import INSTANCE, PREFIXES, Settings
 from .graphstore import GraphStore, GraphStoreError
 from .init import initialize, tbox_loaded
@@ -67,6 +77,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p_find = sub.add_parser("findings", help="Gespeicherte Experten-Erkenntnisse auflisten")
     p_find.add_argument("--user", default=None, help="nur Erkenntnisse dieses Nutzers")
 
+    # --- Aufgabe 13: Auswahl-Graphen ---
+    sub.add_parser("selections", help="Alle Auswahlen (Named Graphs) auflisten")
+
+    p_sel = sub.add_parser("selection", help="Eine Auswahl samt ihrer Fälle zeigen")
+    p_sel.add_argument("id", help="selectionId (recipe_key des Mediators)")
+
+    p_drop = sub.add_parser("drop-selection", help="Manifest einer Auswahl verwerfen")
+    p_drop.add_argument("id", help="selectionId (recipe_key des Mediators)")
+    p_drop.add_argument(
+        "--yes", "-y", action="store_true", help="ohne Sicherheitsabfrage löschen"
+    )
+
     return parser
 
 
@@ -93,6 +115,8 @@ def _cmd_init(store: GraphStore, force: bool) -> int:
     print(f"Dataset '{report['dataset']}': "
           f"{'neu angelegt' if report['dataset_created'] else 'bereits vorhanden'}")
     print(f"TBox:    {report['tbox']}")
+    print(f"Vokabular: Rückkanal {report['feedback_vocab']}, "
+          f"Auswahl {report['selection_vocab']}")
     print(f"Klassen: {report['owl_classes']} owl:Class im Store")
     return 0
 
@@ -233,6 +257,74 @@ def _cmd_findings(store: GraphStore, user: str | None) -> int:
     return 0
 
 
+def _cmd_selections(store: GraphStore) -> int:
+    entries = selection.list_selections(store)
+    if not entries:
+        print("(keine Auswahlen im Store)")
+        return 0
+    for e in entries:
+        print(f"- {e.get('selection_id') or '—'}")
+        print(f"    Quelle:     {e.get('source') or '—'}   "
+              f"Modalität: {e.get('modality') or '—'}   "
+              f"Zeit: {e.get('timestamp') or '—'}")
+        print(f"    Kohorten:   {', '.join(e['cohorts']) or '—'}")
+        print(f"    Attribute:  {', '.join(e['attributes']) or '—'}")
+        print(f"    Mitglieder: {e['members']} Probe(n), {e['cases']} Fall/Fälle")
+        print(f"    Graph:      {e.get('graph')}")
+    print(f"\n{len(entries)} Auswahl(en)")
+    return 0
+
+
+def _cmd_selection(store: GraphStore, selection_id: str) -> int:
+    entry = next(
+        (e for e in selection.list_selections(store) if e.get("selection_id") == selection_id),
+        None,
+    )
+    if entry is None and not selection.selection_exists(store, selection_id):
+        print(f"Keine Auswahl '{selection_id}' im Store.", file=sys.stderr)
+        return 1
+    if entry:
+        print(f"Auswahl:    {entry.get('selection_id')}")
+        print(f"Graph:      {entry.get('graph')}")
+        print(f"Quelle:     {entry.get('source') or '—'}")
+        print(f"Modalität:  {entry.get('modality') or '—'}")
+        print(f"Kohorten:   {', '.join(entry['cohorts']) or '—'}")
+        print(f"Attribute:  {', '.join(entry['attributes']) or '—'}")
+        print(f"Zeit:       {entry.get('timestamp') or '—'}")
+        print(f"Mitglieder: {entry['members']} Probe(n), {entry['cases']} Fall/Fälle laut Manifest")
+
+    cases = enrichment.cases_for_selection(store, selection_id)
+    print(f"Fälle im Wissensbestand: {len(cases)}")
+    for c in cases:
+        print(f"  - {c.get('submitter_id') or c['case_iri']}")
+        print(f"      Projekt:    {c.get('project_id') or '—'}   "
+              f"Geschlecht: {c.get('gender') or '—'}   "
+              f"Probentyp: {c.get('sample_type') or '—'}")
+        print(f"      Diagnose:   {c.get('primary_diagnosis') or '—'}   "
+              f"Stadium: {c.get('tumor_stage') or '—'}")
+    return 0
+
+
+def _cmd_drop_selection(store: GraphStore, selection_id: str, assume_yes: bool) -> int:
+    if not selection.selection_exists(store, selection_id):
+        print(f"Keine Auswahl '{selection_id}' im Store.", file=sys.stderr)
+        return 1
+    graph = selection.graph_iri_for_selection(selection_id)
+    if not assume_yes:
+        print(f"Verwirft das Manifest der Auswahl '{selection_id}' (DROP GRAPH <{graph}>).")
+        print("Der Wissensbestand im Default-Graph bleibt erhalten.")
+        try:
+            answer = input("Wirklich verwerfen? [j/N] ").strip().lower()
+        except EOFError:
+            answer = ""
+        if answer not in {"j", "ja", "y", "yes"}:
+            print("Abgebrochen.")
+            return 1
+    selection.drop_selection(store, selection_id)
+    print(f"Verworfen: {graph}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     store = GraphStore(Settings.from_env())
@@ -253,6 +345,12 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_feedback(store, args.event, args.user)
         if args.command == "findings":
             return _cmd_findings(store, args.user)
+        if args.command == "selections":
+            return _cmd_selections(store)
+        if args.command == "selection":
+            return _cmd_selection(store, args.id)
+        if args.command == "drop-selection":
+            return _cmd_drop_selection(store, args.id, args.yes)
     except (GraphStoreError, FileNotFoundError) as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 1
