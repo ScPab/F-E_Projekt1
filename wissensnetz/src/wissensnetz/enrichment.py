@@ -22,6 +22,7 @@ from typing import Any
 
 from .config import INSTANCE, PREFIXES
 from .graphstore import GraphStore
+from .selection import graph_iri_for_selection
 
 
 # --------------------------------------------------------------------------
@@ -194,6 +195,77 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
     return result
 
 
+# --------------------------------------------------------------------------
+# Gemeinsame Bausteine für die Sammel-Leseabfragen (all_cases /
+# cases_for_selection): beide liefern dieselbe Form, sie unterscheiden sich nur
+# darin, WELCHE Fälle sie einsammeln — deshalb ein OPTIONAL-Block und eine
+# Verdichtungsfunktion für beide.
+# --------------------------------------------------------------------------
+_CASE_VARS = (
+    "?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus ?sampleType "
+    "?label ?tumorStage ?morphology ?siteBiopsy ?metastasis"
+)
+
+# ?sampleBlock wird je Aufrufer eingesetzt: alle Proben des Falls (all_cases)
+# bzw. nur die Proben, die zur Auswahl gehören (cases_for_selection).
+_CASE_OPTIONALS = """      OPTIONAL {{ ?c db:submitterId ?sid }}
+      OPTIONAL {{ ?c db:belongsToProject ?proj . ?proj db:projectId ?projectId }}
+      OPTIONAL {{
+        ?c db:hasDemographic ?demo .
+        OPTIONAL {{ ?demo db:gender ?gender }}
+        OPTIONAL {{ ?demo db:race ?race }}
+        OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
+        OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
+      }}
+      {sample_block}
+      OPTIONAL {{
+        ?c db:hasDiagnosis ?diag .
+        OPTIONAL {{ ?diag db:primaryDiagnosisLabel ?label }}
+        OPTIONAL {{ ?diag db:tumorStage ?tumorStage }}
+        OPTIONAL {{ ?diag db:morphology ?morphology }}
+        OPTIONAL {{ ?diag db:siteOfResectionOrBiopsy ?siteBiopsy }}
+        OPTIONAL {{ ?diag db:metastasisAtDiagnosis ?metastasis }}
+      }}"""
+
+# Ausgabe-Schlüssel -> SPARQL-Variable. Diese Form erwartet ``build_obs`` im
+# Mediator (``_OBS_CASE_FIELDS``) — sie ist Teil der Naht und ändert sich nicht
+# einseitig.
+_CASE_KEYS = (
+    ("submitter_id", "sid"), ("project_id", "projectId"), ("gender", "gender"),
+    ("race", "race"), ("ethnicity", "ethnicity"), ("vital_status", "vitalStatus"),
+    ("sample_type", "sampleType"),
+    ("primary_diagnosis", "label"), ("tumor_stage", "tumorStage"),
+    ("morphology", "morphology"), ("site_of_resection_or_biopsy", "siteBiopsy"),
+    ("has_metastasis", "metastasis"),
+)
+
+
+def _fold_case_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mehrere Zeilen je Fall (Diagnosen/Proben) auf einen Eintrag verdichten.
+
+    Erste Diagnose / erster Nicht-Null-Wert gewinnt; die Reihenfolge der Fälle
+    aus der Abfrage bleibt erhalten.
+    """
+    by_case: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for r in rows:
+        c = r.get("c")
+        if not c:
+            continue
+        if c not in by_case:
+            entry: dict[str, Any] = {"case_iri": c}
+            for out_key, var in _CASE_KEYS:
+                entry[out_key] = r.get(var)
+            by_case[c] = entry
+            order.append(c)
+        else:
+            entry = by_case[c]
+            for out_key, var in _CASE_KEYS:
+                if entry[out_key] is None and r.get(var) is not None:
+                    entry[out_key] = r.get(var)
+    return [by_case[c] for c in order]
+
+
 def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, Any]]:
     """Sammel-Leseabfrage über **alle** Fälle im Store (für MP-lite Aufgabe 7).
 
@@ -216,59 +288,49 @@ def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, 
         inner += f" LIMIT {int(limit)}"
     inner += " }"
 
+    sample_block = (
+        "OPTIONAL { ?c db:hasSample ?sample . ?sample db:sampleType ?sampleType }"
+    )
     sparql = PREFIXES + f"""
-    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus ?sampleType
-           ?label ?tumorStage ?morphology ?siteBiopsy ?metastasis WHERE {{
+    SELECT {_CASE_VARS} WHERE {{
       {inner}
       ?c a db:Case .
-      OPTIONAL {{ ?c db:submitterId ?sid }}
-      OPTIONAL {{ ?c db:belongsToProject ?proj . ?proj db:projectId ?projectId }}
-      OPTIONAL {{
-        ?c db:hasDemographic ?demo .
-        OPTIONAL {{ ?demo db:gender ?gender }}
-        OPTIONAL {{ ?demo db:race ?race }}
-        OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
-        OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
-      }}
-      OPTIONAL {{ ?c db:hasSample ?sample . ?sample db:sampleType ?sampleType }}
-      OPTIONAL {{
-        ?c db:hasDiagnosis ?diag .
-        OPTIONAL {{ ?diag db:primaryDiagnosisLabel ?label }}
-        OPTIONAL {{ ?diag db:tumorStage ?tumorStage }}
-        OPTIONAL {{ ?diag db:morphology ?morphology }}
-        OPTIONAL {{ ?diag db:siteOfResectionOrBiopsy ?siteBiopsy }}
-        OPTIONAL {{ ?diag db:metastasisAtDiagnosis ?metastasis }}
-      }}
+{_CASE_OPTIONALS.format(sample_block=sample_block)}
     }} ORDER BY ?c
     """
-    # Mehrere Diagnosen ⇒ mehrere Zeilen pro Fall: auf einen Eintrag je Fall
-    # verdichten (erste Diagnose / erster Nicht-Null-Wert gewinnt).
-    _keys = (
-        ("submitter_id", "sid"), ("project_id", "projectId"), ("gender", "gender"),
-        ("race", "race"), ("ethnicity", "ethnicity"), ("vital_status", "vitalStatus"),
-        ("sample_type", "sampleType"),
-        ("primary_diagnosis", "label"), ("tumor_stage", "tumorStage"),
-        ("morphology", "morphology"), ("site_of_resection_or_biopsy", "siteBiopsy"),
-        ("has_metastasis", "metastasis"),
+    return _fold_case_rows(store.query(sparql))
+
+
+def cases_for_selection(store: GraphStore, selection_id: str) -> list[dict[str, Any]]:
+    """Wie :func:`all_cases`, aber **begrenzt auf die Mitglieder einer Auswahl**.
+
+    Gegenstück zu ``all_cases(store)`` in ``_build_anndata_from_hits`` und der
+    Grund, warum die ``obs`` nicht mehr den ganzen Store sieht (Aufgabe 13,
+    ``HANDOFF_pablo_store_waechst.md``, P3). Die Rückgabeform ist identisch,
+    ``build_obs`` bleibt also unverändert.
+
+    Die Abfrage joint über die Grenze zwischen den beiden Ebenen hinweg: das
+    **Manifest** liegt im Named Graph der Auswahl, der **Wissensbestand** im
+    Default-Graph. ``sample_type`` wird dabei nur aus Proben gelesen, die auch
+    Mitglied der Auswahl sind — nicht aus allen Proben des Falls.
+
+    Tolerant wie :func:`case_context`: fehlt ein Wert, steht ``None``. Fälle,
+    die das Manifest nennt, die aber (noch) nicht im Wissensbestand liegen,
+    erscheinen nicht — das Manifest allein macht keinen Fall.
+    """
+    graph = graph_iri_for_selection(selection_id)
+    sample_block = (
+        f"OPTIONAL {{ GRAPH <{graph}> {{ ?sel db:hasMember ?sample }}\n"
+        f"        ?c db:hasSample ?sample . ?sample db:sampleType ?sampleType }}"
     )
-    by_case: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
-    for r in store.query(sparql):
-        c = r.get("c")
-        if not c:
-            continue
-        if c not in by_case:
-            entry: dict[str, Any] = {"case_iri": c}
-            for out_key, var in _keys:
-                entry[out_key] = r.get(var)
-            by_case[c] = entry
-            order.append(c)
-        else:
-            entry = by_case[c]
-            for out_key, var in _keys:
-                if entry[out_key] is None and r.get(var) is not None:
-                    entry[out_key] = r.get(var)
-    return [by_case[c] for c in order]
+    sparql = PREFIXES + f"""
+    SELECT {_CASE_VARS} WHERE {{
+      GRAPH <{graph}> {{ ?sel a db:Selection ; db:selectionCase ?c }}
+      ?c a db:Case .
+{_CASE_OPTIONALS.format(sample_block=sample_block)}
+    }} ORDER BY ?c
+    """
+    return _fold_case_rows(store.query(sparql))
 
 
 def diagnosis_context(store: GraphStore, diagnosis_ref: str) -> dict[str, Any]:
