@@ -22,6 +22,10 @@ mediator/scripts/output/
 # scripts/fetch_pancancer_h5ad.py) — grosses, regenerierbares Mediator-Artefakt.
 wissensnetz/data/pancancer.h5ad
 
+# .h5ad einer einzelnen Auswahl (ADR-0003, start_all.ps1 -DemoGenerate bzw.
+# scripts/run_selection.py --generate --out) — ebenso regenerierbar.
+wissensnetz/data/selection_demo.h5ad
+
 # Docker
 *.log
 
