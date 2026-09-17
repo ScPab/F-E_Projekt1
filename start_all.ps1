@@ -12,8 +12,15 @@
       6. EINEN Demo-Scope ueber POST /selection/preview abrufen - der Store
          waechst mit den Aufrufen (ADR-0003), es wird NICHT mehr global
          vorgeladen. Vorlage: scripts/selection_demo.json
-      6b. Graph-Visualisierung (pyvis, graph_view.html) erzeugen und oeffnen
-      7. Oberflaeche (MP-lite, Bokeh) starten - Browser oeffnet sich
+      6b. NUR mit -WithGraphView: Graph-Visualisierung (pyvis, graph_view.html)
+          erzeugen und oeffnen
+      7. NUR mit -WithMpLite: Oviedo-Prototyp MP-lite (Bokeh) starten
+
+    Der Standardstart oeffnet KEIN Browser-Fenster. Er bringt nur die Dienste
+    hoch, fuehrt den Demo-Scope aus, gibt eine Uebersicht aus und beendet sich;
+    die Dienste laufen weiter. Grund: die eigene Auswahl-Oberflaeche entsteht
+    gerade unter frontend/ (ADR-0003 Abschnitt 6). MP-Lite ist der Oviedo-
+    Prototyp, die pyvis-Ansicht ein Diagnosewerkzeug - beide sind Opt-in.
 
     Schritt 6 kennt drei Betriebsarten:
       Standard      ein Scope ueber /selection/preview (-DemoCohort/-DemoSize)
@@ -23,16 +30,21 @@
                     fetch_pancancer_h5ad.py, fuellt den Store global
       -SkipLoad     gar kein Abruf; der Store bleibt leer (nur TBox+Vokabulare)
 
-    Strg+C in diesem Fenster stoppt die Oberflaeche und faehrt danach automatisch
-    Mediator, graph-db (Docker) und die Oberflaeche herunter - und schliesst dieses
-    Fenster. Manuelles Herunterfahren: .\stop_all.ps1
+    Herunterfahren: .\stop_all.ps1 - im Standardfall der einzige Weg, denn das
+    Skript beendet sich nach dem Start und die Dienste laufen weiter.
+    NUR mit -WithMpLite laeuft Bokeh im Vordergrund; dann stoppt Strg+C in diesem
+    Fenster die Oberflaeche, faehrt Mediator und graph-db herunter und schliesst
+    das Fenster.
 
 .NOTES
     Voraussetzung: aktivierte Conda-Env "F+E"  (conda activate F+E).
-    Am zuverlaessigsten schliesst sich das Fenster, wenn du das Skript direkt in
-    der aktivierten Session startest:
+    Das Fenster-Schliessen per Strg+C betrifft nur -WithMpLite (Bokeh im
+    Vordergrund). Am zuverlaessigsten klappt es, wenn du das Skript direkt in der
+    aktivierten Session startest:
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-        .\start_all.ps1
+        .\start_all.ps1 -WithMpLite
+    Ohne -WithMpLite beendet sich das Skript von selbst; die Dienste laufen
+    weiter, bis .\stop_all.ps1 sie stoppt.
 
 .EXAMPLE
     # Standard: ein Demo-Scope (TCGA-BRCA, 20 Proben) ueber /selection/preview
@@ -44,8 +56,14 @@
     # mit Rohdaten und .h5ad; MP-lite zeigt danach selection_demo.h5ad
     .\start_all.ps1 -DemoGenerate
 .EXAMPLE
-    # leerer Store: MP-lite faellt auf das BRCA-Fixture zurueck
-    .\start_all.ps1 -SkipLoad -NoUi
+    # nur die Dienste, leerer Store, keine Oberflaeche
+    .\start_all.ps1 -SkipLoad
+.EXAMPLE
+    # Oviedo-Prototyp MP-lite mitstarten (Bokeh im Vordergrund, Browser oeffnet sich)
+    .\start_all.ps1 -WithMpLite
+.EXAMPLE
+    # pyvis-Diagnoseansicht erzeugen und oeffnen, ohne MP-lite
+    .\start_all.ps1 -WithGraphView
 .EXAMPLE
     # ALTWEG vor ADR-0003: alle 32 Kohorten laden + globales pancancer.h5ad
     .\start_all.ps1 -FullLoad -Size 50 -PancancerSize 5
@@ -61,11 +79,13 @@ param(
     [switch]$SkipLoad,
     [int]$PancancerSize = 5,            # nur mit -FullLoad wirksam (Proben je Kohorte)
     [switch]$RebuildMediator,
-    [switch]$NoUi,
+    [switch]$NoUi,                      # wirkungslos: kein Start oeffnet mehr eine Oberflaeche
     [string]$DemoCohort = "TCGA-BRCA",  # Kohorte des Demo-Scopes (ADR-0003)
     [int]$DemoSize = 20,                # Proben im Demo-Scope
     [switch]$DemoGenerate,              # /selection/generate statt /preview (mit .h5ad)
-    [switch]$FullLoad                   # ALTWEG vor ADR-0003 (global vorladen)
+    [switch]$FullLoad,                  # ALTWEG vor ADR-0003 (global vorladen)
+    [switch]$WithMpLite,                # Oviedo-Prototyp MP-Lite starten (Bokeh, oeffnet Browser)
+    [switch]$WithGraphView              # pyvis-Diagnoseansicht erzeugen und oeffnen
 )
 
 $ErrorActionPreference = "Stop"
@@ -280,26 +300,46 @@ if ($demoH5ad -and (Test-Path $demoH5ad)) {
 }
 
 # --- 6b) Wissensnetz visualisieren (pyvis) ---------------------------------
-if (-not $NoUi) {
+# Diagnosewerkzeug, kein Teil des Starts: nur mit -WithGraphView. Die Datei in der
+# Projektwurzel wird dadurch nur noch auf Anforderung neu erzeugt und ist sonst
+# potenziell veraltet.
+if ($WithGraphView -and -not $NoUi) {
     Step "Erzeuge Graph-Visualisierung (pyvis, graph_view.html) ..."
     python scripts\graph_view.py --limit 500
     if ($LASTEXITCODE -ne 0) { Fail "Graph-Visualisierung fehlgeschlagen (nicht kritisch)." }
     else { Good "graph_view.html geoeffnet." }
 }
 
-# --- 7) Oberflaeche (MP-lite) starten --------------------------------------
-if ($NoUi) {
-    Info "Fertig. Dienste laufen weiter. Herunterfahren mit:  .\stop_all.ps1"
-    exit 0
+# --- 7) Oberflaeche ---------------------------------------------------------
+# Die eigene Auswahl-Oberflaeche (frontend/, ADR-0003 Abschnitt 6) existiert noch
+# nicht und wird hier eingehaengt, sobald sie da ist. MP-Lite ist der
+# Oviedo-Prototyp und startet nur noch mit -WithMpLite.
+if ($NoUi -and ($WithMpLite -or $WithGraphView)) {
+    Info "   Hinweis: -NoUi schlaegt -WithMpLite/-WithGraphView - es wird keine Oberflaeche gestartet."
+} elseif ($NoUi) {
+    Info "   Hinweis: -NoUi ist nicht mehr noetig - der Start oeffnet ohnehin keine Oberflaeche."
 }
 
-Info "Starte Oberflaeche (MP-lite) auf Port $UiPort - Browser oeffnet sich."
-Info "Strg+C beendet ALLES (Mediator, Docker, Oberflaeche) und schliesst dieses Fenster."
-try {
-    bokeh serve --show --port $UiPort wissensnetz\prototype\mp_lite\app.py
-} finally {
-    Stop-All
+if ($WithMpLite -and -not $NoUi) {
+    Info "Starte Oberflaeche (MP-lite) auf Port $UiPort - Browser oeffnet sich."
+    Info "Strg+C beendet ALLES (Mediator, Docker, Oberflaeche) und schliesst dieses Fenster."
+    try {
+        bokeh serve --show --port $UiPort wissensnetz\prototype\mp_lite\app.py
+    } finally {
+        Stop-All
+    }
+    # Fenster schliessen (wirkt, wenn das Skript dieses Fenster besitzt; sonst zurueck zum Prompt)
+    Stop-Process -Id $PID -Force
 }
 
-# Fenster schliessen (wirkt, wenn das Skript dieses Fenster besitzt; sonst zurueck zum Prompt)
-Stop-Process -Id $PID -Force
+# Standardfall: keine Oberflaeche. Dienste laufen weiter, kurze Uebersicht.
+Write-Host ""
+Info "==================  Fertig - Dienste laufen  =================="
+Info "  Fuseki:            http://localhost:3030            (Login admin/admin)"
+Info "  Mediator:          http://localhost:$MediatorPort/health   und   /docs"
+Info ""
+Info "  Auswahl ausfuehren:  python scripts\run_selection.py <selection.json>"
+Info "  Auswahlen ansehen:   wissensnetz selections"
+Info "  MP-Lite bei Bedarf:  .\start_all.ps1 -WithMpLite"
+Info "  Herunterfahren:      .\stop_all.ps1"
+exit 0
