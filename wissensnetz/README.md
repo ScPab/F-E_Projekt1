@@ -179,6 +179,48 @@ python scripts/run_selection.py selection.json            # POST /selection/prev
 python scripts/run_selection.py selection.json --generate # POST /selection/generate
 ```
 
+## Upsert je Property (Aufgabe 14)
+
+Weil der Store mit den Aufrufen wächst, kann derselbe Fall mehrfach geladen
+werden. Ändert GDC dazwischen einen Wert, hingen ohne Gegenmaßnahme **zwei**
+Werte an derselben Property — `build_obs` und MP-Lite erwarten einen.
+
+`load_knowledge()` löst das als **Upsert je Property**, nicht als „Fall
+ersetzen":
+
+> Gelöscht wird nur, was die aktuelle Nutzlast auch schreibt.
+
+Das ist der Unterschied, auf den es ankommt: verschiedene Auswahlen fragen
+verschiedene Attributmengen ab. Holt Auswahl A `gender` und `tumor_stage` und
+Auswahl B danach nur `gender`, dann **löscht B das `tumor_stage` von A nicht**.
+Der Store wächst monoton, außer in den Werten, die tatsächlich neu geliefert
+werden. „Fall ersetzen" würde ihn dagegen je nach letzter Anfrage schrumpfen
+lassen (siehe [`HANDOFF_pablo_P4_ersetzen.md`](HANDOFF_pablo_P4_ersetzen.md)).
+
+```python
+from wissensnetz import load_knowledge
+
+load_knowledge(
+    store, turtle,
+    submitter_ids=[...],   # aus dem geteilten Abruf
+    properties=[...],      # db:-Property-IRIs der gewählten Attribute
+)
+```
+
+Ohne `properties` verhält sich die Funktion wie `store.load_turtle(turtle)`,
+also reines Anhängen. Die Zuordnung *Attributname → `db:`-Property* bleibt beim
+Mediator (`resolve_attribute`) und kommt als Parameter herein — hier entsteht
+bewusst keine zweite Tabelle davon.
+
+Gelöscht wird am Fall **und an seinen Unterknoten** (`db:hasDemographic`,
+`db:hasDiagnosis`, `db:hasSample`), denn die Klinikfelder hängen laut TBox nicht
+am Case selbst. Enthält die Liste `db:primaryDiagnosisLabel`, gehen der
+NCIt-Link `db:primaryDiagnosis` und dessen RDF-star-Provenienz als Anhang mit.
+
+Unberührt bleiben die TBox, die kohortenweit geteilten Projekt-Knoten und alle
+Named Graphs (Auswahl-Manifeste, Rückkanal-Graphen). Das ist nicht angenommen,
+sondern in `tests/test_knowledge.py` festgenagelt.
+
 ## Python-API
 
 ```python
@@ -186,6 +228,7 @@ from wissensnetz import GraphStore, initialize
 from wissensnetz import subclasses, superclasses, case_context, diagnosis_context
 from wissensnetz import SelectionEvent, write_feedback, list_findings
 from wissensnetz import write_selection, cases_for_selection, list_selections
+from wissensnetz import load_knowledge
 
 store = GraphStore()          # liest Verbindung aus ENV
 initialize(store)             # Dataset + TBox (Aufgabe 1)
@@ -211,6 +254,9 @@ graph_iri = write_selection(
 )
 cases_for_selection(store, recipe_key)     # wie all_cases(), aber nur diese Auswahl
 list_selections(store)                     # -> [{selection_id, cohorts, members, ...}]
+
+# Wissensbestand (Aufgabe 14) — Upsert je Property statt reinem Anhängen
+load_knowledge(store, turtle, submitter_ids=[...], properties=[...])
 ```
 
 `load_turtle` überträgt den Turtle-Text **roh** an Fuseki (kein rdflib-
@@ -246,6 +292,7 @@ wissensnetz/
                             #     all_cases / cases_for_selection
     feedback.py             # (4) Rückkanal: Event -> oa:Annotation/PROV-O/RDF-star
     selection.py            # (13) Auswahl-Manifeste im Named Graph je /selection/*-Aufruf
+    knowledge.py            # (14) Upsert je Property beim Laden in den Default-Graph
     cli.py                  # CLI-Einstieg
   ontology/                 # TBox databridge-core.ttl, feedback.ttl, selection.ttl + Alignment
   data/sample/              # Mediator-Turtle-Fixture + selection_event.json
@@ -269,6 +316,11 @@ wissensnetz/
   `enrichment.cases_for_selection` als begrenztes Gegenstück zu `all_cases`,
   Vokabular `ontology/selection.ttl` + CLI `selections`/`selection`/
   `drop-selection` + Projektskript `scripts/run_selection.py`.
+
+- **Aufgabe 14 (Upsert je Property):** umgesetzt — `knowledge.py`
+  (`load_knowledge` als Naht zum Mediator, `replace_case_properties`), inkl.
+  Sonderfall NCIt-Alignment (`db:primaryDiagnosis` + RDF-star) und Nachweis,
+  dass TBox, Projekt-Knoten und Named Graphs unberührt bleiben.
 
 Damit sind alle drei Richtungen des Wissensnetzes umgesetzt: **① Laden** (ABox
 aus dem Mediator), **② Anreichern/Lesen** (SPARQL) und **③ Rückkanal/Schreiben**
