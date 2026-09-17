@@ -4,11 +4,17 @@ das Ergebnis im Wissensnetz anzeigen — die Kette ohne Oberfläche.
 
     python scripts/run_selection.py selection.json
     python scripts/run_selection.py selection.json --generate
+    python scripts/run_selection.py selection.json --generate --out wissensnetz/data/selection_demo.h5ad
 
 Ablauf:
     1. POST <mediator>/selection/preview  bzw.  /selection/generate
        (UI-Auswahl -> Abruf -> Übersetzung -> Laden; Kollege B)
-    2. `wissensnetz selection <recipe_key>` je Ebene (Wissensnetz)
+    2. mit --out: das erzeugte `.h5ad` über GET <mediator><download_url> holen
+       (sonst bleibt es im Mediator-Container und MP-Lite findet es nicht)
+    3. `wissensnetz selection <recipe_key>` je Ebene (Wissensnetz)
+
+Dies ist der reguläre Weg nach ADR-0003: **ein** Scope statt eines globalen
+Vorladens. scripts/selection_demo.json ist die versionierte Referenz-Auswahl.
 
 Bewusst ein PROJEKT-Skript (nicht im wissensnetz-Paket), Muster wie
 scripts/load_gdc.py: das Paket bleibt „nur graph-db", dieses Skript
@@ -65,6 +71,23 @@ def _post_selection(base: str, payload: dict, *, generate: bool, timeout: float)
         return None
 
 
+def _download(base: str, download_url: str, out_path: Path, *, timeout: float = 900.0) -> Path:
+    """Datei über ``GET {base}{download_url}`` streamen und nach ``out_path``
+    schreiben (Muster: ``_download()`` in ``scripts/fetch_pancancer_h5ad.py``).
+
+    Bewusst über den Download-Endpoint statt über den ``path`` aus der Antwort:
+    das `.h5ad` liegt im Mediator-**Container**, der Host sieht den Pfad nicht.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(f"{base}{download_url}", stream=True, timeout=timeout) as r:
+        r.raise_for_status()
+        with open(out_path, "wb") as fh:
+            for chunk in r.iter_content(chunk_size=1 << 16):
+                if chunk:
+                    fh.write(chunk)
+    return out_path
+
+
 def _print_level(level: dict) -> str | None:
     """Eine Ebene der Mediator-Antwort ausgeben; gibt den recipe_key zurück."""
     sel = level.get("selection") or {}
@@ -97,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="Basis-URL des Mediators (Default: http://localhost:8000)")
     p.add_argument("--timeout", type=float, default=600.0,
                    help="HTTP-Timeout in Sekunden (Default: 600 — /selection/generate lädt herunter)")
+    p.add_argument("--out", default=None,
+                   help="Zieldatei für das .h5ad aus --generate (nur damit wirksam). "
+                        "Bei mehreren Ebenen wird die Datei der ERSTEN Ebene mit status='ok' "
+                        "geschrieben. Ohne --out bleibt das .h5ad im Mediator-Container.")
     args = p.parse_args(argv)
 
     path = Path(args.selection)
@@ -104,7 +131,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Auswahl-Datei nicht gefunden: {path}", file=sys.stderr)
         return 1
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        # utf-8-sig: Windows-Werkzeuge (PowerShell `Out-File -Encoding utf8`)
+        # schreiben ein BOM; utf-8-sig liest BOM-behaftetes UND BOM-freies UTF-8.
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except ValueError as exc:
         print(f"{path} ist kein gültiges JSON: {exc}", file=sys.stderr)
         return 1
@@ -139,7 +168,28 @@ def main(argv: list[str] | None = None) -> int:
 
     keys = [k for k in (_print_level(level) for level in levels) if k]
 
-    # 3) Ergebnis im Wissensnetz — dieselbe Ausgabe wie `wissensnetz selection <id>`.
+    # 3) Optional: das .h5ad der ersten erfolgreichen Ebene herunterladen.
+    if args.out:
+        if not args.generate:
+            print("--out wirkt nur zusammen mit --generate (die Vorschau erzeugt kein .h5ad).",
+                  file=sys.stderr)
+        else:
+            url = next(
+                (lvl["anndata"]["download_url"] for lvl in levels
+                 if lvl.get("status") == "ok" and (lvl.get("anndata") or {}).get("download_url")),
+                None,
+            )
+            if not url:
+                print("Keine Ebene hat ein .h5ad geliefert — nichts herunterzuladen.",
+                      file=sys.stderr)
+            else:
+                try:
+                    out_path = _download(base, url, Path(args.out), timeout=args.timeout)
+                    print(f"\n.h5ad geschrieben: {out_path.resolve()}")
+                except (requests.RequestException, OSError) as exc:
+                    print(f"Download fehlgeschlagen: {exc}", file=sys.stderr)
+
+    # 4) Ergebnis im Wissensnetz — dieselbe Ausgabe wie `wissensnetz selection <id>`.
     known = {e.get("selection_id") for e in list_selections(store)}
     for key in keys:
         print(f"\n--- wissensnetz selection {key} ---")
