@@ -78,6 +78,9 @@ wissensnetz load mediator/scripts/output/tcga_brca_sample.ttl
 | `wissensnetz context <ref>` | Fall-/Diagnose-Kontext: verknüpfte Konzepte + Alignment-Ziele (Aufgabe 3) |
 | `wissensnetz feedback <event.json> [--user <id>]` | MP-Selektions-Event in den Nutzer-Named-Graph schreiben (Aufgabe 4) |
 | `wissensnetz findings [--user <id>]` | Gespeicherte Experten-Erkenntnisse auflisten (Aufgabe 4) |
+| `wissensnetz selections` | Alle Auswahlen (Named Graphs) auflisten (Aufgabe 13) |
+| `wissensnetz selection <id>` | Eine Auswahl samt ihrer Fälle zeigen (Aufgabe 13) |
+| `wissensnetz drop-selection <id> [--yes]` | Manifest einer Auswahl verwerfen, Wissensbestand bleibt (Aufgabe 13) |
 
 ## Anreicherung (Aufgabe 3)
 
@@ -129,12 +132,60 @@ Das Rückkanal-Vokabular (`db:ExpertFinding`, `db:Reclassification`,
 [`ontology/feedback.ttl`](ontology/feedback.ttl) und wird von `wissensnetz init`
 mitgeladen; `oa:`/`prov:`-Terme werden wiederverwendet.
 
+## Auswahl-Graphen (Aufgabe 13)
+
+Der Store ist **nicht** global vorbefüllt, sondern **wächst mit den Aufrufen**:
+jeder `/selection/*`-Aufruf des Mediators schreibt seinen Wissensbestand hinein
+(siehe [ADR-0003](../docs/adr/0003-ui-gesteuerte-akquise.md) und
+[`HANDOFF_pablo_store_waechst.md`](HANDOFF_pablo_store_waechst.md)). Zwei Ebenen
+bleiben dabei getrennt:
+
+| Ebene | Inhalt | Ort | Lebensdauer |
+| --- | --- | --- | --- |
+| Wissensbestand | Case, Demographic, Diagnosis, Sample, dynamische Properties | **Default-Graph** | wächst, bleibt |
+| Auswahl-Manifest | welche Proben und Fälle zur Auswahl gehören, plus die Auswahlparameter | **Named Graph** `http://databridge.hka/graph/selection/<id>` | je Aufruf, verwerfbar |
+
+Läge der Wissensbestand je Auswahl in einem eigenen Named Graph, stünden
+dieselben Case-Tripel als Quads mehrfach im Store, und ein `DROP GRAPH` würde
+Wissen löschen, das eine andere Auswahl noch braucht.
+
+```bash
+wissensnetz selections                 # alle Auswahlen im Store
+wissensnetz selection <recipe_key>     # nur die Fälle DIESER Auswahl
+wissensnetz query "SELECT (COUNT(DISTINCT ?c) AS ?n) WHERE { ?c a db:Case }"  # weiterhin der ganze Store
+wissensnetz drop-selection <recipe_key>   # nur das Manifest, mit Sicherheitsabfrage
+```
+
+Genau dieser Unterschied ist der Zweck: `wissensnetz selection <id>` zeigt nur
+die Fälle der Auswahl, während `wissensnetz query` den gesamten Store sieht.
+
+Das Auswahl-Vokabular (`db:Selection`, `db:selectionId`, `db:hasMember`,
+`db:selectionCase`, `db:selectedCohort`/`-Modality`/`-Attribute`, `db:source`)
+liegt in [`ontology/selection.ttl`](ontology/selection.ttl) und wird von
+`wissensnetz init` mitgeladen; `prov:`/`rdfs:`-Terme werden wiederverwendet.
+`db:hasCase` ist in der Kern-TBox für `db:Project` → `db:Case` belegt, daher
+heißt der Fallbezug hier `db:selectionCase`.
+
+**Naht zum Mediator:** `write_selection(...)` ist die Funktion, die der Mediator
+aufruft — ihre Signatur ändert sich nicht ohne Absprache. Die Sample-IRIs folgen
+derselben Bildungsregel wie das Mediator-Mapping
+(`INSTANCE_BASE + "sample/" + _slug(sample_id)`), festgenagelt in
+`tests/test_selection.py::test_sample_iri_matches_mediator_rule`.
+
+Die Kette ohne Oberfläche durchspielen (Projektskript, nicht Teil des Pakets):
+
+```bash
+python scripts/run_selection.py selection.json            # POST /selection/preview
+python scripts/run_selection.py selection.json --generate # POST /selection/generate
+```
+
 ## Python-API
 
 ```python
 from wissensnetz import GraphStore, initialize
 from wissensnetz import subclasses, superclasses, case_context, diagnosis_context
 from wissensnetz import SelectionEvent, write_feedback, list_findings
+from wissensnetz import write_selection, cases_for_selection, list_selections
 
 store = GraphStore()          # liest Verbindung aus ENV
 initialize(store)             # Dataset + TBox (Aufgabe 1)
@@ -151,6 +202,15 @@ diagnosis_context(store, "d-11111111")     # -> {label, age_at_diagnosis, case_i
 event = SelectionEvent.from_json_file("data/sample/selection_event.json")
 graph_iri = write_feedback(store, event)   # schreibt in Named Graph pro Nutzer
 list_findings(store, user="nvaldes")       # -> [{annotation, hypothesis, targets, ...}]
+
+# Auswahl (Aufgabe 13) — Manifest schreiben, danach begrenzt lesen
+graph_iri = write_selection(
+    store, selection_id=recipe_key, source="gdc", cohorts=["TCGA-BRCA"],
+    modality="gene_expression", attributes=["gender", "tumor_stage"],
+    submitter_ids=[...], sample_ids=[...],
+)
+cases_for_selection(store, recipe_key)     # wie all_cases(), aber nur diese Auswahl
+list_selections(store)                     # -> [{selection_id, cohorts, members, ...}]
 ```
 
 `load_turtle` überträgt den Turtle-Text **roh** an Fuseki (kein rdflib-
@@ -181,11 +241,13 @@ wissensnetz/
   src/wissensnetz/
     config.py               # Fuseki-URL, Dataset, Namespaces aus ENV
     graphstore.py           # (2) Fuseki-Client: load_turtle / query / update
-    init.py                 # (1) Dataset sicherstellen + TBox + Feedback-Vokabular laden
-    enrichment.py           # (3) Lese-Funktionen: Hierarchie + Fall-/Diagnose-Kontext
+    init.py                 # (1) Dataset sicherstellen + TBox + Nebenvokabulare laden
+    enrichment.py           # (3) Lese-Funktionen: Hierarchie, Fall-/Diagnose-Kontext,
+                            #     all_cases / cases_for_selection
     feedback.py             # (4) Rückkanal: Event -> oa:Annotation/PROV-O/RDF-star
+    selection.py            # (13) Auswahl-Manifeste im Named Graph je /selection/*-Aufruf
     cli.py                  # CLI-Einstieg
-  ontology/                 # TBox databridge-core.ttl, feedback.ttl + Alignment
+  ontology/                 # TBox databridge-core.ttl, feedback.ttl, selection.ttl + Alignment
   data/sample/              # Mediator-Turtle-Fixture + selection_event.json
   tests/                    # pytest (Skip ohne laufendes Fuseki)
 ```
@@ -200,6 +262,13 @@ wissensnetz/
 - **Aufgabe 4 (Rückkanal, Schreiben):** umgesetzt — `feedback.py` (MP-Selektions-
   Event → `oa:Annotation`/PROV-O/RDF-star, SPARQL-star-INSERT in Named Graph
   pro Nutzer) + Vokabular `ontology/feedback.ttl` + CLI `feedback`/`findings`.
+
+- **Aufgabe 13 (Auswahl-Graphen, wachsender Store):** umgesetzt —
+  `selection.py` (Manifest je Auswahl im Named Graph, `write_selection` als Naht
+  zum Mediator, `drop_selection`, `list_selections`),
+  `enrichment.cases_for_selection` als begrenztes Gegenstück zu `all_cases`,
+  Vokabular `ontology/selection.ttl` + CLI `selections`/`selection`/
+  `drop-selection` + Projektskript `scripts/run_selection.py`.
 
 Damit sind alle drei Richtungen des Wissensnetzes umgesetzt: **① Laden** (ABox
 aus dem Mediator), **② Anreichern/Lesen** (SPARQL) und **③ Rückkanal/Schreiben**
