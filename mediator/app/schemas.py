@@ -192,6 +192,14 @@ class SelectionRequest(BaseModel):
         description="Proben pro Kohorte je Ebene, falls eine Ebene mehrere cohorts hat "
         "(analog AnndataExportRequest.per_project_size).",
     )
+    load: bool = Field(
+        True,
+        description="Bei true (Standard): den übersetzten Wissensbestand jeder Ebene in den "
+        "Default-Graph von graph-db (Fuseki) laden (siehe wissensnetz/HANDOFF_pablo_store_waechst.md, "
+        "P1) — sowohl bei /selection/preview als auch /selection/generate, da der Store erst dadurch "
+        "wächst und `obs` daraus befüllt werden kann. Nur zum Testen ohne Fuseki-Seiteneffekt auf "
+        "false setzen.",
+    )
 
 
 class SelectionLevelResult(BaseModel):
