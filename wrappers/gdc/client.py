@@ -118,13 +118,18 @@ EXPRESSION_QUANTIFICATION_COLUMNS: dict[str, dict[str, Optional[str]]] = {
 
 # Felder, die für die Proben/Case-Zuordnung nötig sind (siehe
 # `extract_sample_case_rows`); zusätzliche Felder können darüber hinaus
-# angefragt werden.
+# angefragt werden. `cases.project.project_id` ist Teil davon (W2, siehe
+# recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf): beide Senken der
+# Mediator-Seite (RDF-Graph über `cases_to_graph` und die anndata-Matrix über
+# `build_obs(..., gdc_project_by_sample=...)`) brauchen die Projekt/Kohorte
+# je Probe, z. B. für die Stratifizierung bei Multi-Kohorten-Auswahlen.
 EXPRESSION_FILE_FIELDS: list[str] = [
     "file_id",
     "file_name",
     "data_type",
     "experimental_strategy",
     "cases.submitter_id",
+    "cases.project.project_id",
     "cases.samples.sample_id",
     "cases.samples.sample_type",
 ]
@@ -156,10 +161,12 @@ def build_expression_filters(
 
 
 def extract_sample_case_rows(hits: list[dict]) -> list[dict[str, Optional[str]]]:
-    """Flacht GDC-`files`-Treffer (mit `cases.submitter_id` +
-    `cases.samples.sample_id`/`sample_type`) zu einer Zeile je
-    (Datei, Probe)-Paar ab — die "Proben↔Case-Zuordnung", die der Mediator
-    laut HANDOFF_anndata.md (Abschnitt 3a/3b) vom Wrapper erwartet.
+    """Flacht GDC-`files`-Treffer (mit `cases.submitter_id`, `cases.project.project_id`
+    + `cases.samples.sample_id`/`sample_type`) zu einer Zeile je (Datei, Probe)-Paar
+    ab — die "Proben↔Case-Zuordnung", die der Mediator laut HANDOFF_anndata.md
+    (Abschnitt 3a/3b) vom Wrapper erwartet. `project_id` ist Teil jeder Zeile
+    (W2, siehe recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf): beide
+    Mediator-Senken (RDF-Graph, anndata-`obs`) brauchen die Kohorte je Probe.
 
     Ein Treffer ohne `cases`/`samples` (unerwartet für TCGA-Quantifizierungs-
     dateien, aber keine GDC-Garantie) liefert keine Zeile statt eines Fehlers.
@@ -170,12 +177,14 @@ def extract_sample_case_rows(hits: list[dict]) -> list[dict[str, Optional[str]]]
         file_name = hit.get("file_name")
         for case in hit.get("cases") or []:
             submitter_id = case.get("submitter_id")
+            project_id = (case.get("project") or {}).get("project_id")
             for sample in case.get("samples") or []:
                 rows.append(
                     {
                         "file_id": file_id,
                         "file_name": file_name,
                         "submitter_id": submitter_id,
+                        "project_id": project_id,
                         "sample_id": sample.get("sample_id"),
                         "sample_type": sample.get("sample_type"),
                     }
@@ -414,7 +423,13 @@ class GDCWrapper:
         `sample_types`).
 
         Baut bewusst KEIN anndata (siehe `to_anndata`/Modul-Docstring) —
-        das bleibt der separate Mediator-Schritt.
+        das bleibt der separate Mediator-Schritt. Liefert neben
+        `sample_case_map`/`sample_types` auch `sample_project_map` (W2):
+        Probe -> Kohorte/`project_id`, in derselben Form wie
+        `mediator/app/main.py::fetch_selection_files` sie inline aufbaut und
+        wie `expression.build_obs(..., gdc_project_by_sample=...)` sie
+        erwartet — nötig für Multi-Kohorten-Auswahlen, deren Proben sich
+        sonst nicht mehr ihrer Kohorte zuordnen ließen.
         """
         filters = build_expression_filters(assay=assay, project_id=project_id, access=access)
         metadata = self.query("files", filters=filters, fields=EXPRESSION_FILE_FIELDS, size=size)
@@ -425,6 +440,7 @@ class GDCWrapper:
 
         sample_case_map: dict[str, str] = {}
         sample_types: dict[str, str] = {}
+        sample_project_map: dict[str, str] = {}
         sample_files: dict[str, Path] = {}
         out_dir = Path(output_dir)
         for row in rows:
@@ -434,6 +450,8 @@ class GDCWrapper:
             sample_case_map[sample_id] = row["submitter_id"]
             if row.get("sample_type"):
                 sample_types[sample_id] = row["sample_type"]
+            if row.get("project_id"):
+                sample_project_map[sample_id] = row["project_id"]
             if download["status"] == "completed":
                 # gdc-client legt jede Datei unter <output_dir>/<file_id>/<file_name> ab.
                 local_path = out_dir / file_id / file_name
@@ -448,6 +466,7 @@ class GDCWrapper:
             "files": rows,
             "sample_case_map": sample_case_map,
             "sample_types": sample_types,
+            "sample_project_map": sample_project_map,
             "sample_files": sample_files,
         }
 

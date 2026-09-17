@@ -234,6 +234,7 @@ def test_extract_sample_case_rows_flattens_cases_and_samples():
             "cases": [
                 {
                     "submitter_id": "TCGA-XX-0001",
+                    "project": {"project_id": "TCGA-XX"},
                     "samples": [{"sample_id": "s-0001-01", "sample_type": "Primary Tumor"}],
                 }
             ],
@@ -248,10 +249,32 @@ def test_extract_sample_case_rows_flattens_cases_and_samples():
             "file_id": "file-1",
             "file_name": "sample-a.rna_seq.gene_counts.tsv",
             "submitter_id": "TCGA-XX-0001",
+            "project_id": "TCGA-XX",
             "sample_id": "s-0001-01",
             "sample_type": "Primary Tumor",
         }
     ]
+
+
+def test_extract_sample_case_rows_missing_project_yields_none():
+    """Kein `project`-Objekt im Treffer (z. B. abweichende Feldliste) -> `project_id`
+    ist `None` statt eines KeyError (W2: robust gegen fehlendes Feld)."""
+    hits = [
+        {
+            "file_id": "file-1",
+            "file_name": "sample-a.rna_seq.gene_counts.tsv",
+            "cases": [
+                {
+                    "submitter_id": "TCGA-XX-0001",
+                    "samples": [{"sample_id": "s-0001-01", "sample_type": "Primary Tumor"}],
+                }
+            ],
+        }
+    ]
+
+    rows = extract_sample_case_rows(hits)
+
+    assert rows[0]["project_id"] is None
 
 
 def test_search_expression_files_merges_default_fields(wrapper):
@@ -265,6 +288,7 @@ def test_search_expression_files_merges_default_fields(wrapper):
     assert "md5sum" in requested_fields
     assert "file_id" in requested_fields
     assert "cases.samples.sample_id" in requested_fields
+    assert "cases.project.project_id" in requested_fields
 
 
 def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path, monkeypatch):
@@ -275,6 +299,7 @@ def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path
             "cases": [
                 {
                     "submitter_id": "TCGA-XX-0001",
+                    "project": {"project_id": "TCGA-XX"},
                     "samples": [{"sample_id": "s-0001-01", "sample_type": "Primary Tumor"}],
                 }
             ],
@@ -316,6 +341,7 @@ def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path
     assert result["download"]["status"] == "completed"
     assert result["sample_case_map"] == {"s-0001-01": "TCGA-XX-0001"}
     assert result["sample_types"] == {"s-0001-01": "Primary Tumor"}
+    assert result["sample_project_map"] == {"s-0001-01": "TCGA-XX"}
     assert result["sample_files"] == {"s-0001-01": output_dir / "file-1" / "s-0001-01.rna_seq.gene_counts.tsv"}
     assert result["quantification_columns"] == {
         "id_column": "gene_id",
@@ -353,6 +379,7 @@ def test_download_expression_files_gdc_client_not_installed(wrapper, tmp_path, m
 
     assert result["download"]["status"] == "not_run"
     assert result["sample_case_map"] == {"s-0001-01": "TCGA-XX-0001"}
+    assert result["sample_project_map"] == {}  # kein "project" im Treffer -> project_id None, nicht aufgenommen
     assert result["sample_files"] == {}
 
 
