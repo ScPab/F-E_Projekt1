@@ -14,10 +14,10 @@ Kurzreferenz, um das Projekt und alle Skripte zum Laufen zu bringen.
 
 ## 1. Schnellstart — alles mit einem Befehl (`start_all.ps1`)
 
-Ein Skript fährt die **komplette Pipeline** hoch: prüft/startet Docker, startet
-Fuseki, initialisiert das Wissensnetz, baut/startet den Mediator-**Container**
-(mit `gdc-client`), lädt **einen Scope** in den Graphen und öffnet zum Schluss die
-Oberfläche (MP-lite).
+Ein Skript fährt die **Dienste** hoch: prüft/startet Docker, startet Fuseki,
+initialisiert das Wissensnetz, baut/startet den Mediator-**Container** (mit
+`gdc-client`) und lädt **einen Scope** in den Graphen. **Es öffnet kein
+Browser-Fenster** und beendet sich danach — die Dienste laufen weiter.
 
 ```powershell
 conda activate F+E
@@ -29,14 +29,32 @@ Was das Skript der Reihe nach macht: (1) Abhängigkeiten sicherstellen →
 (2) Docker prüfen, ggf. Docker Desktop starten und warten → (3) Fuseki starten →
 (4) `wissensnetz init` → (5) Mediator-Container bauen/starten (`docker compose`,
 enthält `gdc-client`) → (6) **einen** Demo-Scope über `POST /selection/preview`
-laden (`run_selection.py`, Vorlage `scripts/selection_demo.json`) → (6b) pyvis-
-Graphbild → (7) Bokeh öffnen.
+laden (`run_selection.py`, Vorlage `scripts/selection_demo.json`) → Übersicht
+ausgeben und beenden. Schritt (6b) pyvis-Ansicht und (7) MP-lite laufen nur noch
+mit `-WithGraphView` bzw. `-WithMpLite`.
 
 > **Seit [ADR-0003](docs/adr/0003-ui-gesteuerte-akquise.md) wird nicht mehr global
 > vorgeladen.** Der Store startet leer und **wächst mit den Aufrufen**. Der
 > Standardstart holt deshalb genau eine Auswahl (Default `TCGA-BRCA`, 20 Proben)
 > statt aller 32 Kohorten. Nur so bleibt sichtbar, dass eine Auswahl nur ihre
 > eigenen Fälle sieht (`wissensnetz selection <recipe_key>`).
+
+> **Der Start öffnet keine Oberfläche mehr.** Die eigene Auswahl-Oberfläche
+> entsteht gerade unter `frontend/` ([ADR-0003](docs/adr/0003-ui-gesteuerte-akquise.md),
+> Abschnitt 6). MP-lite ist der Oviedo-Prototyp, die pyvis-Ansicht ein
+> Diagnosewerkzeug — beide sind seitdem **Opt-in** (`-WithMpLite`,
+> `-WithGraphView`).
+
+Nach dem Start:
+
+| | |
+| --- | --- |
+| Fuseki | `http://localhost:3030` (Login `admin`/`admin`) |
+| Mediator | `http://localhost:8000/health` und `/docs` |
+| Auswahl ausführen | `python scripts\run_selection.py <selection.json>` |
+| Auswahlen ansehen | `wissensnetz selections` |
+| MP-lite bei Bedarf | `.\start_all.ps1 -WithMpLite` |
+| Herunterfahren | `.\stop_all.ps1` |
 
 Optionen:
 
@@ -49,8 +67,10 @@ Optionen:
 | `-FullLoad` | **Altweg vor ADR-0003:** alle 32 Kohorten laden (`load_gdc.py --pancancer`) **plus** globales `pancancer.h5ad` (`fetch_pancancer_h5ad.py`). Füllt den Store global; das Skript warnt vorher |
 | `-Size 100` | Fälle **pro Kohorte** — **nur mit `-FullLoad`**, sonst ignoriert (mit Hinweis) |
 | `-PancancerSize 10` | Proben **pro Kohorte** in der Pancancer-`.h5ad` — **nur mit `-FullLoad`** |
+| `-WithMpLite` | Oviedo-Prototyp MP-lite starten (Bokeh auf `-UiPort`, öffnet den Browser); Strg+C fährt dann alles herunter |
+| `-WithGraphView` | pyvis-Diagnoseansicht `graph_view.html` erzeugen und öffnen |
 | `-RebuildMediator` | Mediator-Image neu bauen — nach Änderungen an `mediator/` oder `environment.yml` |
-| `-NoUi` | ohne Bokeh-Oberfläche (nur Dienste) |
+| `-NoUi` | nicht mehr nötig (der Start öffnet ohnehin nichts); schlägt `-WithMpLite`/`-WithGraphView`, falls doch gesetzt |
 | `-SkipInstall` | `pip install` überspringen |
 | `-MediatorPort 8001` | anderen Mediator-Port verwenden |
 
@@ -59,15 +79,15 @@ Liegt noch ein altes `wissensnetz/data/pancancer.h5ad` aus früheren Läufen her
 aber nicht. Für den Auswahl-Scope entweder mit `-DemoGenerate` starten oder die
 Datei wegräumen.
 
-Hinweise: Der **Mediator** läuft jetzt als **Docker-Container** (kein eigenes
-Fenster mehr; Logs via `docker compose logs -f mediator`); die **Oberfläche** läuft
-im aktuellen Fenster. Der **erste Lauf baut das Mediator-Image** (einige Minuten,
-lädt `gdc-client` aus bioconda). **Strg+C beendet alles** — es stoppt die Oberfläche
-und fährt danach automatisch Mediator + `graph-db` (`docker compose down`) herunter
-und schließt das Fenster.
+Hinweise: Der **Mediator** läuft als **Docker-Container** (kein eigenes Fenster;
+Logs via `docker compose logs -f mediator`). Der **erste Lauf baut das
+Mediator-Image** (einige Minuten, lädt `gdc-client` aus bioconda). Im Standardfall
+beendet sich das Skript nach dem Start und die Dienste laufen weiter —
+**`.\stop_all.ps1` fährt sie herunter**. Nur mit `-WithMpLite` läuft Bokeh im
+Vordergrund; dann beendet **Strg+C alles** und schließt das Fenster.
 
-Damit sich das Fenster wirklich schließt, das Skript **direkt in der aktivierten
-Session** starten (nicht als `powershell -File`-Kindprozess):
+Damit sich das Fenster bei `-WithMpLite` wirklich schließt, das Skript **direkt in
+der aktivierten Session** starten (nicht als `powershell -File`-Kindprozess):
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
