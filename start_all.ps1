@@ -14,13 +14,18 @@
          vorgeladen. Vorlage: scripts/selection_demo.json
       6b. NUR mit -WithGraphView: Graph-Visualisierung (pyvis, graph_view.html)
           erzeugen und oeffnen
-      7. NUR mit -WithUi: eigene Auswahl-Oberflaeche (frontend/, PySide6) starten,
-         bzw. NUR mit -WithMpLite: Oviedo-Prototyp MP-lite (Bokeh)
+      7. Eigene Auswahl-Oberflaeche (frontend/, PySide6) starten - STANDARD,
+         also erst nachdem Docker und die Dienste oben sind.
+         NUR mit -WithMpLite zusaetzlich: Oviedo-Prototyp MP-lite (Bokeh)
 
-    Der Standardstart oeffnet KEINE Oberflaeche. Er bringt nur die Dienste hoch,
-    fuehrt den Demo-Scope aus, gibt eine Uebersicht aus und beendet sich; die
-    Dienste laufen weiter. Die eigene Auswahl-Oberflaeche (-WithUi), MP-Lite
-    (-WithMpLite) und die pyvis-Ansicht (-WithGraphView) sind alle Opt-in.
+    Der Standardstart oeffnet die eigene Auswahl-Oberflaeche (DataBridge
+    Explorer), und zwar ERST nachdem Docker, Fuseki und der Mediator laufen und
+    der Demo-Scope geladen ist. Sie startet abgekoppelt, dieses Fenster bleibt
+    also frei; danach gibt das Skript eine Uebersicht aus und beendet sich, die
+    Dienste laufen weiter.
+
+    KEIN Browser-Fenster: MP-Lite (Bokeh) und die pyvis-Ansicht bleiben Opt-in
+    ueber -WithMpLite bzw. -WithGraphView. -NoUi unterdrueckt alles davon.
 
     Schritt 6 kennt drei Betriebsarten:
       Standard      ein Scope ueber /selection/preview (-DemoCohort/-DemoSize)
@@ -30,8 +35,9 @@
                     fetch_pancancer_h5ad.py, fuellt den Store global
       -SkipLoad     gar kein Abruf; der Store bleibt leer (nur TBox+Vokabulare)
 
-    Herunterfahren: .\stop_all.ps1 - im Standardfall der einzige Weg, denn das
-    Skript beendet sich nach dem Start und die Dienste laufen weiter.
+    Herunterfahren: .\stop_all.ps1 - im Standardfall der Weg, denn das Skript
+    beendet sich nach dem Start; Dienste und Oberflaeche laufen weiter.
+    stop_all.ps1 schliesst auch den Explorer.
     NUR mit -WithMpLite laeuft Bokeh im Vordergrund; dann stoppt Strg+C in diesem
     Fenster die Oberflaeche, faehrt Mediator und graph-db herunter und schliesst
     das Fenster.
@@ -43,11 +49,11 @@
     aktivierten Session startest:
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
         .\start_all.ps1 -WithMpLite
-    Ohne -WithMpLite beendet sich das Skript von selbst; die Dienste laufen
-    weiter, bis .\stop_all.ps1 sie stoppt.
+    Ohne -WithMpLite beendet sich das Skript von selbst; Dienste und Explorer
+    laufen weiter, bis .\stop_all.ps1 sie stoppt.
 
 .EXAMPLE
-    # Standard: ein Demo-Scope (TCGA-BRCA, 20 Proben) ueber /selection/preview
+    # Standard: Dienste hoch, Demo-Scope (TCGA-BRCA, 20 Proben), Explorer oeffnet sich
     .\start_all.ps1
 .EXAMPLE
     # anderer Scope
@@ -59,8 +65,8 @@
     # nur die Dienste, leerer Store, keine Oberflaeche
     .\start_all.ps1 -SkipLoad
 .EXAMPLE
-    # eigene Auswahl-Oberflaeche mitstarten (PySide6-Fenster, ADR-0004)
-    .\start_all.ps1 -WithUi
+    # Explorer UND den Oviedo-Prototyp MP-lite nebeneinander
+    .\start_all.ps1 -WithMpLite
 .EXAMPLE
     # Oviedo-Prototyp MP-lite mitstarten (Bokeh im Vordergrund, Browser oeffnet sich)
     .\start_all.ps1 -WithMpLite
@@ -82,14 +88,14 @@ param(
     [switch]$SkipLoad,
     [int]$PancancerSize = 5,            # nur mit -FullLoad wirksam (Proben je Kohorte)
     [switch]$RebuildMediator,
-    [switch]$NoUi,                      # wirkungslos: kein Start oeffnet mehr eine Oberflaeche
+    [switch]$NoUi,                      # gar keine Oberflaeche oeffnen (auch nicht den Explorer)
     [string]$DemoCohort = "TCGA-BRCA",  # Kohorte des Demo-Scopes (ADR-0003)
     [int]$DemoSize = 20,                # Proben im Demo-Scope
     [switch]$DemoGenerate,              # /selection/generate statt /preview (mit .h5ad)
     [switch]$FullLoad,                  # ALTWEG vor ADR-0003 (global vorladen)
     [switch]$WithMpLite,                # Oviedo-Prototyp MP-Lite starten (Bokeh, oeffnet Browser)
     [switch]$WithGraphView,             # pyvis-Diagnoseansicht erzeugen und oeffnen
-    [switch]$WithUi                     # eigene Auswahl-Oberflaeche starten (frontend/, ADR-0004)
+    [switch]$WithUi                     # Explorer starten - inzwischen Standard, bleibt fuer Abwaertskompatibilitaet
 )
 
 $ErrorActionPreference = "Stop"
@@ -117,9 +123,20 @@ function Stop-PortProcess([int]$Port) {
     } catch { }
 }
 
+function Stop-Explorer {
+    # Die Auswahl-Oberflaeche (frontend/app.py) beenden, falls sie laeuft.
+    # Sie wird abgekoppelt gestartet, haengt also nicht an diesem Fenster.
+    try {
+        Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like "*frontend*app.py*" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    } catch { }
+}
+
 function Stop-All {
     Write-Host ""
     Info "Fahre alles herunter ..."
+    Stop-Explorer
     # Mediator NICHT per Port-Kill stoppen: er laeuft jetzt im Container, und der
     # Host-Port 8000 gehoert Docker Desktops Port-Weiterleitung - ein Force-Kill
     # darauf wuerde Docker Desktop selbst beenden. "docker compose down" stoppt
@@ -315,22 +332,36 @@ if ($WithGraphView -and -not $NoUi) {
 }
 
 # --- 7) Oberflaeche ---------------------------------------------------------
-# Die eigene Auswahl-Oberflaeche liegt in frontend/ (PySide6, ADR-0004) und
-# startet mit -WithUi als Host-Prozess in der Env F+E, nicht im Container.
-# MP-Lite ist der Oviedo-Prototyp und startet nur mit -WithMpLite. Ohne Schalter
-# oeffnet der Start weiterhin nichts.
+# Die eigene Auswahl-Oberflaeche (frontend/, PySide6, ADR-0004) oeffnet sich
+# STANDARDMAESSIG - und zwar erst hier, also nachdem Docker, Fuseki und der
+# Mediator oben sind und der Demo-Scope geladen wurde. Sie laeuft als
+# Host-Prozess in der Env F+E, nicht im Container.
+#
+# Die beiden BROWSER-Oberflaechen bleiben Opt-in: MP-Lite (Bokeh) ueber
+# -WithMpLite, die pyvis-Ansicht ueber -WithGraphView. -NoUi unterdrueckt alles.
 if ($NoUi -and ($WithUi -or $WithMpLite -or $WithGraphView)) {
     Info "   Hinweis: -NoUi schlaegt -WithUi/-WithMpLite/-WithGraphView - es wird keine Oberflaeche gestartet."
-} elseif ($NoUi) {
-    Info "   Hinweis: -NoUi ist nicht mehr noetig - der Start oeffnet ohnehin keine Oberflaeche."
+} elseif ($WithUi) {
+    Info "   Hinweis: -WithUi ist nicht mehr noetig - die Oberflaeche oeffnet sich ohnehin."
 }
 
-if ($WithUi -and -not $NoUi) {
+$explorerRunning = $false
+if (-not $NoUi) {
     Step "Starte Auswahl-Oberflaeche (frontend/app.py) ..."
     $env:MEDIATOR_URL = "http://localhost:$MediatorPort"
-    python frontend\app.py
-    if ($LASTEXITCODE -ne 0) { Fail "Oberflaeche beendet sich mit Fehler (Dienste laufen weiter)." }
-    else { Good "Oberflaeche beendet." }
+    # Abgekoppelt starten (nicht blockierend), damit dieses Fenster frei bleibt
+    # und danach noch die Uebersicht ausgegeben werden kann.
+    $explorer = Start-Process -FilePath "python" -ArgumentList "frontend\app.py" `
+                              -WorkingDirectory $PSScriptRoot -PassThru
+    Start-Sleep -Seconds 3
+    if ($explorer.HasExited) {
+        Fail "Oberflaeche konnte nicht starten (Exit $($explorer.ExitCode))."
+        Info "            Ursache sehen:  python frontend\app.py"
+        Info "            Haeufig: pyside6 fehlt oder kam aus pip statt conda (siehe frontend/README.md)."
+    } else {
+        $explorerRunning = $true
+        Good "Oberflaeche laeuft (PID $($explorer.Id)) - Mediator: $env:MEDIATOR_URL"
+    }
 }
 
 if ($WithMpLite -and -not $NoUi) {
@@ -345,7 +376,8 @@ if ($WithMpLite -and -not $NoUi) {
     Stop-Process -Id $PID -Force
 }
 
-# Standardfall: keine Oberflaeche. Dienste laufen weiter, kurze Uebersicht.
+# Abschluss: kurze Uebersicht. Dienste und Explorer laufen weiter, dieses
+# Fenster wird frei. Herunterfahren uebernimmt stop_all.ps1.
 Write-Host ""
 Info "==================  Fertig - Dienste laufen  =================="
 Info "  Fuseki:            http://localhost:3030            (Login admin/admin)"
@@ -353,7 +385,11 @@ Info "  Mediator:          http://localhost:$MediatorPort/health   und   /docs"
 Info ""
 Info "  Auswahl ausfuehren:  python scripts\run_selection.py <selection.json>"
 Info "  Auswahlen ansehen:   wissensnetz selections"
-Info "  Oberflaeche:         .\start_all.ps1 -WithUi        (oder: python frontend\app.py)"
+if ($explorerRunning) {
+    Info "  Oberflaeche:         laeuft bereits   (neu starten: python frontend\app.py)"
+} else {
+    Info "  Oberflaeche:         nicht gestartet  (starten: python frontend\app.py)"
+}
 Info "  MP-Lite bei Bedarf:  .\start_all.ps1 -WithMpLite"
 Info "  Herunterfahren:      .\stop_all.ps1"
 exit 0
