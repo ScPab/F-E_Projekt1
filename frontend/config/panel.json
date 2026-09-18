@@ -1,0 +1,34 @@
+{
+  "_hinweis": "Genau diese elf Attribute, weil nur sie in KNOWN_ATTRIBUTES (mediator/app/semantic/mapping.py) hinterlegt sind. NICHT erweitern um Felder aus den Knoten Exposure, Treatment, Family History, Follow Up oder Pathology Detail (vollstaendige Liste: wissensnetz/GDC_TCGA_Klinische_Datenfelder.md): resolve_attribute() im Mediator nimmt bei einem Namen ohne Punkt 'diagnoses.<name>' an und loest sie damit falsch auf.",
+  "_cohorts_hinweis": "Nur Rueckfall, falls der Import von wissensnetz.cohorts.COHORT_PROJECT_IDS scheitert. Fuehrend ist dort die kanonische Oviedo-Reihenfolge.",
+
+  "sources": [
+    {"value": "gdc", "label": "GDC / TCGA", "enabled": true}
+  ],
+
+  "modalities": [
+    {"value": "gene_expression", "label": "Genexpression", "enabled": true},
+    {"value": "dna_methylation", "label": "DNA-Methylierung", "enabled": false,
+     "note": "noch nicht angebunden"},
+    {"value": "mutations", "label": "Mutationen", "enabled": false,
+     "note": "noch nicht angebunden"}
+  ],
+
+  "attribute_groups": [
+    {"node": "Demographic", "attributes": ["gender", "race", "ethnicity", "vital_status"]},
+    {"node": "Diagnosis", "attributes": ["primary_diagnosis", "age_at_diagnosis",
+      "morphology", "site_of_resection_or_biopsy", "tumor_stage", "has_metastasis"]},
+    {"node": "Sample", "attributes": ["sample_type"]}
+  ],
+
+  "default_attributes": ["gender", "primary_diagnosis"],
+
+  "cohorts": [
+    "TCGA-ACC", "TCGA-CHOL", "TCGA-BLCA", "TCGA-BRCA", "TCGA-CESC", "TCGA-COAD",
+    "TCGA-UCEC", "TCGA-ESCA", "TCGA-GBM", "TCGA-HNSC", "TCGA-KICH", "TCGA-KIRC",
+    "TCGA-KIRP", "TCGA-DLBC", "TCGA-LIHC", "TCGA-LGG", "TCGA-LUAD", "TCGA-LUSC",
+    "TCGA-SKCM", "TCGA-MESO", "TCGA-UVM", "TCGA-OV", "TCGA-PAAD", "TCGA-PCPG",
+    "TCGA-PRAD", "TCGA-READ", "TCGA-SARC", "TCGA-STAD", "TCGA-TGCT", "TCGA-THYM",
+    "TCGA-THCA", "TCGA-UCS"
+  ]
+}
