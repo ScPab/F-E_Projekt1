@@ -9,6 +9,8 @@ gilt damit fuer alle Fenster.
 
 from __future__ import annotations
 
+from PySide6.QtGui import QColor, QPalette
+
 # --- Farben ----------------------------------------------------------------
 HEADER_BG = "#101827"
 HEADER_TEXT = "#ffffff"
@@ -118,15 +120,55 @@ QComboBox:disabled, QSpinBox:disabled {{
     color: {TEXT_MUTED};
     background-color: {SURFACE};
 }}
+/* Aufklappliste einer QComboBox. Ohne diese Regeln erbt das Popup unter
+   Windows 11 die dunkle Systempalette und wird mit unserer dunklen Schriftfarbe
+   unlesbar. Deshalb Hintergrund UND Textfarbe hier explizit, je Zustand. */
 QComboBox QAbstractItemView {{
     background-color: {WINDOW_BG};
+    color: {TEXT};
     border: {BORDER_WIDTH}px solid {BORDER};
     selection-background-color: {ACCENT_BG};
     selection-color: {TEXT};
     outline: none;
 }}
+QComboBox QAbstractItemView::item {{
+    background-color: {WINDOW_BG};
+    color: {TEXT};
+    padding: 4px 8px;
+}}
+QComboBox QAbstractItemView::item:selected,
+QComboBox QAbstractItemView::item:hover {{
+    background-color: {ACCENT_BG};
+    color: {TEXT};
+}}
+QComboBox QAbstractItemView::item:disabled {{
+    background-color: {WINDOW_BG};
+    color: {TEXT_MUTED};
+}}
 QListWidget::item {{
     padding: 3px 2px;
+}}
+/* Haekchen: der Fusion-Stil zeichnet das Kaestchen sonst als dunkle Flaeche,
+   weil QWidget oben nur Hintergrund und Textfarbe setzt. Deshalb hier
+   ausdruecklich, je Zustand. */
+QListWidget::indicator {{
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border: {BORDER_WIDTH}px solid {TEXT_MUTED};
+    border-radius: 3px;
+    background-color: {WINDOW_BG};
+}}
+QListWidget::indicator:hover {{
+    border-color: {ACCENT};
+}}
+QListWidget::indicator:checked {{
+    background-color: {ACCENT};
+    border-color: {ACCENT};
+}}
+QListWidget::indicator:disabled {{
+    background-color: {SURFACE};
+    border-color: {BORDER};
 }}
 QListWidget::item:selected {{
     background-color: {ACCENT_BG};
@@ -187,6 +229,43 @@ _STATE_COLORS = {
     "warning": (WARNING, WARNING_BG),
     "error": (ERROR, ERROR_BG),
 }
+
+
+def palette() -> QPalette:
+    """Helle Palette, unabhaengig vom Windows-Hell/Dunkel-Modus.
+
+    Das Stylesheet allein genuegt nicht: Aufklapplisten und andere Popups
+    bekommen unter Windows 11 eigene Fenster und erben dort die dunkle
+    Systempalette. Zusammen mit ``setStyle("Fusion")`` in ``app.py`` ist die
+    Darstellung damit auf jedem Rechner dieselbe.
+    """
+    pal = QPalette()
+    text, muted = QColor(TEXT), QColor(TEXT_MUTED)
+    window, base, surface = QColor(WINDOW_BG), QColor(WINDOW_BG), QColor(SURFACE)
+    accent, on_accent = QColor(ACCENT), QColor(HEADER_TEXT)
+
+    for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+        pal.setColor(group, QPalette.ColorRole.Window, window)
+        pal.setColor(group, QPalette.ColorRole.WindowText, text)
+        pal.setColor(group, QPalette.ColorRole.Base, base)
+        pal.setColor(group, QPalette.ColorRole.AlternateBase, surface)
+        pal.setColor(group, QPalette.ColorRole.Text, text)
+        pal.setColor(group, QPalette.ColorRole.Button, window)
+        pal.setColor(group, QPalette.ColorRole.ButtonText, text)
+        pal.setColor(group, QPalette.ColorRole.ToolTipBase, surface)
+        pal.setColor(group, QPalette.ColorRole.ToolTipText, text)
+        pal.setColor(group, QPalette.ColorRole.Highlight, accent)
+        pal.setColor(group, QPalette.ColorRole.HighlightedText, on_accent)
+        pal.setColor(group, QPalette.ColorRole.PlaceholderText, muted)
+
+    disabled = QPalette.ColorGroup.Disabled
+    pal.setColor(disabled, QPalette.ColorRole.Window, window)
+    pal.setColor(disabled, QPalette.ColorRole.Base, window)
+    pal.setColor(disabled, QPalette.ColorRole.Button, surface)
+    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text,
+                 QPalette.ColorRole.ButtonText, QPalette.ColorRole.HighlightedText):
+        pal.setColor(disabled, role, muted)
+    return pal
 
 
 def status_style(state: str) -> str:

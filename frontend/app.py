@@ -33,6 +33,11 @@ from main_window import MainWindow  # noqa: E402
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("DataBridge Explorer")
+    # Fusion statt des Windows-Stils: der native Stil zieht unter Windows 11 die
+    # System-Hell/Dunkel-Einstellung mit, wodurch Aufklapplisten schwarz wurden
+    # und mit unserer dunklen Schriftfarbe unlesbar waren.
+    app.setStyle("Fusion")
+    app.setPalette(theme.palette())
     # Stylesheet einmal auf die QApplication: alle Farben kommen aus theme.py.
     app.setStyleSheet(theme.stylesheet())
 
