@@ -106,6 +106,34 @@ class RowDelegate(QStyledItemDelegate):
         return QSize(option.rect.width(), theme.ROW_HEIGHT)
 
 
+class PopupCard(QFrame):
+    """Die aufklappende Karte — malt ihren Hintergrund selbst.
+
+    Noetig, weil dieses Top-Level-Fenster unter Windows 11 nichts fuellt, was
+    Qt fuellen muesste: weder die Stylesheet-Hintergruende noch die Palette
+    kamen an, die Karte blieb schwarz und der dunkle Text darauf unlesbar.
+    Raender und Text wurden dagegen gezeichnet — also malen wir die Flaeche
+    ebenso ausdruecklich, wie :class:`RowDelegate` es fuer die Zeilen tut.
+    Nachgestellt mit drei Varianten (ohne border-radius, nur Palette,
+    Transluzenz abgeschaltet); keine davon half.
+    """
+
+    def paintEvent(self, event) -> None:  # noqa: D102
+        painter = QPainter(self)
+        # ERST die ganze Flaeche fuellen, DANN den runden Rahmen daraufmalen.
+        # Wuerde nur das abgerundete Rechteck gefuellt, blieben an den Ecken
+        # schwarze Zwickel stehen: was hier nicht gemalt wird, fuellt niemand,
+        # und Transluzenz hat daran nichts geaendert.
+        painter.fillRect(self.rect(), theme.qcolor(theme.WINDOW_BG))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(theme.qcolor(theme.BORDER))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1),
+                                theme.RADIUS, theme.RADIUS)
+        painter.end()
+        super().paintEvent(event)
+
+
 class SearchableSelect(QWidget):
     """Schaltflaeche mit aufklappbarer, durchsuchbarer Liste.
 
@@ -129,7 +157,7 @@ class SearchableSelect(QWidget):
         layout.addWidget(self._button)
 
         # Qt.Popup: schliesst sich beim Klick daneben und bei Escape von selbst.
-        self._popup = QFrame(self, Qt.WindowType.Popup)
+        self._popup = PopupCard(self, Qt.WindowType.Popup)
         self._popup.setObjectName(theme.OBJ_POPUP)
         popup_layout = QVBoxLayout(self._popup)
         popup_layout.setContentsMargins(8, 8, 8, 8)

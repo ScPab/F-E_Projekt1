@@ -121,6 +121,15 @@ die System-Hell/Dunkel-Einstellung mit, und Aufklapplisten werden schwarz
 hinterlegt — mit unserer dunklen Schriftfarbe unlesbar. Aus demselben Grund
 zeichnet das Stylesheet die Häkchen (`QListWidget::indicator`) ausdrücklich.
 
+**Top-Level-Fenster füllen unter Windows 11 gar keinen Hintergrund.** Die
+aufklappende Karte der Kohortenauswahl ist so ein Fenster: weder Stylesheet
+noch Palette kamen dort an, sie blieb schwarz mit dunklem Text. Ränder und Text
+wurden dagegen gezeichnet. `PopupCard.paintEvent` malt die Fläche deshalb
+selbst — erst die ganze Fensterfläche füllen, dann den runden Rahmen darauf,
+sonst bleiben an den Ecken schwarze Zwickel. Wer dort etwas ändert, prüft das
+mit einer **Bildschirmaufnahme**, nicht mit `widget.grab()`: letzteres malt den
+Fensterhintergrund nicht mit und zeigt die Karte fälschlich weiß.
+
 **Das Panel führt genau die elf Attribute aus `KNOWN_ATTRIBUTES`**
 (`mediator/app/semantic/mapping.py`). Die vollständige GDC-Feldliste steht in
 [`../wissensnetz/GDC_TCGA_Klinische_Datenfelder.md`](../wissensnetz/GDC_TCGA_Klinische_Datenfelder.md),

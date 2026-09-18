@@ -168,10 +168,11 @@ QPushButton#{OBJ_SELECT_BUTTON} {{
 QPushButton#{OBJ_SELECT_BUTTON}:hover {{
     border-color: {ACCENT};
 }}
+/* Flaeche und Rahmen malt PopupCard.paintEvent selbst (siehe dort, warum);
+   hier deshalb nichts als "nicht dazwischenmalen". */
 QFrame#{OBJ_POPUP} {{
-    background-color: {WINDOW_BG};
-    border: {BORDER_WIDTH}px solid {BORDER};
-    border-radius: {RADIUS}px;
+    background: transparent;
+    border: none;
 }}
 
 /* --- Suchfeld ueber einer Auswahlliste ---------------------------------- */
@@ -190,8 +191,10 @@ QLineEdit#{OBJ_SEARCH}:focus {{
 /* --- Zeilen in den Auswahllisten --------------------------------------- */
 /* Abgerundete, grosszuegige Zeilen statt der Qt-Standardleiste: die
    Auswahlhervorhebung soll wie eine Karte wirken, nicht wie ein Balken. */
+/* Durchscheinend: die Flaeche darunter malt PopupCard. Ein eigener
+   Hintergrund wuerde im Popup-Fenster ohnehin nicht gefuellt. */
 QListWidget#{OBJ_PICKER} {{
-    background-color: {WINDOW_BG};
+    background: transparent;
     border: none;
     outline: none;
 }}
