@@ -22,9 +22,7 @@ bleiben Opt-in. Das Skript beendet sich anschließend; Dienste und Explorer lauf
 weiter.
 
 ```powershell
-conda activate F+E
-cd C:\Dev\F+E\F-E_Projekt1
-powershell -ExecutionPolicy Bypass -File .\start_all.ps1
+powershell .\start_all.ps1
 ```
 
 Was das Skript der Reihe nach macht: (1) Abhängigkeiten sicherstellen →
