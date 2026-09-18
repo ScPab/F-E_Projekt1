@@ -25,8 +25,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMenu,
     QPlainTextEdit,
@@ -42,18 +40,17 @@ from PySide6.QtWidgets import (
 import mediator_client as mc
 import theme
 import worker
-from searchable_select import SearchableSelect
+from searchable_select import KIND_HEADER, MultiSelect, SearchableSelect
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "panel.json"
 
 # Wie viele Turtle-Zeilen als Ausschnitt angehaengt werden.
 TURTLE_PREVIEW_LINES = 40
 
-# Rolle, unter der ein Listeneintrag seinen Attributnamen traegt (Gruppen-
-# ueberschriften haben keinen).
-_ATTR_ROLE = Qt.ItemDataRole.UserRole
-# Rolle fuer den Quellen-Wert eines Listeneintrags (gdc, ena, geo).
-_SOURCE_ROLE = Qt.ItemDataRole.UserRole
+# Wie hoch die aufgeklappte Attributkarte hoechstens wird. Elf Attribute und
+# drei Gruppenueberschriften passen damit ohne Scrollen hinein und bleiben auch
+# auf einem 768 Pixel hohen Bildschirm unter der Schaltflaeche sichtbar.
+_ATTRIBUTE_CARD_HEIGHT = 520
 
 
 
@@ -335,25 +332,33 @@ class MainWindow(QMainWindow):
         self._cohort_select = SearchableSelect(self._cohort_entries())
 
         self._modality_box = QComboBox()
-        self._attribute_list = QListWidget()
-        self._attribute_list.setMinimumHeight(240)
-        self._attribute_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Datenquellen sind mehrfach waehlbar: je Haekchen eine eigene Ebene.
-        self._source_list = QListWidget()
-        self._source_list.setMaximumHeight(110)
-        # Lange Hinweise sollen nicht waagerecht scrollen, sondern abschneiden;
-        # der vollstaendige Text steht im Tooltip.
-        self._source_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._source_list.setTextElideMode(Qt.TextElideMode.ElideRight)
+
+        # Obj und Datenquelle klappen ebenso auf wie die Kohorte, sind aber
+        # Haekchenlisten: dauerhaft sichtbar haben sie das Panel gefuellt,
+        # obwohl vier der fuenf Zeilen selten angefasst werden — und die
+        # Attributliste war in ihren 240 Pixeln immer abgeschnitten.
+        # Ein Suchfeld nur bei den Attributen; drei Datenquellen brauchen keines.
+        self._attribute_select = MultiSelect(
+            self._attribute_entries(),
+            mit_suche=True,
+            platzhalter="Attribut oder Knoten suchen, z. B. stage …",
+            leer_text="Kein Attribut passt",
+            max_hoehe=_ATTRIBUTE_CARD_HEIGHT,
+        )
+        self._source_select = MultiSelect(self._source_entries())
+
         self._size_spin = QSpinBox()
         self._size_spin.setRange(mc.SIZE_MIN, mc.SIZE_MAX)
         self._size_spin.setValue(20)
 
+        # Alle fuenf Zeilen sind einzeilig. Was das an Platz freimacht, bekommt
+        # die Anzeigeflaeche links ueber den Splitter — nicht ein wachsendes
+        # Panel; deshalb steht unten ein Dehnfeld und keine Zeile dehnt sich.
         for label, widgets, stretch in (
             ("Krebs", (self._cohort_select,), 0),
             ("Var", (self._modality_box,), 0),
-            ("Obj", (self._attribute_list,), 3),
-            ("Datenquelle", (self._source_list,), 0),
+            ("Obj", (self._attribute_select,), 0),
+            ("Datenquelle", (self._source_select,), 0),
             ("Proben", (self._size_spin,), 0),
         ):
             caption = QLabel(label)
@@ -365,7 +370,7 @@ class MainWindow(QMainWindow):
                 layout.addWidget(widget, stretch=stretch if i == len(widgets) - 1 else 0)
             layout.addSpacing(10)
 
-        layout.addStretch(0)
+        layout.addStretch(1)
         return panel
 
     # -- Panel befuellen ----------------------------------------------------
@@ -373,8 +378,6 @@ class MainWindow(QMainWindow):
         self._cohort_select.set_value("TCGA-BRCA")
 
         self._fill_choice_box(self._modality_box, self._config.get("modalities") or [])
-        self._fill_sources()
-        self._fill_attributes()
 
     @staticmethod
     def _fill_choice_box(box: QComboBox, entries: list[dict[str, Any]]) -> None:
@@ -427,65 +430,46 @@ class MainWindow(QMainWindow):
         """Die gewaehlte ``project_id``, oder '' wenn nichts ausgewaehlt ist."""
         return self._cohort_select.current_value()
 
-    def _fill_sources(self) -> None:
-        """Datenquellen als Haekchen-Liste (Mehrfachauswahl).
+    def _source_entries(self) -> list[dict[str, Any]]:
+        """Die Datenquellen als Eintraege fuer :class:`MultiSelect`.
 
         Nicht angebundene Quellen stehen sichtbar drin, sind aber nicht
-        anhakbar und tragen den Grund als Text und Tooltip — ehrliche Luecke
-        statt unsichtbarer Grenze. ``POST /selection/*`` kennt heute nur
-        ``gdc``; ENA und GEO haben eigene Endpunkte, sind aber nicht an die
-        Auswahl angebunden (siehe ``config/panel.json``).
+        anhakbar und tragen den Grund als Hinweis rechts in der Zeile und als
+        Tooltip — ehrliche Luecke statt unsichtbarer Grenze. ``POST /selection/*``
+        kennt heute nur ``gdc``; ENA und GEO haben eigene Endpunkte, sind aber
+        nicht an die Auswahl angebunden (siehe ``config/panel.json``).
         """
         preselected = set(self._config.get("default_sources") or [])
+        entries: list[dict[str, Any]] = []
         for entry in self._config.get("sources") or []:
-            value = entry.get("value")
+            value = entry.get("value") or ""
             enabled = bool(entry.get("enabled", True))
-            note = entry.get("note")
-            label = entry.get("label", value or "")
-            if not enabled and note:
-                label = f"{label}  ({note})"
+            entries.append({
+                "value": value,
+                "label": entry.get("label") or value,
+                # Der kurze Hinweis steht rechts in der Zeile, der ausfuehrliche
+                # Grund im Tooltip - das Panel ist nur rund 360 Pixel breit.
+                "code": "" if enabled else (entry.get("note") or ""),
+                "enabled": enabled,
+                "checked": enabled and value in preselected,
+                "tooltip": entry.get("detail") or entry.get("note") or "",
+                "search": value,
+            })
+        return entries
 
-            item = QListWidgetItem(label)
-            item.setData(_SOURCE_ROLE, value)
-            if enabled:
-                item.setFlags(
-                    Qt.ItemFlag.ItemIsEnabled
-                    | Qt.ItemFlag.ItemIsSelectable
-                    | Qt.ItemFlag.ItemIsUserCheckable
-                )
-                item.setCheckState(
-                    Qt.CheckState.Checked if value in preselected
-                    else Qt.CheckState.Unchecked
-                )
-            else:
-                item.setFlags(Qt.ItemFlag.NoItemFlags)
-                item.setCheckState(Qt.CheckState.Unchecked)
-            # Der ausfuehrliche Grund gehoert in den Tooltip, nicht in die
-            # Beschriftung - das Panel ist nur rund 360 Pixel breit.
-            item.setToolTip(entry.get("detail") or note or "")
-            self._source_list.addItem(item)
+    def _attribute_entries(self) -> list[dict[str, Any]]:
+        """Die Attribute als Eintraege fuer :class:`MultiSelect`, nach Knoten
+        gruppiert.
 
-    def _fill_attributes(self) -> None:
-        """Attribute nach Knoten gruppiert, mit Haekchen je Eintrag.
-
-        Die Gruppenueberschriften sind nicht anwaehlbare Eintraege in
-        gedaempfter Farbe — sie tragen keinen Attributnamen und landen deshalb
-        nie im Auftrag.
+        Die Gruppenueberschriften tragen keinen Attributnamen und landen deshalb
+        nie im Auftrag. Gesucht wird ueber Attributname **und** Knoten: ``diag``
+        findet die Diagnose-Gruppe, ``stage`` findet ``tumor_stage``.
         """
-        from PySide6.QtGui import QBrush, QColor, QFont
-
-        muted = QBrush(QColor(theme.TEXT_MUTED))
         preselected = set(self._config.get("default_attributes") or [])
-
+        entries: list[dict[str, Any]] = []
         for group in self._config.get("attribute_groups") or []:
-            header = QListWidgetItem(group.get("node", ""))
-            header.setFlags(Qt.ItemFlag.NoItemFlags)
-            header.setForeground(muted)
-            font = QFont()
-            font.setBold(True)
-            header.setFont(font)
-            self._attribute_list.addItem(header)
-
+            knoten = group.get("node") or ""
+            entries.append({"kind": KIND_HEADER, "label": knoten})
             for eintrag in group.get("attributes") or []:
                 # Ein Eintrag ist entweder ein blosser Name oder {value, label}.
                 # Die zweite Form braucht es, wenn der an den Mediator gesendete
@@ -498,39 +482,27 @@ class MainWindow(QMainWindow):
                     attribute = beschriftung = eintrag
                 if not attribute:
                     continue
-                item = QListWidgetItem(f"    {beschriftung}")
-                item.setData(_ATTR_ROLE, attribute)
-                item.setFlags(
-                    Qt.ItemFlag.ItemIsEnabled
-                    | Qt.ItemFlag.ItemIsSelectable
-                    | Qt.ItemFlag.ItemIsUserCheckable
-                )
-                item.setCheckState(
-                    Qt.CheckState.Checked if attribute in preselected
-                    else Qt.CheckState.Unchecked
-                )
-                self._attribute_list.addItem(item)
+                entries.append({
+                    "value": attribute,
+                    "label": beschriftung,
+                    "checked": attribute in preselected,
+                    "tooltip": f"{knoten}.{attribute}" if knoten else attribute,
+                    "search": f"{attribute} {beschriftung} {knoten}",
+                })
+        return entries
 
     # -- Auswahl auslesen ---------------------------------------------------
     def checked_attributes(self) -> list[str]:
-        """Die angehakten Attributnamen in Panel-Reihenfolge."""
-        result = []
-        for row in range(self._attribute_list.count()):
-            item = self._attribute_list.item(row)
-            name = item.data(_ATTR_ROLE)
-            if name and item.checkState() == Qt.CheckState.Checked:
-                result.append(name)
-        return result
+        """Die angehakten Attributnamen in Panel-Reihenfolge.
+
+        Reihenfolge, nicht Klick-Reihenfolge: der Client reicht sie unveraendert
+        an den Mediator durch (siehe ``MultiSelect.checked_values``).
+        """
+        return self._attribute_select.checked_values()
 
     def checked_sources(self) -> list[str]:
         """Die angehakten Datenquellen in Panel-Reihenfolge."""
-        result = []
-        for row in range(self._source_list.count()):
-            item = self._source_list.item(row)
-            value = item.data(_SOURCE_ROLE)
-            if value and item.checkState() == Qt.CheckState.Checked:
-                result.append(value)
-        return result
+        return self._source_select.checked_values()
 
     def current_payload(self) -> dict[str, Any]:
         return mc.build_selection_request(
