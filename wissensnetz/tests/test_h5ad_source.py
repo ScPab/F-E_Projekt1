@@ -38,7 +38,7 @@ def _tiny_adata() -> "ad.AnnData":
             "submitter_id": ["TCGA-AA-0001", "TCGA-AA-0002", "TCGA-AA-0003"],
             "project_id": ["TCGA-BRCA", "TCGA-BRCA", "TCGA-PAAD"],
             "race": ["white", "asian", "white"],
-            "gender": ["female", "male", "female"],
+            "sex_at_birth": ["female", "male", "female"],
             "ethnicity": [None, "not hispanic or latino", None],
             "vital_status": ["Alive", "Dead", "Alive"],
             "tumor_stage": ["Stage I", "Stage II", "Stage III"],
@@ -114,7 +114,7 @@ def test_points_from_obs_columns_and_values() -> None:
     row0 = pts[0]
     # alle Oviedo-Felder + sample_id + tumor vorhanden
     for col in (
-        "sample_type", "submitter_id", "project_id", "race", "gender", "ethnicity",
+        "sample_type", "submitter_id", "project_id", "race", "sex_at_birth", "ethnicity",
         "vital_status", "tumor_stage", "morphology", "site_of_resection_or_biopsy",
         "has_metastasis", "primary_diagnosis", "age_at_diagnosis", "cancer",
         "sample_id", "tumor",

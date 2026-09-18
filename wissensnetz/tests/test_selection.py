@@ -273,7 +273,7 @@ def test_cases_for_selection_has_the_same_shape_as_all_cases(two_selections) -> 
     # Einwertige Felder müssen identisch sein; bei mehreren Diagnosen je Fall
     # ist "erste Diagnose gewinnt" nicht über beide Abfragen hinweg garantiert.
     single_valued = (
-        "submitter_id", "project_id", "gender", "race", "ethnicity", "vital_status",
+        "submitter_id", "project_id", "sex_at_birth", "race", "ethnicity", "vital_status",
     )
     for c in limited:
         reference = full[c["case_iri"]]
@@ -289,7 +289,7 @@ def test_cases_for_selection_is_tolerant(two_selections) -> None:
     assert enrichment.cases_for_selection(store, "gibt-es-nicht") == []
     for c in enrichment.cases_for_selection(store, SEL_A):
         assert c["case_iri"]
-        assert "gender" in c and "tumor_stage" in c
+        assert "sex_at_birth" in c and "tumor_stage" in c
 
 
 def test_manifest_case_iris_point_into_the_knowledge_base(two_selections) -> None:

@@ -31,7 +31,7 @@ t:B rdfs:subClassOf t:A .
 def test_case_context_by_submitter_id(loaded_store: GraphStore) -> None:
     ctx = e.case_context(loaded_store, "TCGA-A1-A0SB")
     assert ctx["project_id"] == "TCGA-BRCA"
-    assert ctx["gender"] == "female"
+    assert ctx["sex_at_birth"] == "female"
     assert ctx["submitter_id"] == "TCGA-A1-A0SB"
     assert len(ctx["diagnoses"]) == 1
     diag = ctx["diagnoses"][0]
@@ -66,7 +66,7 @@ def test_all_cases_contains_fixture_cases(loaded_store: GraphStore) -> None:
     assert "TCGA-A1-A0SB" in by_sid
     brca = by_sid["TCGA-A1-A0SB"]
     assert brca["project_id"] == "TCGA-BRCA"
-    assert brca["gender"] == "female"
+    assert brca["sex_at_birth"] == "female"
     assert brca["primary_diagnosis"] == "Infiltrating duct carcinoma, NOS"
     # Neue Aufgabe-5-Felder als Keys vorhanden (Werte dürfen None sein).
     for key in ("race", "ethnicity", "vital_status", "tumor_stage", "morphology",
@@ -134,7 +134,7 @@ def test_case_context_by_iri(loaded_store: GraphStore) -> None:
     iri = "http://databridge.hka/instance/case/44444444-4444-4444-8444-444444444444"
     ctx = e.case_context(loaded_store, iri)
     assert ctx["case_iri"] == iri
-    assert ctx["gender"] == "male"
+    assert ctx["sex_at_birth"] == "male"
     assert ctx["diagnoses"][0]["label"] == "Adenocarcinoma, NOS"
 
 
