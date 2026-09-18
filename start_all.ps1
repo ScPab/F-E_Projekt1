@@ -14,13 +14,13 @@
          vorgeladen. Vorlage: scripts/selection_demo.json
       6b. NUR mit -WithGraphView: Graph-Visualisierung (pyvis, graph_view.html)
           erzeugen und oeffnen
-      7. NUR mit -WithMpLite: Oviedo-Prototyp MP-lite (Bokeh) starten
+      7. NUR mit -WithUi: eigene Auswahl-Oberflaeche (frontend/, PySide6) starten,
+         bzw. NUR mit -WithMpLite: Oviedo-Prototyp MP-lite (Bokeh)
 
-    Der Standardstart oeffnet KEIN Browser-Fenster. Er bringt nur die Dienste
-    hoch, fuehrt den Demo-Scope aus, gibt eine Uebersicht aus und beendet sich;
-    die Dienste laufen weiter. Grund: die eigene Auswahl-Oberflaeche entsteht
-    gerade unter frontend/ (ADR-0003 Abschnitt 6). MP-Lite ist der Oviedo-
-    Prototyp, die pyvis-Ansicht ein Diagnosewerkzeug - beide sind Opt-in.
+    Der Standardstart oeffnet KEINE Oberflaeche. Er bringt nur die Dienste hoch,
+    fuehrt den Demo-Scope aus, gibt eine Uebersicht aus und beendet sich; die
+    Dienste laufen weiter. Die eigene Auswahl-Oberflaeche (-WithUi), MP-Lite
+    (-WithMpLite) und die pyvis-Ansicht (-WithGraphView) sind alle Opt-in.
 
     Schritt 6 kennt drei Betriebsarten:
       Standard      ein Scope ueber /selection/preview (-DemoCohort/-DemoSize)
@@ -59,6 +59,9 @@
     # nur die Dienste, leerer Store, keine Oberflaeche
     .\start_all.ps1 -SkipLoad
 .EXAMPLE
+    # eigene Auswahl-Oberflaeche mitstarten (PySide6-Fenster, ADR-0004)
+    .\start_all.ps1 -WithUi
+.EXAMPLE
     # Oviedo-Prototyp MP-lite mitstarten (Bokeh im Vordergrund, Browser oeffnet sich)
     .\start_all.ps1 -WithMpLite
 .EXAMPLE
@@ -85,7 +88,8 @@ param(
     [switch]$DemoGenerate,              # /selection/generate statt /preview (mit .h5ad)
     [switch]$FullLoad,                  # ALTWEG vor ADR-0003 (global vorladen)
     [switch]$WithMpLite,                # Oviedo-Prototyp MP-Lite starten (Bokeh, oeffnet Browser)
-    [switch]$WithGraphView              # pyvis-Diagnoseansicht erzeugen und oeffnen
+    [switch]$WithGraphView,             # pyvis-Diagnoseansicht erzeugen und oeffnen
+    [switch]$WithUi                     # eigene Auswahl-Oberflaeche starten (frontend/, ADR-0004)
 )
 
 $ErrorActionPreference = "Stop"
@@ -311,13 +315,22 @@ if ($WithGraphView -and -not $NoUi) {
 }
 
 # --- 7) Oberflaeche ---------------------------------------------------------
-# Die eigene Auswahl-Oberflaeche (frontend/, ADR-0003 Abschnitt 6) existiert noch
-# nicht und wird hier eingehaengt, sobald sie da ist. MP-Lite ist der
-# Oviedo-Prototyp und startet nur noch mit -WithMpLite.
-if ($NoUi -and ($WithMpLite -or $WithGraphView)) {
-    Info "   Hinweis: -NoUi schlaegt -WithMpLite/-WithGraphView - es wird keine Oberflaeche gestartet."
+# Die eigene Auswahl-Oberflaeche liegt in frontend/ (PySide6, ADR-0004) und
+# startet mit -WithUi als Host-Prozess in der Env F+E, nicht im Container.
+# MP-Lite ist der Oviedo-Prototyp und startet nur mit -WithMpLite. Ohne Schalter
+# oeffnet der Start weiterhin nichts.
+if ($NoUi -and ($WithUi -or $WithMpLite -or $WithGraphView)) {
+    Info "   Hinweis: -NoUi schlaegt -WithUi/-WithMpLite/-WithGraphView - es wird keine Oberflaeche gestartet."
 } elseif ($NoUi) {
     Info "   Hinweis: -NoUi ist nicht mehr noetig - der Start oeffnet ohnehin keine Oberflaeche."
+}
+
+if ($WithUi -and -not $NoUi) {
+    Step "Starte Auswahl-Oberflaeche (frontend/app.py) ..."
+    $env:MEDIATOR_URL = "http://localhost:$MediatorPort"
+    python frontend\app.py
+    if ($LASTEXITCODE -ne 0) { Fail "Oberflaeche beendet sich mit Fehler (Dienste laufen weiter)." }
+    else { Good "Oberflaeche beendet." }
 }
 
 if ($WithMpLite -and -not $NoUi) {
@@ -340,6 +353,7 @@ Info "  Mediator:          http://localhost:$MediatorPort/health   und   /docs"
 Info ""
 Info "  Auswahl ausfuehren:  python scripts\run_selection.py <selection.json>"
 Info "  Auswahlen ansehen:   wissensnetz selections"
+Info "  Oberflaeche:         .\start_all.ps1 -WithUi        (oder: python frontend\app.py)"
 Info "  MP-Lite bei Bedarf:  .\start_all.ps1 -WithMpLite"
 Info "  Herunterfahren:      .\stop_all.ps1"
 exit 0
