@@ -31,15 +31,20 @@ Aufrufen"). Ohne Fuseki schlägt der Aufruf mediator-seitig fehl.
 ## Start
 
 ```powershell
-.\start_all.ps1 -NoUi        # Dienste hochfahren (Fuseki + Mediator)
-python frontend\app.py       # Fenster öffnen
+.\start_all.ps1
 ```
 
-Oder in einem Zug:
+Das genügt: Docker, Fuseki und Mediator kommen hoch, ein Demo-Scope wird
+geladen, **danach** öffnet sich das Fenster. Es startet abgekoppelt, das
+Terminal bleibt frei, und `.\stop_all.ps1` schließt es wieder mit.
+
+Einzeln starten, wenn die Dienste schon laufen:
 
 ```powershell
-.\start_all.ps1 -WithUi
+python frontend\app.py
 ```
+
+Ohne jede Oberfläche: `.\start_all.ps1 -NoUi`.
 
 Die Basis-URL des Mediators kommt aus `MEDIATOR_URL`, Voreinstellung
 `http://localhost:8000`.
