@@ -64,6 +64,13 @@ in der Liste, sind aber deaktiviert und tragen den Grund als Hinweistext und
 Tooltip. Ehrliche Lücke statt unsichtbarer Grenze — dasselbe Prinzip wie bei den
 MP-Lite-Slidern.
 
+**Die Kohorte wird gesucht, nicht gescrollt.** Ein Klick auf das Feld klappt
+eine Karte mit Suchfeld auf; getippt wird nach Krebsart (`lung`, `kidney`,
+`melanom`), Kürzel (`BRCA`) oder Projekt-ID (`TCGA-OV`). Pfeiltasten und Enter
+funktionieren aus dem Suchfeld heraus, Escape schließt. Die Klarnamen stammen
+einmalig von `GET /projects` der GDC-API und stehen als `cohort_labels` in
+`config/panel.json` — gesendet wird immer die `project_id`.
+
 **Datenquellen sind mehrfach wählbar.** `SingleSelection.source` ist im Mediator
 ein einzelner Wert, keine Liste — je angehakter Quelle entsteht deshalb eine
 **eigene Ebene** im Auftrag. Genau dafür gibt es `levels`: parallele,
@@ -86,7 +93,8 @@ anbindet, genügt in `config/panel.json` ein `"enabled": true`.
 | `mediator_client.py` | HTTP gegen den Mediator — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `worker.py` | `QThread`-Worker für die langen Aufrufe |
 | `theme.py` | Farben und Stylesheet an genau einer Stelle |
-| `config/panel.json` | Modalitäten, Quellen, Attribute nach Knoten gruppiert |
+| `searchable_select.py` | aufklappende Auswahl mit Suchfeld (Kohorte) |
+| `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
 | `tests/test_mediator_client.py` | Tests ohne Qt und ohne Netz (`requests` gemockt) |
 
 ```powershell

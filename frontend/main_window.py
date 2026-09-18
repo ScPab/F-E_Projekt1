@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 import mediator_client as mc
 import theme
 import worker
+from searchable_select import SearchableSelect
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "panel.json"
 
@@ -53,6 +54,7 @@ TURTLE_PREVIEW_LINES = 40
 _ATTR_ROLE = Qt.ItemDataRole.UserRole
 # Rolle fuer den Quellen-Wert eines Listeneintrags (gdc, ena, geo).
 _SOURCE_ROLE = Qt.ItemDataRole.UserRole
+
 
 
 def load_panel_config() -> dict[str, Any]:
@@ -326,7 +328,12 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(6)
 
-        self._cohort_box = QComboBox()
+        # Kohorte: aufklappende Auswahl mit Suchfeld. 32 Eintraege sind zum
+        # Durchscrollen zu viele, und gesucht wird nach Krebsart, nicht nach
+        # Projektkuerzel — deshalb steht der Klarname vorn und das Kuerzel rechts.
+        # Eine dauerhaft sichtbare Liste hat das schmale Panel gesprengt.
+        self._cohort_select = SearchableSelect(self._cohort_entries())
+
         self._modality_box = QComboBox()
         self._attribute_list = QListWidget()
         self._attribute_list.setMinimumHeight(240)
@@ -342,17 +349,20 @@ class MainWindow(QMainWindow):
         self._size_spin.setRange(mc.SIZE_MIN, mc.SIZE_MAX)
         self._size_spin.setValue(20)
 
-        for label, widget, stretch in (
-            ("Krebs", self._cohort_box, 0),
-            ("Var", self._modality_box, 0),
-            ("Obj", self._attribute_list, 1),
-            ("Datenquelle", self._source_list, 0),
-            ("Proben", self._size_spin, 0),
+        for label, widgets, stretch in (
+            ("Krebs", (self._cohort_select,), 0),
+            ("Var", (self._modality_box,), 0),
+            ("Obj", (self._attribute_list,), 3),
+            ("Datenquelle", (self._source_list,), 0),
+            ("Proben", (self._size_spin,), 0),
         ):
             caption = QLabel(label)
             caption.setObjectName(theme.OBJ_PANEL_LABEL)
             layout.addWidget(caption)
-            layout.addWidget(widget, stretch=stretch)
+            for i, widget in enumerate(widgets):
+                # Nur das letzte Widget einer Zeile darf wachsen (bei "Krebs"
+                # also die Liste, nicht das Suchfeld darueber).
+                layout.addWidget(widget, stretch=stretch if i == len(widgets) - 1 else 0)
             layout.addSpacing(10)
 
         layout.addStretch(0)
@@ -360,10 +370,7 @@ class MainWindow(QMainWindow):
 
     # -- Panel befuellen ----------------------------------------------------
     def _fill_panel(self) -> None:
-        self._cohort_box.addItems(self._cohorts)
-        default_cohort = self._cohort_box.findText("TCGA-BRCA")
-        if default_cohort >= 0:
-            self._cohort_box.setCurrentIndex(default_cohort)
+        self._cohort_select.set_value("TCGA-BRCA")
 
         self._fill_choice_box(self._modality_box, self._config.get("modalities") or [])
         self._fill_sources()
@@ -396,6 +403,29 @@ class MainWindow(QMainWindow):
                 first_enabled = index
         if first_enabled >= 0:
             box.setCurrentIndex(first_enabled)
+
+    def _cohort_entries(self) -> list[dict[str, str]]:
+        """Die Kohorten als Eintraege fuer :class:`SearchableSelect`.
+
+        Gesendet wird die ``project_id``; angezeigt wird der Klarname aus
+        ``config/panel.json`` (einmalig von GDC geholt), rechts das Kuerzel.
+        Fehlt ein Name, steht dort die ``project_id`` — dann ist die Liste
+        karger, aber nichts kaputt.
+        """
+        labels = self._config.get("cohort_labels") or {}
+        entries = []
+        for project_id in self._cohorts:
+            code = project_id.split("-", 1)[-1] if "-" in project_id else project_id
+            entries.append({
+                "value": project_id,
+                "label": labels.get(project_id) or project_id,
+                "code": code,
+            })
+        return entries
+
+    def current_cohort(self) -> str:
+        """Die gewaehlte ``project_id``, oder '' wenn nichts ausgewaehlt ist."""
+        return self._cohort_select.current_value()
 
     def _fill_sources(self) -> None:
         """Datenquellen als Haekchen-Liste (Mehrfachauswahl).
@@ -504,7 +534,7 @@ class MainWindow(QMainWindow):
 
     def current_payload(self) -> dict[str, Any]:
         return mc.build_selection_request(
-            cohort=self._cohort_box.currentText(),
+            cohort=self.current_cohort(),
             modality=self._modality_box.currentData(),
             attributes=self.checked_attributes(),
             sources=self.checked_sources(),
@@ -513,7 +543,7 @@ class MainWindow(QMainWindow):
 
     # -- Aufruf -------------------------------------------------------------
     def _start(self, mode: str) -> None:
-        if not self._cohort_box.currentText():
+        if not self.current_cohort():
             self.set_status("Keine Kohorte gewaehlt.", "warning")
             return
         if not self.checked_sources():

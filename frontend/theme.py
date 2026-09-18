@@ -41,6 +41,8 @@ MONO_FAMILY = '"Consolas", "Cascadia Mono", monospace'
 
 HEADER_HEIGHT = 56
 PANEL_WIDTH = 360
+ROW_HEIGHT = 38              # Zeilenhoehe in den Auswahllisten
+DOT_SIZE = 12                # runder Anker links in einer Zeile
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
@@ -51,6 +53,13 @@ OBJ_PANEL = "Panel"
 OBJ_PANEL_LABEL = "PanelLabel"
 OBJ_OUTPUT = "Output"
 OBJ_PRIMARY_BUTTON = "PrimaryButton"
+OBJ_SEARCH = "SearchField"
+OBJ_PICKER = "PickerList"          # Liste mit Suchfeld darueber (Kohorten)
+OBJ_ROW_LABEL = "RowLabel"         # Hauptbeschriftung einer Listenzeile
+OBJ_ROW_CODE = "RowCode"           # gedaempftes Kuerzel rechts
+OBJ_ROW_DOT = "RowDot"             # runder Anker links
+OBJ_SELECT_BUTTON = "SelectButton"  # Schaltflaeche, die die Auswahl aufklappt
+OBJ_POPUP = "SelectPopup"           # die aufklappende Karte selbst
 
 
 def stylesheet() -> str:
@@ -145,6 +154,63 @@ QComboBox QAbstractItemView::item:disabled {{
     background-color: {WINDOW_BG};
     color: {TEXT_MUTED};
 }}
+/* --- Aufklappbare Auswahl (searchable_select.py) ------------------------ */
+/* Sieht aus wie ein Eingabefeld, nicht wie eine Schaltflaeche: es zeigt einen
+   Wert an, es loest keine Aktion aus. */
+QPushButton#{OBJ_SELECT_BUTTON} {{
+    background-color: {WINDOW_BG};
+    border: {BORDER_WIDTH}px solid {BORDER};
+    border-radius: {RADIUS}px;
+    padding: 7px 12px;
+    text-align: left;
+    font-weight: 400;
+}}
+QPushButton#{OBJ_SELECT_BUTTON}:hover {{
+    border-color: {ACCENT};
+}}
+QFrame#{OBJ_POPUP} {{
+    background-color: {WINDOW_BG};
+    border: {BORDER_WIDTH}px solid {BORDER};
+    border-radius: {RADIUS}px;
+}}
+
+/* --- Suchfeld ueber einer Auswahlliste ---------------------------------- */
+QLineEdit#{OBJ_SEARCH} {{
+    background-color: {WINDOW_BG};
+    border: {BORDER_WIDTH}px solid {BORDER};
+    border-radius: {RADIUS}px;
+    padding: 7px 10px;
+    selection-background-color: {ACCENT_BG};
+    selection-color: {TEXT};
+}}
+QLineEdit#{OBJ_SEARCH}:focus {{
+    border-color: {ACCENT};
+}}
+
+/* --- Zeilen in den Auswahllisten --------------------------------------- */
+/* Abgerundete, grosszuegige Zeilen statt der Qt-Standardleiste: die
+   Auswahlhervorhebung soll wie eine Karte wirken, nicht wie ein Balken. */
+QListWidget#{OBJ_PICKER} {{
+    background-color: {WINDOW_BG};
+    border: none;
+    outline: none;
+}}
+/* Zeilenhintergrund und -rahmen malt RowDelegate selbst (es braucht die
+   Breite, um Name zu kuerzen und Kuerzel rechts zu setzen) — hier deshalb
+   KEINE ::item-Regeln, sonst wird zweimal gemalt. */
+QLabel#{OBJ_ROW_LABEL} {{
+    background-color: transparent;
+    color: {TEXT};
+}}
+QLabel#{OBJ_ROW_CODE} {{
+    background-color: transparent;
+    color: {TEXT_MUTED};
+    font-weight: 600;
+}}
+QLabel#{OBJ_ROW_DOT} {{
+    background-color: transparent;
+}}
+
 QListWidget::item {{
     padding: 3px 2px;
 }}
@@ -207,6 +273,31 @@ QPushButton#{OBJ_PRIMARY_BUTTON}:disabled {{
     color: {TEXT_MUTED};
 }}
 
+/* --- Bildlaufleisten ---------------------------------------------------- */
+/* Schlank und ohne Pfeilkaestchen: der Fusion-Standard ist breit, kantig und
+   draengt sich in den Inhalt (in der Kohortenliste bis in die Kuerzel hinein). */
+QScrollBar:vertical {{
+    background: transparent;
+    width: 10px;
+    margin: 2px 2px 2px 0;
+}}
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 10px;
+    margin: 0 2px 2px 2px;
+}}
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
+    background: {BORDER};
+    border-radius: 4px;
+}}
+QScrollBar::handle:vertical {{ min-height: 28px; }}
+QScrollBar::handle:horizontal {{ min-width: 28px; }}
+QScrollBar::handle:hover {{ background: {TEXT_MUTED}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{
+    height: 0; width: 0; border: none; background: none;
+}}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+
 /* --- Statusleiste und Splitter ----------------------------------------- */
 QStatusBar {{
     background-color: {SURFACE};
@@ -229,6 +320,27 @@ _STATE_COLORS = {
     "warning": (WARNING, WARNING_BG),
     "error": (ERROR, ERROR_BG),
 }
+
+
+def qcolor(value: str) -> QColor:
+    """Eine der Farbkonstanten oben als ``QColor`` — fuer alles, was gezeichnet
+    statt per Stylesheet gesetzt wird (z. B. der Zeilen-Delegate)."""
+    return QColor(value)
+
+
+def dot_color(key: str) -> QColor:
+    """Farbe des runden Ankers links in einer Kohortenzeile.
+
+    **Rein optisch**: sie macht die Liste scanbar, so wie die Flagge in der
+    Vorlage, und kodiert nichts. Insbesondere ist es NICHT die MP-Lite-Palette —
+    sollen die Farben dort und hier dieselben sein, muss die Palette aus dem
+    Prototyp herkommen, nicht neu erfunden werden.
+
+    Deterministisch aus dem Schluessel, damit dieselbe Kohorte immer dieselbe
+    Farbe hat; Sattheit und Helligkeit fest, damit nichts grell wird.
+    """
+    farbton = (sum(ord(c) * (i + 1) for i, c in enumerate(key)) * 47) % 360
+    return QColor.fromHsl(farbton, 150, 150)
 
 
 def palette() -> QPalette:
