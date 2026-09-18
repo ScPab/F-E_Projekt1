@@ -243,6 +243,28 @@ zusätzlich client-seitig (meist nicht mehr nötig, seit der Endpoint es selbst 
 neu bauen), sonst greift die neue Logik nicht. Ohne die Datei bleibt MP-Lite beim
 BRCA-Fixture (Aufgabe 9).
 
+## 6d. Ein erzeugtes `.h5ad` kontrollieren
+
+Nach jedem `Generieren` (Oberfläche, `run_selection.py --generate` oder
+`/export/anndata`) prüfen, **welche Klinikfelder tatsächlich angekommen sind**:
+
+```powershell
+python scripts\check_h5ad.py                      # die neueste .h5ad im Projekt
+python scripts\check_h5ad.py <pfad\datei.h5ad>
+python scripts\check_h5ad.py <datei.h5ad> --strict  # Hinweise als Fehler werten
+```
+
+Zeigt Achsen, je `obs`-Spalte die Zahl der gefüllten Werte mit Beispielen,
+Eindeutigkeit der Schlüssel, Kennzahlen der Matrix (NaN/Inf, Wertebereich, leere
+Zeilen) und die Einbettungen. Rückgabewert 0 = in Ordnung, 1 = harter Fehler
+(unlesbar, NaN in `X`, doppelte Schlüssel); mit `--strict` zählen auch Hinweise
+wie leere `obs`-Spalten als Fehler, damit man in einem Skript abbrechen kann.
+
+> Ein HDF5-Viewer (z. B. die VS-Code-Erweiterung **H5Web**) zeigt nur, dass eine
+> Spalte **existiert** — nicht, ob sie **Werte** enthält. Genau dort sitzen die
+> bekannten Lücken, solange `build_obs` noch über `all_cases(store)` statt
+> `cases_for_selection` befüllt wird.
+
 ## 7. Rückkanal per CLI testen
 ```powershell
 wissensnetz feedback wissensnetz/data/sample/selection_event.json
