@@ -2,9 +2,16 @@
   "levels": [
     {
       "source": "gdc",
-      "cohorts": ["TCGA-BRCA"],
+      "cohorts": [
+        "TCGA-BRCA"
+      ],
       "modality": "gene_expression",
-      "attributes": ["gender", "tumor_stage", "primary_diagnosis", "sample_type"]
+      "attributes": [
+        "demographic.sex_at_birth",
+        "tumor_stage",
+        "primary_diagnosis",
+        "sample_type"
+      ]
     }
   ],
   "size": 20

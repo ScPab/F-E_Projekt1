@@ -35,7 +35,8 @@ Format der selection.json (= mediator/app/schemas.py::SelectionRequest):
     {
       "levels": [
         {"source": "gdc", "cohorts": ["TCGA-BRCA"],
-         "modality": "gene_expression", "attributes": ["gender", "tumor_stage"]}
+         "modality": "gene_expression",
+         "attributes": ["demographic.sex_at_birth", "tumor_stage"]}
       ],
       "size": 20
     }

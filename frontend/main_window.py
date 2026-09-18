@@ -456,8 +456,19 @@ class MainWindow(QMainWindow):
             header.setFont(font)
             self._attribute_list.addItem(header)
 
-            for attribute in group.get("attributes") or []:
-                item = QListWidgetItem(f"    {attribute}")
+            for eintrag in group.get("attributes") or []:
+                # Ein Eintrag ist entweder ein blosser Name oder {value, label}.
+                # Die zweite Form braucht es, wenn der an den Mediator gesendete
+                # Wert und der angezeigte Name auseinanderfallen — siehe
+                # "_sex_at_birth_hinweis" in panel.json.
+                if isinstance(eintrag, dict):
+                    attribute = eintrag.get("value") or ""
+                    beschriftung = eintrag.get("label") or attribute
+                else:
+                    attribute = beschriftung = eintrag
+                if not attribute:
+                    continue
+                item = QListWidgetItem(f"    {beschriftung}")
                 item.setData(_ATTR_ROLE, attribute)
                 item.setFlags(
                     Qt.ItemFlag.ItemIsEnabled

@@ -49,7 +49,10 @@
     {
       "node": "Demographic",
       "attributes": [
-        "gender",
+        {
+          "value": "demographic.sex_at_birth",
+          "label": "sex_at_birth"
+        },
         "race",
         "ethnicity",
         "vital_status"
@@ -74,7 +77,7 @@
     }
   ],
   "default_attributes": [
-    "gender",
+    "demographic.sex_at_birth",
     "primary_diagnosis"
   ],
   "cohorts": [
@@ -110,5 +113,6 @@
     "TCGA-THYM",
     "TCGA-THCA",
     "TCGA-UCS"
-  ]
+  ],
+  "_sex_at_birth_hinweis": "GDC hat 'demographic.gender' auf 'demographic.sex_at_birth' umbenannt; der alte Name existiert in der API nicht mehr und wurde stillschweigend ignoriert (live gegen /files/_mapping geprueft, 2026-09-18). KNOWN_ATTRIBUTES im Mediator fuehrt weiterhin 'gender' -> 'demographic.gender' und laeuft damit ins Leere. Deshalb senden wir hier den VOLLEN GDC-Feldpfad: resolve_attribute() behandelt einen Namen MIT Punkt als Feldpfad, loest ihn auf die Demographic-Entitaet auf und bildet daraus db:sexAtBirth - genau die Property aus databridge-core.ttl. Sobald Pablo KNOWN_ATTRIBUTES korrigiert, kann hier wieder ein kurzer Name stehen."
 }
