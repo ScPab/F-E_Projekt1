@@ -130,8 +130,24 @@ db:submitterId a owl:DatatypeProperty ;
     rdfs:domain db:Case ;
     rdfs:range xsd:string .
 
+# Geschlecht bei Geburt. GDC hat das Feld von `gender` auf `sex_at_birth`
+# umbenannt — `demographic.gender` existiert in der API nicht mehr (live gegen
+# /files/_mapping und /cases/_mapping geprüft, 2026-09-18). Die beiden Begriffe
+# sind fachlich NICHT dasselbe, deshalb heißt die Property jetzt ebenso.
+db:sexAtBirth a owl:DatatypeProperty ;
+    rdfs:label "sexAtBirth" ;
+    rdfs:comment "Geschlecht bei Geburt, aus GDC `demographic.sex_at_birth`. Nachfolger von db:gender: GDC hat das Feld umbenannt, und 'sex at birth' und 'gender' bezeichnen Verschiedenes." ;
+    rdfs:domain db:Demographic ;
+    rdfs:range xsd:string .
+
+# Veraltet, aber nicht entfernt: Daten aus früheren Läufen (und die
+# eingefrorene Beispiel-ABox) tragen diese Property noch. Die Lesefunktionen
+# in enrichment.py akzeptieren beide, bis der Mediator auf db:sexAtBirth
+# umgestellt hat. Danach kann dieser Block weg.
 db:gender a owl:DatatypeProperty ;
     rdfs:label "gender" ;
+    rdfs:comment "VERALTET — ersetzt durch db:sexAtBirth. GDC liefert das Feld seit der Umbenennung auf `sex_at_birth` nicht mehr; Werte unter dieser Property stammen aus älteren Läufen." ;
+    owl:deprecated true ;
     rdfs:domain db:Demographic ;
     rdfs:range xsd:string .
 
