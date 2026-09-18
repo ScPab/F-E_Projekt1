@@ -22,6 +22,26 @@ numpy>=1.24
 # --- Graph-Visualisierung (scripts/graph_view.py) --------------------------
 pyvis>=0.3
 
+# --- Auswahl-Oberflaeche (frontend/, ADR-0004) -----------------------------
+# Eigenes Fenster statt Browser-Tab; laeuft als Host-Prozess in der Env F+E,
+# nicht im Mediator-Container. Start: python frontend\app.py
+#
+# ACHTUNG, pyside6 NICHT ueber pip installieren: das PyPI-Wheel bringt kein ICU
+# mit und ist gegen ein neueres ICU gebaut als das conda-Paket `icu 73` in der
+# Env. Qt6Core.dll findet dann die versionsbehafteten ICU-Exporte nicht und der
+# Import scheitert mit "DLL load failed ... Die angegebene Prozedur wurde nicht
+# gefunden". In der Env F+E deshalb:
+#
+#     conda install -c conda-forge pyside6
+#
+# Das passende Paket (6.11.0) ist gegen das vorhandene qtbase/icu gebaut.
+# Die Zeile unten bleibt als Dokumentation der Abhaengigkeit stehen; ist
+# pyside6 bereits per conda installiert, ist sie ein No-op.
+pyside6>=6.6
+# requests kommt bereits ueber ./wissensnetz und ./wrappers mit, steht hier aber
+# explizit: frontend/mediator_client.py importiert es direkt.
+requests>=2.28
+
 # --- Mediator (FastAPI-Service, Kollege B) ---------------------------------
 # Leichtgewichtiger Web-/Service-Stack. rdflib kommt bereits über ./wissensnetz.
 fastapi>=0.110
