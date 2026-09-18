@@ -65,11 +65,17 @@ Tooltip. Ehrliche Lücke statt unsichtbarer Grenze — dasselbe Prinzip wie bei 
 MP-Lite-Slidern.
 
 **Die Kohorte wird gesucht, nicht gescrollt.** Ein Klick auf das Feld klappt
-eine Karte mit Suchfeld auf; getippt wird nach Krebsart (`lung`, `kidney`,
-`melanom`), Kürzel (`BRCA`) oder Projekt-ID (`TCGA-OV`). Pfeiltasten und Enter
-funktionieren aus dem Suchfeld heraus, Escape schließt. Die Klarnamen stammen
-einmalig von `GET /projects` der GDC-API und stehen als `cohort_labels` in
-`config/panel.json` — gesendet wird immer die `project_id`.
+eine Karte mit Suchfeld auf. Gesucht wird **über die offizielle
+TCGA-Studienabkürzung** — `BRCA`, `LUAD`, `KIRC` — oder über die volle
+Projekt-ID (`TCGA-OV`); ein Präfix genügt, `ki` findet KICH, KIRC und KIRP.
+Pfeiltasten und Enter funktionieren aus dem Suchfeld heraus, Escape schließt.
+
+Der **Klarname in der Zeile ist Beschriftung, kein Suchbegriff**: `lung` findet
+nichts, `LUAD` schon. Damit das nicht wie ein Fehler wirkt, nennt der
+Platzhalter das Muster (`Kuerzel suchen, z. B. BRCA …`) und die Leermeldung
+lautet „Kein Kuerzel passt". Die Klarnamen stammen einmalig von `GET /projects`
+der GDC-API und stehen als `cohort_labels` in `config/panel.json` — gesendet
+wird immer die `project_id`.
 
 **Datenquellen sind mehrfach wählbar.** `SingleSelection.source` ist im Mediator
 ein einzelner Wert, keine Liste — je angehakter Quelle entsteht deshalb eine

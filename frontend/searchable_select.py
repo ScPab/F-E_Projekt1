@@ -110,7 +110,8 @@ class SearchableSelect(QWidget):
     """Schaltflaeche mit aufklappbarer, durchsuchbarer Liste.
 
     ``entries`` ist eine Liste von ``{"value", "label", "code"}``. Gesendet wird
-    immer ``value``; gesucht wird ueber Klarname, Kuerzel und Wert.
+    immer ``value``; gesucht wird ueber ``code`` und ``value`` — der Klarname
+    ist Beschriftung, kein Suchbegriff.
     """
 
     selection_changed = Signal(str)
@@ -136,7 +137,9 @@ class SearchableSelect(QWidget):
 
         self._search = QLineEdit()
         self._search.setObjectName(theme.OBJ_SEARCH)
-        self._search.setPlaceholderText("Suchen …")
+        # Der Platzhalter nennt das Suchmuster ausdruecklich: seit die Suche nur
+        # das Kuerzel trifft, wuerde "lung" sonst kommentarlos leer ausgehen.
+        self._search.setPlaceholderText("Kuerzel suchen, z. B. BRCA …")
         self._search.setClearButtonEnabled(True)
         self._search.textChanged.connect(self._filter)
         self._search.installEventFilter(self)
@@ -152,7 +155,7 @@ class SearchableSelect(QWidget):
 
         # Eigener Hinweis statt einer leeren Liste: ein Kasten ohne Inhalt sieht
         # kaputt aus, nicht wie "nichts gefunden".
-        self._empty = QLabel("Keine Treffer")
+        self._empty = QLabel("Kein Kuerzel passt")
         self._empty.setObjectName(theme.OBJ_ROW_CODE)
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty.hide()
@@ -170,7 +173,11 @@ class SearchableSelect(QWidget):
             item.setData(VALUE_ROLE, value)
             item.setData(LABEL_ROLE, label)
             item.setData(CODE_ROLE, code)
-            item.setData(SEARCH_ROLE, f"{label} {code} {value}".lower())
+            # Bewusst NUR Kuerzel und Wert, nicht der Klarname: gesucht wird mit
+            # der offiziellen Studienabkuerzung (BRCA, LUAD, KIRC). Der Klarname
+            # steht weiter in der Zeile, damit man sieht, was sich hinter dem
+            # Kuerzel verbirgt — er ist Beschriftung, kein Suchbegriff.
+            item.setData(SEARCH_ROLE, f"{code} {value}".lower())
             item.setSizeHint(QSize(0, theme.ROW_HEIGHT))
             item.setToolTip(f"{label}  ({value})")
             self._list.addItem(item)
