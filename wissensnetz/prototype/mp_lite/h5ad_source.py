@@ -52,7 +52,7 @@ _PANCANCER_REL = ("wissensnetz", "data", "pancancer.h5ad")
 # fehlende Spalten werden zu ``None``). ``submitter_id`` = Case-Barcode (Rückkanal-
 # und Kontext-Schlüssel), ``cancer`` = Kohorten-Code (Färbung/Legende).
 _OBS_FIELDS = (
-    "sample_type", "submitter_id", "project_id", "race", "gender", "ethnicity",
+    "sample_type", "submitter_id", "project_id", "race", "sex_at_birth", "ethnicity",
     "vital_status", "tumor_stage", "morphology", "site_of_resection_or_biopsy",
     "has_metastasis", "primary_diagnosis", "age_at_diagnosis", "cancer",
 )

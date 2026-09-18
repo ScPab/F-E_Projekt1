@@ -147,13 +147,13 @@ def _dash(v: object) -> str:
 
 
 # Oviedo-Hover-Spalten in exakter Reihenfolge; Default überall "--".
-_FIELDS = ("cancer", "sample_type", "race", "gender", "ethnicity", "tumor_stage",
+_FIELDS = ("cancer", "sample_type", "race", "sex_at_birth", "ethnicity", "tumor_stage",
            "morphology", "site_biopsy", "primary_diagnosis", "has_metastasis",
            "vital_status")
 
 
 def _fill_fields(fields: dict[str, list[str]], i: int, *, code: str | None,
-                 race, gender, ethnicity, vital, sample_type, tumor_stage,
+                 race, sex_at_birth, ethnicity, vital, sample_type, tumor_stage,
                  morphology, site, dx, metastasis) -> None:
     """Eine Zeile der Hover-Spalten setzen. ``sample_type`` (Oviedo-Spalte 'type')
     kommt aus ``db:Sample``/``db:sampleType`` (Aufgabe 8) und bleibt "--", bis der
@@ -161,7 +161,7 @@ def _fill_fields(fields: dict[str, list[str]], i: int, *, code: str | None,
     fields["cancer"][i] = _dash(code)
     fields["sample_type"][i] = _dash(sample_type)
     fields["race"][i] = _dash(race)
-    fields["gender"][i] = _dash(gender)
+    fields["sex_at_birth"][i] = _dash(sex_at_birth)
     fields["ethnicity"][i] = _dash(ethnicity)
     fields["vital_status"][i] = _dash(vital)
     fields["tumor_stage"][i] = _dash(tumor_stage)
@@ -213,7 +213,8 @@ if H5AD_OK:
         code = cancer_code(p.get("project_id")) or p.get("cancer")
         point_codes[i] = code
         _fill_fields(
-            fields, i, code=code, race=p.get("race"), gender=p.get("gender"),
+            fields, i, code=code, race=p.get("race"),
+            sex_at_birth=p.get("sex_at_birth") or p.get("gender"),
             ethnicity=p.get("ethnicity"), vital=p.get("vital_status"),
             sample_type=p.get("sample_type"),
             tumor_stage=p.get("tumor_stage"), morphology=p.get("morphology"),
@@ -233,7 +234,8 @@ elif real_cases:
         code = cancer_code(c.get("project_id"))
         point_codes[i] = code
         _fill_fields(
-            fields, i, code=code, race=c.get("race"), gender=c.get("gender"),
+            fields, i, code=code, race=c.get("race"),
+            sex_at_birth=c.get("sex_at_birth") or c.get("gender"),
             ethnicity=c.get("ethnicity"), vital=c.get("vital_status"),
             sample_type=c.get("sample_type"),
             tumor_stage=c.get("tumor_stage"), morphology=c.get("morphology"),
@@ -262,7 +264,8 @@ else:
             diags = ctx.get("diagnoses") or []
             d0 = diags[0] if diags else {}
             _fill_fields(
-                fields, i, code=code, race=ctx.get("race"), gender=ctx.get("gender"),
+                fields, i, code=code, race=ctx.get("race"),
+                sex_at_birth=ctx.get("sex_at_birth") or ctx.get("gender"),
                 ethnicity=ctx.get("ethnicity"), vital=ctx.get("vital_status"),
                 sample_type=ctx.get("sample_type"),
                 tumor_stage=d0.get("tumor_stage"), morphology=d0.get("morphology"),
@@ -320,6 +323,9 @@ def _scale_layout(arr: np.ndarray, target: float = CIRCLE_SCALE) -> np.ndarray:
 #   genes, mirna, cancer, type, race, gender, ethnicity, primary_diagnosis,
 #   has_metastasis, vital_status, cancer (ver), tumor_stage (ver),
 #   miRNA-210-3p (hor), CA9 (ver), SAA1 (hor)
+# EINE bewusste Abweichung: Oviedos "gender" heisst bei uns "sex_at_birth" —
+# GDC hat das Feld umbenannt, und fachlich ist es nicht dasselbe (siehe
+# db:sexAtBirth in ontology/databridge-core.ttl).
 # Ein Slider ist nur aktiv, wenn seine Encoding-Daten vorliegen; sonst wird er
 # deaktiviert angezeigt (Titel-Zusatz „(keine Daten)"), damit das Set optisch dem
 # Original entspricht. Nur die aktiven Slider (mit E-Array) treiben die Morph-Engine
@@ -382,7 +388,7 @@ _SLIDER_SPECS = [
     ("cancer", _circ("cancer"), 0.0),
     ("type", _circ("sample_type"), 0.0),
     ("race", _circ("race"), 0.0),
-    ("gender", _circ("gender"), 0.0),
+    ("sex_at_birth", _circ("sex_at_birth"), 0.0),
     ("ethnicity", _circ("ethnicity"), 0.0),
     ("primary_diagnosis", _circ("primary_diagnosis"), 0.0),
     ("has_metastasis", _circ("has_metastasis"), 0.0),
@@ -480,7 +486,7 @@ if plot.legend:
 # Hover = volle Oviedo-MP-Feldliste in exakter Reihenfolge (fehlend -> "--").
 _hover_fields = [
     ("Sample", "@tumor"), ("cancer", "@cancer"), ("type", "@sample_type"),
-    ("race", "@race"), ("gender", "@gender"), ("ethnicity", "@ethnicity"),
+    ("race", "@race"), ("sex_at_birth", "@sex_at_birth"), ("ethnicity", "@ethnicity"),
     ("tumor_stage", "@tumor_stage"), ("morphology", "@morphology"),
     ("site_of_resection_or_biopsy", "@site_biopsy"),
     ("primary_diagnosis", "@primary_diagnosis"),
@@ -563,7 +569,8 @@ def _render_context(barcode: str) -> str:
     ) or "<li>—</li>"
     return (
         f"<b>{barcode}</b><br>"
-        f"Projekt: {ctx.get('project_id') or '—'} · Geschlecht: {ctx.get('gender') or '—'}<br>"
+        f"Projekt: {ctx.get('project_id') or '—'} · "
+        f"Sex at birth: {ctx.get('sex_at_birth') or ctx.get('gender') or '—'}<br>"
         f"Diagnosen:<ul>{diags}</ul>"
     )
 

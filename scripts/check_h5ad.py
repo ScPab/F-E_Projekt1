@@ -39,7 +39,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 # ganz, ist das ein anderer Fall als "vorhanden, aber leer" — deshalb getrennt
 # gemeldet.
 _ERWARTETE_OBS = (
-    "sample_type", "submitter_id", "project_id", "race", "gender", "ethnicity",
+    "sample_type", "submitter_id", "project_id", "race", "sex_at_birth", "ethnicity",
     "vital_status", "tumor_stage", "morphology", "site_of_resection_or_biopsy",
     "has_metastasis", "primary_diagnosis", "age_at_diagnosis", "cancer",
 )
