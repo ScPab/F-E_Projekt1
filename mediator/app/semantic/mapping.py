@@ -63,7 +63,12 @@ class AttributeMapping:
 # (resolve_case_fields) gelistet — die ABox-Erzeugung bleibt Sonderfall
 # (Alignment + Label-Fallback + RDF-star, siehe cases_to_graph).
 KNOWN_ATTRIBUTES: dict[str, AttributeMapping] = {
-    "gender": AttributeMapping("demographic.gender", "demographic", DB.gender),
+    # GDC hat das Feld von `gender` auf `sex_at_birth` umbenannt; der alte Name
+    # existiert in der API nicht mehr (live gegen /files/_mapping und
+    # /cases/_mapping geprueft, 2026-09-18). GDC ignoriert unbekannte Felder
+    # stillschweigend, deshalb blieb die Spalte lange unbemerkt leer.
+    # Der alte UI-Name wird ueber LEGACY_ATTRIBUTE_ALIASES weiter angenommen.
+    "sex_at_birth": AttributeMapping("demographic.sex_at_birth", "demographic", DB.sexAtBirth),
     "race": AttributeMapping("demographic.race", "demographic", DB.race),
     "ethnicity": AttributeMapping("demographic.ethnicity", "demographic", DB.ethnicity),
     "vital_status": AttributeMapping("demographic.vital_status", "demographic", DB.vitalStatus),
@@ -79,6 +84,15 @@ KNOWN_ATTRIBUTES: dict[str, AttributeMapping] = {
     "tumor_stage": AttributeMapping("diagnoses.ajcc_pathologic_stage", "diagnosis", DB.tumorStage),
     "has_metastasis": AttributeMapping("diagnoses.metastasis_at_diagnosis", "diagnosis", DB.metastasisAtDiagnosis),
     "sample_type": AttributeMapping("samples.sample_type", "sample", DB.sampleType),
+}
+
+# Alte UI-Attributnamen, die weiterhin akzeptiert werden. Bewusst NICHT in
+# KNOWN_ATTRIBUTES: sonst stünden sie doppelt in DEFAULT_ATTRIBUTES und das
+# zugehörige GDC-Feld würde zweimal angefragt. Ohne diese Tabelle würde ein
+# Aufrufer mit "gender" still auf `diagnoses.gender` umgebogen (siehe
+# `resolve_attribute`, dynamischer Pfad) — also falsch statt fehlerhaft.
+LEGACY_ATTRIBUTE_ALIASES: dict[str, str] = {
+    "gender": "sex_at_birth",
 }
 
 # Rückwärtskompatibler Default für Aufrufer, die kein `attributes` angeben
@@ -116,7 +130,9 @@ def resolve_attribute(attribute: str) -> AttributeMapping:
     """Löst ein UI-Attribut (Obj-Trigger) auf ein `AttributeMapping` auf.
 
     Bekannte Attribute (`KNOWN_ATTRIBUTES`) nutzen ihre feste, in
-    databridge-core.ttl deklarierte db:-Property. Für unbekannte Attribute
+    databridge-core.ttl deklarierte db:-Property. Veraltete Namen aus
+    `LEGACY_ATTRIBUTE_ALIASES` werden vorher umgeschrieben (z. B. "gender" ->
+    "sex_at_birth"). Für unbekannte Attribute
     gilt laut Entscheidung 7.5 (Umsetzungsplan_UI-gesteuerte-Akquise.pdf,
     Abschnitt 7.5: "dynamisch anlegen"): das Attribut wird als GDC-Feldpfad
     interpretiert (z. B. "diagnoses.prior_malignancy"; ohne Punkt wird
@@ -129,6 +145,7 @@ def resolve_attribute(attribute: str) -> AttributeMapping:
     `_declare_dynamic_property`), damit der erzeugte Graph für sich genommen
     gültig/selbstbeschreibend bleibt.
     """
+    attribute = LEGACY_ATTRIBUTE_ALIASES.get(attribute, attribute)
     known = KNOWN_ATTRIBUTES.get(attribute)
     if known:
         return known

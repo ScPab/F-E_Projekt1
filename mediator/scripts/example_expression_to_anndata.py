@@ -51,7 +51,7 @@ def _case_context_row(case: dict) -> dict:
     return {
         "submitter_id": case.get("submitter_id"),
         "project_id": (case.get("project") or {}).get("project_id"),
-        "gender": demographic.get("gender"),
+        "sex_at_birth": demographic.get("sex_at_birth"),
         "race": demographic.get("race"),
         "ethnicity": demographic.get("ethnicity"),
         "vital_status": demographic.get("vital_status"),

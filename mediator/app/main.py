@@ -657,7 +657,7 @@ def _load_selection_knowledge(turtle: str) -> None:
     Aussagen (Instanz-IRIs sind deterministisch aus `case_id` gebildet)
     kollabieren von selbst und richten nichts an. Ändert sich aber ein Wert
     für denselben Fall zwischen zwei Aufrufen (z. B. GDC aktualisiert
-    `gender`), entstehen zwei Werte für dieselbe Property, bis Marcel die
+    `sex_at_birth`), entstehen zwei Werte für dieselbe Property, bis Marcel die
     Ersetzungslogik liefert (siehe Handoff, P4) — absichtlich noch nicht
     selbst nachgebaut, damit es nicht zwei Varianten davon gibt.
     """

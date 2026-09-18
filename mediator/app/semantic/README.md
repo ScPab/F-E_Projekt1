@@ -35,7 +35,7 @@ dieselbe Klasse/Property, statt sie zu duplizieren:
 | Klasse/Property | Genutzt von | Rolle |
 |---|---|---|
 | `db:Project`, `db:Case`, `db:Demographic`, `db:Diagnosis`, `db:Sample` | GDC **und** cBioPortal | cBioPortal bereitet häufig dieselben TCGA/GDC-Ursprungsdaten auf (siehe `wrappers/cbioportal/client.py`-Docstring) |
-| `db:gender`, `db:race`, `db:ethnicity`, `db:vitalStatus`, `db:sampleType`, `db:tumorStage` | GDC **und** cBioPortal | identische Properties, gleiche `rdfs:domain` (Demographic/Sample/Diagnosis) |
+| `db:sexAtBirth`, `db:race`, `db:ethnicity`, `db:vitalStatus`, `db:sampleType`, `db:tumorStage` | GDC **und** cBioPortal | identische Properties, gleiche `rdfs:domain` (Demographic/Sample/Diagnosis) |
 | `db:Run` | GEO **und** ENA | "ein Lauf/Sample innerhalb einer Serie/Studie" — dieselbe Rolle, unabhängig von der Elternklasse |
 | `db:hasRun` / `db:isRunOf` | GEO **und** ENA | verlinkt sowohl `db:Series` (GEO) als auch `db:Study` (ENA) mit `db:Run` |
 | `db:organism` | GEO **und** ENA | Taxon-Angabe (GEO `taxon`, ENA `scientific_name`) |
@@ -56,7 +56,7 @@ Proben") ist eine bewusst offen gelassene, spätere Ontologie-Entscheidung.
 | `case_id` | `db:caseId` | `db:Case` | |
 | `submitter_id` | `db:submitterId` | `db:Case` | |
 | `project.project_id` | `db:projectId` | `db:Project` | über `db:belongsToProject`/`db:hasCase` verlinkt |
-| `demographic.gender` | `db:gender` | `db:Demographic` | |
+| `demographic.sex_at_birth` | `db:sexAtBirth` | `db:Demographic` | GDC hat das Feld von `gender` umbenannt; der alte UI-Name wird über `LEGACY_ATTRIBUTE_ALIASES` weiter angenommen |
 | `demographic.race` | `db:race` | `db:Demographic` | |
 | `demographic.ethnicity` | `db:ethnicity` | `db:Demographic` | |
 | `demographic.vital_status` | `db:vitalStatus` | `db:Demographic` | |
@@ -107,7 +107,7 @@ nach `patientId`/`sampleId` pivotiert.
 
 | cBioPortal `clinicalAttributeId` | Mediator-Label | Zielklasse | Bemerkung |
 |---|---|---|---|
-| `SEX` / `GENDER` | `db:gender` | `db:Demographic` | wiederverwendet von GDC |
+| `SEX` / `GENDER` | `db:sexAtBirth` | `db:Demographic` | wiederverwendet von GDC (cBioPortal benennt das Feld weiterhin `SEX`/`GENDER`) |
 | `VITAL_STATUS` | `db:vitalStatus` | `db:Demographic` | wiederverwendet von GDC |
 | `RACE` | `db:race` | `db:Demographic` | wiederverwendet von GDC |
 | `ETHNICITY` | `db:ethnicity` | `db:Demographic` | wiederverwendet von GDC |

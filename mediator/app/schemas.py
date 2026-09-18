@@ -92,7 +92,7 @@ class TransformRequest(BaseModel):
     # --- gdc (app/semantic/mapping.py) ---
     cases: Optional[list[dict]] = Field(
         None,
-        description="[gdc] Rohe GDC-cases-Treffer (case_id, project.project_id, demographic.gender, "
+        description="[gdc] Rohe GDC-cases-Treffer (case_id, project.project_id, demographic.sex_at_birth, "
         "diagnoses[].primary_diagnosis, diagnoses[].age_at_diagnosis, ...). Ohne Angabe: live über "
         "GDCWrapper.search('cases', ...) geholt (project_id/access/size).",
     )

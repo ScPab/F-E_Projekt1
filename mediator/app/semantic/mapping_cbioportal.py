@@ -13,7 +13,7 @@ dieselben TCGA/GDC-Ursprungsdaten auf, daher nutzt dieses Modul bewusst die
 bestehenden Klassen/Properties `db:Project`/`db:Case`/`db:Demographic`/
 `db:Diagnosis`/`db:Sample` (statt eigener cBioPortal-spezifischer Duplikate).
 Die PATIENT-Attribute werden dazu — wie bei GDC (`mapping.py`) — auf
-`db:Demographic` (`gender`/`race`/`ethnicity`/`vitalStatus`, rdfs:domain in
+`db:Demographic` (`sexAtBirth`/`race`/`ethnicity`/`vitalStatus`, rdfs:domain in
 der Ontologie) bzw. `db:Diagnosis` (`tumorStage`) verteilt statt direkt auf
 `db:Case` geschrieben zu werden; nur `db:age` ist bewusst eine eigene,
 Case-direkte Property (siehe Ontologie-Kommentar zu `db:age`: anders als
@@ -50,8 +50,8 @@ AttributeMap = dict[str, tuple[str, Callable[[str], Any]]]
 # Mehrere IDs je Property, weil Studien dasselbe Konzept unterschiedlich
 # benennen (z. B. "SEX" vs. "GENDER").
 DEMOGRAPHIC_ATTRIBUTE_MAP: AttributeMap = {
-    "SEX": ("gender", str),
-    "GENDER": ("gender", str),
+    "SEX": ("sexAtBirth", str),
+    "GENDER": ("sexAtBirth", str),
     "VITAL_STATUS": ("vitalStatus", str),
     "RACE": ("race", str),
     "ETHNICITY": ("ethnicity", str),

@@ -44,7 +44,7 @@ _OBS_CASE_FIELDS: tuple[tuple[str, str], ...] = (
     ("submitter_id", "submitter_id"),
     ("project_id", "project_id"),
     ("race", "race"),
-    ("gender", "gender"),
+    ("sex_at_birth", "sex_at_birth"),
     ("ethnicity", "ethnicity"),
     ("vital_status", "vital_status"),
     ("tumor_stage", "tumor_stage"),
