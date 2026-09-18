@@ -12,7 +12,7 @@ ein früherer, reicherer Aufruf beigetragen hat — der Store würde je nach let
 Anfrage schrumpfen statt zu wachsen (siehe ``HANDOFF_pablo_P4_ersetzen.md``).
 
 **Sondern Upsert je Property:** gelöscht wird nur, was die aktuelle Nutzlast
-auch schreibt. ``gender`` wird geliefert, also fällt ``db:gender`` an diesen
+auch schreibt. ``sex_at_birth`` wird geliefert, also fällt ``db:sexAtBirth`` an diesen
 Fällen vorher weg; ``tumor_stage`` wird nicht geliefert, also bleibt es stehen.
 Der Store wächst damit monoton, außer in den Werten, die tatsächlich neu
 geliefert werden.
@@ -72,7 +72,7 @@ def _property_term(ref: str) -> str:
         return r
     if is_iri(r):
         return f"<{r}>"
-    return r  # CURIE, z. B. db:gender
+    return r  # CURIE, z. B. db:sexAtBirth
 
 
 def _normalize_property(ref: str) -> str:

@@ -192,7 +192,7 @@ def _cmd_context(store: GraphStore, ref: str) -> int:
         print(f"Case:        {ctx['case_iri']}")
         print(f"submitterId: {ctx.get('submitter_id') or '—'}")
         print(f"Projekt:     {ctx.get('project_id') or '—'}")
-        print(f"Geschlecht:  {ctx.get('gender') or '—'}")
+        print(f"Sex at birth: {ctx.get('sex_at_birth') or '—'}")
         diagnoses = ctx.get("diagnoses") or []
         print(f"Diagnosen:   {len(diagnoses)}")
         for d in diagnoses:
@@ -298,7 +298,7 @@ def _cmd_selection(store: GraphStore, selection_id: str) -> int:
     for c in cases:
         print(f"  - {c.get('submitter_id') or c['case_iri']}")
         print(f"      Projekt:    {c.get('project_id') or '—'}   "
-              f"Geschlecht: {c.get('gender') or '—'}   "
+              f"Sex at birth: {c.get('sex_at_birth') or '—'}   "
               f"Probentyp: {c.get('sample_type') or '—'}")
         print(f"      Diagnose:   {c.get('primary_diagnosis') or '—'}   "
               f"Stadium: {c.get('tumor_stage') or '—'}")

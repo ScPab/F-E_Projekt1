@@ -122,7 +122,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
     """Kontext zu einem Fall. ``case_ref`` = Case-IRI **oder** ``submitterId``.
 
     Liefert ``{}``, wenn kein Case gefunden wird, sonst ein Dict mit
-    ``case_iri``, ``submitter_id``, ``project_id``, ``gender``, ``race``,
+    ``case_iri``, ``submitter_id``, ``project_id``, ``sex_at_birth``, ``race``,
     ``ethnicity``, ``vital_status`` (Top-Ebene, aus dem Demographic) und
     ``diagnoses`` (Liste von ``{iri, label, age_at_diagnosis, aligned_concept,
     tumor_stage, morphology, site_of_resection_or_biopsy, has_metastasis}``).
@@ -133,7 +133,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
     ethnicity, vital_status, tumor_stage, morphology,
     site_of_resection_or_biopsy, has_metastasis) bleiben ``None``, bis
     Mediator/Wrapper sie liefern (siehe HANDOFF.md). ``sample_type`` (erster
-    Sample-Wert, analog ``gender``) bleibt ``None``, bis der Mediator
+    Sample-Wert, analog ``sex_at_birth``) bleibt ``None``, bis der Mediator
     ``samples.sample_type`` auf ``db:sampleType`` mappt (HANDOFF.md, Teil 2).
     """
     ref = case_ref.strip()
@@ -143,7 +143,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         binder = f'?c db:submitterId "{_escape_literal(ref)}" .'
 
     sparql = PREFIXES + f"""
-    SELECT ?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus ?sampleType
+    SELECT ?c ?sid ?projectId ?sexAtBirth ?race ?ethnicity ?vitalStatus ?sampleType
            ?diag ?label ?age ?aligned
            ?tumorStage ?morphology ?siteBiopsy ?metastasis WHERE {{
       {binder}
@@ -152,7 +152,9 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
       OPTIONAL {{ ?c db:belongsToProject ?proj . ?proj db:projectId ?projectId }}
       OPTIONAL {{
         ?c db:hasDemographic ?demo .
-        OPTIONAL {{ ?demo db:gender ?gender }}
+        OPTIONAL {{ ?demo db:sexAtBirth ?sexNeu }}
+        OPTIONAL {{ ?demo db:gender ?sexAlt }}
+        BIND(COALESCE(?sexNeu, ?sexAlt) AS ?sexAtBirth)
         OPTIONAL {{ ?demo db:race ?race }}
         OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
         OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
@@ -178,7 +180,9 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         "case_iri": rows[0].get("c"),
         "submitter_id": _first(rows, "sid"),
         "project_id": _first(rows, "projectId"),
-        "gender": _first(rows, "gender"),
+        "sex_at_birth": _first(rows, "sexAtBirth"),
+        # Übergangs-Alias, siehe _CASE_KEYS.
+        "gender": _first(rows, "sexAtBirth"),
         "race": _first(rows, "race"),
         "ethnicity": _first(rows, "ethnicity"),
         "vital_status": _first(rows, "vitalStatus"),
@@ -202,7 +206,7 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
 # Verdichtungsfunktion für beide.
 # --------------------------------------------------------------------------
 _CASE_VARS = (
-    "?c ?sid ?projectId ?gender ?race ?ethnicity ?vitalStatus ?sampleType "
+    "?c ?sid ?projectId ?sexAtBirth ?race ?ethnicity ?vitalStatus ?sampleType "
     "?label ?tumorStage ?morphology ?siteBiopsy ?metastasis"
 )
 
@@ -212,7 +216,9 @@ _CASE_OPTIONALS = """      OPTIONAL {{ ?c db:submitterId ?sid }}
       OPTIONAL {{ ?c db:belongsToProject ?proj . ?proj db:projectId ?projectId }}
       OPTIONAL {{
         ?c db:hasDemographic ?demo .
-        OPTIONAL {{ ?demo db:gender ?gender }}
+        OPTIONAL {{ ?demo db:sexAtBirth ?sexNeu }}
+        OPTIONAL {{ ?demo db:gender ?sexAlt }}
+        BIND(COALESCE(?sexNeu, ?sexAlt) AS ?sexAtBirth)
         OPTIONAL {{ ?demo db:race ?race }}
         OPTIONAL {{ ?demo db:ethnicity ?ethnicity }}
         OPTIONAL {{ ?demo db:vitalStatus ?vitalStatus }}
@@ -230,8 +236,16 @@ _CASE_OPTIONALS = """      OPTIONAL {{ ?c db:submitterId ?sid }}
 # Ausgabe-Schlüssel -> SPARQL-Variable. Diese Form erwartet ``build_obs`` im
 # Mediator (``_OBS_CASE_FIELDS``) — sie ist Teil der Naht und ändert sich nicht
 # einseitig.
+#
+# ``sex_at_birth`` ist der fachlich richtige Name (GDC hat das Feld von
+# ``gender`` auf ``sex_at_birth`` umbenannt, siehe db:sexAtBirth in der TBox).
+# ``gender`` steht als **Übergangs-Alias** daneben und trägt denselben Wert,
+# damit ``build_obs`` im Mediator nicht bricht, solange dort
+# ``_OBS_CASE_FIELDS`` noch ``gender`` erwartet. Sobald Pablo umgestellt hat,
+# fällt die Alias-Zeile weg.
 _CASE_KEYS = (
-    ("submitter_id", "sid"), ("project_id", "projectId"), ("gender", "gender"),
+    ("submitter_id", "sid"), ("project_id", "projectId"),
+    ("sex_at_birth", "sexAtBirth"), ("gender", "sexAtBirth"),
     ("race", "race"), ("ethnicity", "ethnicity"), ("vital_status", "vitalStatus"),
     ("sample_type", "sampleType"),
     ("primary_diagnosis", "label"), ("tumor_stage", "tumorStage"),
@@ -272,7 +286,7 @@ def all_cases(store: GraphStore, *, limit: int | None = None) -> list[dict[str, 
     Genau **eine** SPARQL-SELECT über ``?c a db:Case`` (nicht pro Fall ein
     :func:`case_context`), die je Fall ein Dict liefert mit ``case_iri``,
     ``submitter_id``, ``project_id`` (über ``db:belongsToProject``/``db:projectId``),
-    ``gender``, ``race``, ``ethnicity``, ``vital_status``, ``sample_type`` (erster
+    ``sex_at_birth``, ``race``, ``ethnicity``, ``vital_status``, ``sample_type`` (erster
     Sample-Wert) sowie — aus der ersten Diagnose — ``primary_diagnosis`` (Label),
     ``tumor_stage``, ``morphology``, ``site_of_resection_or_biopsy`` und
     ``has_metastasis``.
