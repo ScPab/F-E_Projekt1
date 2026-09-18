@@ -64,6 +64,23 @@ in der Liste, sind aber deaktiviert und tragen den Grund als Hinweistext und
 Tooltip. Ehrliche Lücke statt unsichtbarer Grenze — dasselbe Prinzip wie bei den
 MP-Lite-Slidern.
 
+**Alle drei Auswahlen klappen auf.** Das Panel hat fünf einzeilige Felder; ein
+Klick auf eines davon öffnet eine Karte darunter. Kohorte ist **einwertig**,
+`Obj` und `Datenquelle` sind **Häkchenlisten**: dort schaltet ein Klick das
+Häkchen um und die Karte bleibt offen, sonst müsste man sie für jedes Attribut
+neu aufklappen. Geschlossen wird über Escape, Klick daneben oder erneuten Klick
+auf die Schaltfläche; die Leertaste schaltet die Zeile unter dem Cursor um.
+
+Die Schaltfläche zeigt die Auswahl gekürzt — ab drei Werten die ersten beiden
+plus `+N` (`sex_at_birth · primary_diagnosis +2`) —, den vollständigen Satz im
+Tooltip.
+
+**Ein Suchfeld gibt es nur bei Kohorte und `Obj`.** Über drei Datenquellen wäre
+es Ballast. In `Obj` wird über **Attributname und Knoten** gesucht: `stage`
+findet `tumor_stage`, `diag` die ganze Diagnose-Gruppe. Die Gruppenüberschriften
+(`Demographic`, `Diagnosis`, `Sample`) sind nicht anwählbar und verschwinden
+beim Filtern, wenn keines ihrer Attribute mehr passt.
+
 **Die Kohorte wird gesucht, nicht gescrollt.** Ein Klick auf das Feld klappt
 eine Karte mit Suchfeld auf. Gesucht wird **über die offizielle
 TCGA-Studienabkürzung** — `BRCA`, `LUAD`, `KIRC` — oder über die volle
@@ -99,7 +116,7 @@ anbindet, genügt in `config/panel.json` ein `"enabled": true`.
 | `mediator_client.py` | HTTP gegen den Mediator — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `worker.py` | `QThread`-Worker für die langen Aufrufe |
 | `theme.py` | Farben und Stylesheet an genau einer Stelle |
-| `searchable_select.py` | aufklappende Auswahl mit Suchfeld (Kohorte) |
+| `searchable_select.py` | aufklappende Auswahlmenüs: `SearchableSelect` (einwertig, Kohorte) und `MultiSelect` (Häkchen, `Obj`/`Datenquelle`) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
 | `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
 | `tests/test_mediator_client.py` | Tests ohne Qt und ohne Netz (`requests` gemockt) |
 
@@ -119,7 +136,9 @@ Statusleiste sagt, was läuft.
 setzt `Fusion` und `theme.palette()`. Ohne beides zieht der native Windows-Stil
 die System-Hell/Dunkel-Einstellung mit, und Aufklapplisten werden schwarz
 hinterlegt — mit unserer dunklen Schriftfarbe unlesbar. Aus demselben Grund
-zeichnet das Stylesheet die Häkchen (`QListWidget::indicator`) ausdrücklich.
+zeichnet das Stylesheet die Häkchen (`QListWidget::indicator`) ausdrücklich. In
+der aufklappenden Karte greift selbst das nicht: dort **malt der Zeilen-Delegate
+das Kästchen**, Größe und Farben stehen als `CHECK_*` in `theme.py`.
 
 **Top-Level-Fenster füllen unter Windows 11 gar keinen Hintergrund.** Die
 aufklappende Karte der Kohortenauswahl ist so ein Fenster: weder Stylesheet
