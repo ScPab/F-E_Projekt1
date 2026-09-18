@@ -24,6 +24,7 @@ TEXT_MUTED = "#6b7280"
 
 ACCENT = "#2563eb"           # Auswahl, aktiver Rand, Schaltflaeche "Generieren"
 ACCENT_BG = "#e6eefc"
+ON_ACCENT = "#ffffff"        # was auf der Akzentflaeche liegt (Haekchen, Text)
 
 SUCCESS = "#0d8a5f"
 SUCCESS_BG = "#dff5ec"
@@ -42,7 +43,17 @@ MONO_FAMILY = '"Consolas", "Cascadia Mono", monospace'
 HEADER_HEIGHT = 56
 PANEL_WIDTH = 360
 ROW_HEIGHT = 38              # Zeilenhoehe in den Auswahllisten
+GROUP_ROW_HEIGHT = 26        # Gruppenueberschrift in einer Auswahlliste
 DOT_SIZE = 12                # runder Anker links in einer Zeile
+
+# Haekchen-Kaestchen in den Mehrfachauswahl-Zeilen. Es wird gezeichnet, nicht
+# per Stylesheet gesetzt (QListWidget::indicator greift in der aufklappenden
+# Karte nicht, siehe PopupCard) — Groesse und Abstand gehoeren deshalb hierher
+# und nicht in den Delegate.
+CHECK_SIZE = 16              # Kantenlaenge des Kaestchens
+CHECK_RADIUS = 4             # dessen Eckenradius
+CHECK_GAP = 12               # Abstand zwischen Kaestchen und Text
+CHECK_MARK_WIDTH = 2         # Strichstaerke des Hakens
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
@@ -344,6 +355,17 @@ def dot_color(key: str) -> QColor:
     """
     farbton = (sum(ord(c) * (i + 1) for i, c in enumerate(key)) * 47) % 360
     return QColor.fromHsl(farbton, 150, 150)
+
+
+def select_button_style(leer: bool) -> str:
+    """Stylesheet-Fragment fuer die Schaltflaeche einer aufklappenden Auswahl.
+
+    Zeigt sie eine Auswahl, steht sie in normaler Textfarbe; zeigt sie
+    ``Keine Auswahl``, in gedaempfter — sonst liest sich der Platzhalter wie ein
+    gewaehlter Wert. Als Funktion hier, damit auch diese Fallunterscheidung
+    keinen Farbwert in ``searchable_select.py`` braucht.
+    """
+    return f"QPushButton#{OBJ_SELECT_BUTTON} {{ color: {TEXT_MUTED if leer else TEXT}; }}"
 
 
 def palette() -> QPalette:
