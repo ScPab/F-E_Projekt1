@@ -191,8 +191,9 @@ ersetzen":
 > Gelöscht wird nur, was die aktuelle Nutzlast auch schreibt.
 
 Das ist der Unterschied, auf den es ankommt: verschiedene Auswahlen fragen
-verschiedene Attributmengen ab. Holt Auswahl A `gender` und `tumor_stage` und
-Auswahl B danach nur `gender`, dann **löscht B das `tumor_stage` von A nicht**.
+verschiedene Attributmengen ab. Holt Auswahl A `sex_at_birth` und `tumor_stage`
+und Auswahl B danach nur `sex_at_birth`, dann **löscht B das `tumor_stage` von A
+nicht**.
 Der Store wächst monoton, außer in den Werten, die tatsächlich neu geliefert
 werden. „Fall ersetzen" würde ihn dagegen je nach letzter Anfrage schrumpfen
 lassen (siehe [`HANDOFF_pablo_P4_ersetzen.md`](HANDOFF_pablo_P4_ersetzen.md)).
@@ -238,7 +239,7 @@ rows = store.query("PREFIX db: <http://databridge.hka/onto#> "
 
 # Aufgabe 3 — Anreicherung (reine Lese-Funktionen, strukturierte Rückgabe)
 subclasses(store, "db:Case")               # -> ["http://databridge.hka/onto#Case", ...]
-ctx = case_context(store, "TCGA-A1-A0SB")  # -> {project_id, gender, diagnoses: [...]}
+ctx = case_context(store, "TCGA-A1-A0SB")  # -> {project_id, sex_at_birth, diagnoses: [...]}
 diagnosis_context(store, "d-11111111")     # -> {label, age_at_diagnosis, case_iri, ...}
 
 # Aufgabe 4 — Rückkanal (Schreiben)
@@ -249,7 +250,7 @@ list_findings(store, user="nvaldes")       # -> [{annotation, hypothesis, target
 # Auswahl (Aufgabe 13) — Manifest schreiben, danach begrenzt lesen
 graph_iri = write_selection(
     store, selection_id=recipe_key, source="gdc", cohorts=["TCGA-BRCA"],
-    modality="gene_expression", attributes=["gender", "tumor_stage"],
+    modality="gene_expression", attributes=["demographic.sex_at_birth", "tumor_stage"],
     submitter_ids=[...], sample_ids=[...],
 )
 cases_for_selection(store, recipe_key)     # wie all_cases(), aber nur diese Auswahl
@@ -264,6 +265,25 @@ Roundtrip), damit RDF-star-Ausgaben (`<< s p o >>`, Provenienz/Konfidenz aus
 dem Mediator) erhalten bleiben — Fuseki hat nativen RDF-star-Support
 (siehe [ADR-0002](../docs/adr/0002-graph-db-wahl-offen.md) und CLAUDE.md,
 „RDF-star-Falle").
+
+## Achtung: Änderungen hier brauchen einen Mediator-Neubau
+
+`mediator/Dockerfile` kopiert dieses Paket **beim Bauen** ins Image
+(`COPY wissensnetz /wissensnetz`, kein Bind-Mount). Der Mediator nutzt es für
+`all_cases`/`build_obs`. Eine Änderung an `src/wissensnetz/` wirkt deshalb erst
+nach
+
+```powershell
+.\start_all.ps1 -RebuildMediator
+```
+
+Ohne den Neubau läuft im Container weiter die alte Fassung, während `wissensnetz`
+auf dem Host bereits die neue ist — die beiden laufen dann still auseinander.
+Genau daran ist die `sex_at_birth`-Umstellung zunächst hängen geblieben: im Store
+stand die neue Property, der Container fragte noch die alte ab.
+
+(Die Ontologie unter `ontology/` ist davon ausgenommen, die ist als Bind-Mount
+eingebunden und wirkt sofort.)
 
 ## Tests
 
