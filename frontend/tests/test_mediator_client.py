@@ -63,7 +63,7 @@ def _level(**overrides):
     level = {
         "recipe_key": "abc123",
         "status": "ok",
-        "requested_fields": ["case_id", "demographic.gender"],
+        "requested_fields": ["case_id", "demographic.sex_at_birth"],
         "failed_cohorts": [],
         "triple_count": 302,
         "turtle": "@prefix db: <x> .\n",
@@ -81,7 +81,7 @@ def test_build_request_has_exactly_one_level_with_the_right_field_names() -> Non
     payload = mc.build_selection_request(
         cohort="TCGA-BRCA",
         modality="gene_expression",
-        attributes=["gender", "primary_diagnosis"],
+        attributes=["sex_at_birth", "primary_diagnosis"],
         sources=["gdc"],
         size=20,
     )
@@ -93,16 +93,16 @@ def test_build_request_has_exactly_one_level_with_the_right_field_names() -> Non
     assert level["cohorts"] == ["TCGA-BRCA"]
     assert level["source"] == "gdc"
     assert level["modality"] == "gene_expression"
-    assert level["attributes"] == ["gender", "primary_diagnosis"]
+    assert level["attributes"] == ["sex_at_birth", "primary_diagnosis"]
     assert payload["size"] == 20
 
 
 def test_build_request_takes_the_checked_attributes_in_order() -> None:
     payload = mc.build_selection_request(
         cohort="TCGA-KIRC", modality="gene_expression",
-        attributes=["tumor_stage", "gender", "sample_type"], sources=["gdc"], size=5,
+        attributes=["tumor_stage", "sex_at_birth", "sample_type"], sources=["gdc"], size=5,
     )
-    assert payload["levels"][0]["attributes"] == ["tumor_stage", "gender", "sample_type"]
+    assert payload["levels"][0]["attributes"] == ["tumor_stage", "sex_at_birth", "sample_type"]
 
 
 def test_build_request_accepts_no_attributes() -> None:
@@ -129,7 +129,7 @@ def test_several_sources_become_several_levels() -> None:
     payload = mc.build_selection_request(
         cohort="TCGA-BRCA",
         modality="gene_expression",
-        attributes=["gender"],
+        attributes=["sex_at_birth"],
         sources=["gdc", "ena", "geo"],
         size=20,
     )
@@ -138,7 +138,7 @@ def test_several_sources_become_several_levels() -> None:
     for level in payload["levels"]:
         assert level["cohorts"] == ["TCGA-BRCA"]
         assert level["modality"] == "gene_expression"
-        assert level["attributes"] == ["gender"]
+        assert level["attributes"] == ["sex_at_birth"]
     assert payload["size"] == 20
 
 

@@ -71,7 +71,7 @@ def two_selections(loaded_store: GraphStore):
         source="gdc",
         cohorts=["TCGA-BRCA"],
         modality="gene_expression",
-        attributes=["gender", "tumor_stage"],
+        attributes=["sex_at_birth", "tumor_stage"],
         submitter_ids=_submitter_ids(store, a_cases),
         sample_ids=_sample_ids(store, a_cases),
         timestamp="2026-09-17T10:00:00+00:00",
@@ -128,7 +128,7 @@ def test_manifest_parses_as_turtle_and_holds_expected_triples() -> None:
         source="gdc",
         cohorts=["TCGA-BRCA", "TCGA-KIRC", "TCGA-BRCA"],  # Dublette fällt weg
         modality="gene_expression",
-        attributes=["gender", "tumor_stage"],
+        attributes=["sex_at_birth", "tumor_stage"],
         submitter_ids=["TCGA-AA-0001", "TCGA-AA-0002"],
         sample_ids=["s-1", "s-2", "s-3"],
         timestamp="2026-09-17T10:00:00+00:00",
@@ -144,7 +144,7 @@ def test_manifest_parses_as_turtle_and_holds_expected_triples() -> None:
     assert str(g.value(s, DB.source)) == "gdc"
     assert str(g.value(s, DB.selectedModality)) == "gene_expression"
     assert {str(o) for o in g.objects(s, DB.selectedCohort)} == {"TCGA-BRCA", "TCGA-KIRC"}
-    assert {str(o) for o in g.objects(s, DB.selectedAttribute)} == {"gender", "tumor_stage"}
+    assert {str(o) for o in g.objects(s, DB.selectedAttribute)} == {"sex_at_birth", "tumor_stage"}
     assert {str(o) for o in g.objects(s, DB.hasMember)} == {
         f"{INSTANCE}sample/s-{i}" for i in (1, 2, 3)
     }
@@ -180,7 +180,7 @@ def test_write_then_list_finds_the_selection(two_selections) -> None:
     assert a["source"] == "gdc"
     assert a["modality"] == "gene_expression"
     assert a["cohorts"] == ["TCGA-BRCA"]
-    assert sorted(a["attributes"]) == ["gender", "tumor_stage"]
+    assert sorted(a["attributes"]) == ["sex_at_birth", "tumor_stage"]
     assert a["timestamp"] == "2026-09-17T10:00:00+00:00"
     assert a["cases"] == len(a_cases)
     assert a["members"] > 0
@@ -196,7 +196,7 @@ def test_write_selection_replaces_instead_of_appending(two_selections) -> None:
         source="gdc",
         cohorts=["TCGA-BRCA"],
         modality="gene_expression",
-        attributes=["gender", "tumor_stage"],
+        attributes=["sex_at_birth", "tumor_stage"],
         submitter_ids=_submitter_ids(store, a_cases[:1]),
         sample_ids=_sample_ids(store, a_cases[:1]),
         timestamp="2026-09-17T10:00:00+00:00",

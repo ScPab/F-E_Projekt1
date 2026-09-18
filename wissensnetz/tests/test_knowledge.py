@@ -6,9 +6,9 @@ Skip ohne erreichbares Fuseki (übernimmt die ``store``-Fixture).
 
 Der entscheidende Test ist
 :func:`test_upsert_replaces_only_the_delivered_property`: ein Fall wird mit
-``gender`` **und** ``tumorStage`` geladen, danach nur mit ``gender`` und einem
-anderen Wert. Danach muss ``db:gender`` genau **einen** Wert haben (den neuen)
-und ``db:tumorStage`` **noch da** sein. Das ist der Grund für die Aufgabe:
+``sexAtBirth`` **und** ``tumorStage`` geladen, danach nur mit ``sexAtBirth``
+und einem anderen Wert. Danach muss ``db:sexAtBirth`` genau **einen** Wert
+haben (den neuen) und ``db:tumorStage`` **noch da** sein. Das ist der Grund für die Aufgabe:
 "Fall ersetzen" würde hier das ``tumorStage`` eines früheren, reicheren Aufrufs
 verlieren.
 """
@@ -38,11 +38,11 @@ SUBMITTER = "PYTEST-K14-0001"
 OTHER_SUBMITTER = "PYTEST-K14-0002"
 NCIT = "http://purl.obolibrary.org/obo/NCIT_C7950"
 
-GENDER = f"{DB}gender"
+SEX_AT_BIRTH = f"{DB}sexAtBirth"
 TUMOR_STAGE = f"{DB}tumorStage"
 
 
-def _turtle(*, gender: str, with_stage: bool = False, with_diagnosis: bool = False) -> str:
+def _turtle(*, sex_at_birth: str, with_stage: bool = False, with_diagnosis: bool = False) -> str:
     """Nutzlast in der Form, die der Mediator liefert (typisierte Literale,
     Unterknoten je Demographic/Diagnosis/Sample, RDF-star fürs Alignment)."""
     stage = f'    db:tumorStage "Stage IB"^^xsd:string ;\n' if with_stage else ""
@@ -79,7 +79,7 @@ def _turtle(*, gender: str, with_stage: bool = False, with_diagnosis: bool = Fal
 
 <{DEMO}> a db:Demographic ;
     db:isDemographicOf <{CASE}> ;
-{stage}    db:gender "{gender}"^^xsd:string .
+{stage}    db:sexAtBirth "{sex_at_birth}"^^xsd:string .
 
 <{SAMPLE}> a db:Sample ;
     db:isSampleOf <{CASE}> ;
@@ -91,7 +91,7 @@ def _turtle(*, gender: str, with_stage: bool = False, with_diagnosis: bool = Fal
     db:hasDemographic <{OTHER_DEMO}> .
 
 <{OTHER_DEMO}> a db:Demographic ;
-    db:gender "male"^^xsd:string .
+    db:sexAtBirth "male"^^xsd:string .
 {diagnosis}{star}"""
 
 
@@ -133,24 +133,24 @@ def test_upsert_replaces_only_the_delivered_property(clean_store: GraphStore) ->
     das Attribut des früheren, reicheren Aufrufs bleibt stehen."""
     store = clean_store
 
-    # Aufruf 1: gender UND tumor_stage
+    # Aufruf 1: sex_at_birth UND tumor_stage
     kn.load_knowledge(
-        store, _turtle(gender="female", with_stage=True),
+        store, _turtle(sex_at_birth="female", with_stage=True),
         submitter_ids=[SUBMITTER, OTHER_SUBMITTER],
-        properties=[GENDER, TUMOR_STAGE],
+        properties=[SEX_AT_BIRTH, TUMOR_STAGE],
     )
-    assert _values(store, DEMO, GENDER) == ["female"]
+    assert _values(store, DEMO, SEX_AT_BIRTH) == ["female"]
     assert _values(store, DEMO, TUMOR_STAGE) == ["Stage IB"]
 
-    # Aufruf 2: NUR gender, mit geändertem Wert
+    # Aufruf 2: NUR sex_at_birth, mit geändertem Wert
     kn.load_knowledge(
-        store, _turtle(gender="male"),
+        store, _turtle(sex_at_birth="male"),
         submitter_ids=[SUBMITTER, OTHER_SUBMITTER],
-        properties=[GENDER],
+        properties=[SEX_AT_BIRTH],
     )
 
-    # genau ein gender, und zwar der neue …
-    assert _values(store, DEMO, GENDER) == ["male"]
+    # genau ein sex_at_birth, und zwar der neue …
+    assert _values(store, DEMO, SEX_AT_BIRTH) == ["male"]
     # … und tumor_stage aus dem ersten Aufruf lebt noch.
     assert _values(store, DEMO, TUMOR_STAGE) == ["Stage IB"]
 
@@ -159,9 +159,9 @@ def test_append_only_would_duplicate(clean_store: GraphStore) -> None:
     """Gegenprobe: ohne ``properties`` (= bisheriges Anhängen) entstehen genau
     die zwei Werte, wegen derer es diese Aufgabe gibt."""
     store = clean_store
-    kn.load_knowledge(store, _turtle(gender="female"), submitter_ids=[SUBMITTER])
-    kn.load_knowledge(store, _turtle(gender="male"), submitter_ids=[SUBMITTER])
-    assert _values(store, DEMO, GENDER) == ["female", "male"]
+    kn.load_knowledge(store, _turtle(sex_at_birth="female"), submitter_ids=[SUBMITTER])
+    kn.load_knowledge(store, _turtle(sex_at_birth="male"), submitter_ids=[SUBMITTER])
+    assert _values(store, DEMO, SEX_AT_BIRTH) == ["female", "male"]
 
 
 # --------------------------------------------------------------------------
@@ -173,22 +173,22 @@ def test_first_load_deletes_nothing_and_does_not_raise(clean_store: GraphStore) 
     store = clean_store
     assert not store.ask(PREFIXES + f'ASK {{ ?c db:submitterId "{SUBMITTER}" }}')
     kn.load_knowledge(
-        store, _turtle(gender="female"),
-        submitter_ids=[SUBMITTER], properties=[GENDER],
+        store, _turtle(sex_at_birth="female"),
+        submitter_ids=[SUBMITTER], properties=[SEX_AT_BIRTH],
     )
-    assert _values(store, DEMO, GENDER) == ["female"]
+    assert _values(store, DEMO, SEX_AT_BIRTH) == ["female"]
 
 
 def test_replace_case_properties_is_a_noop_without_input(clean_store: GraphStore) -> None:
     store = clean_store
-    assert kn.replace_case_properties(store, case_iris=[], properties=[GENDER]) == 0
+    assert kn.replace_case_properties(store, case_iris=[], properties=[SEX_AT_BIRTH]) == 0
     assert kn.replace_case_properties(store, case_iris=[CASE], properties=[]) == 0
 
 
 def test_properties_none_behaves_like_load_turtle(clean_store: GraphStore) -> None:
     store = clean_store
-    kn.load_knowledge(store, _turtle(gender="female"), submitter_ids=[SUBMITTER])
-    assert _values(store, DEMO, GENDER) == ["female"]
+    kn.load_knowledge(store, _turtle(sex_at_birth="female"), submitter_ids=[SUBMITTER])
+    assert _values(store, DEMO, SEX_AT_BIRTH) == ["female"]
     assert store.ask(PREFIXES + f"ASK {{ <{SAMPLE}> db:sampleType ?t }}")
 
 
@@ -197,34 +197,34 @@ def test_upsert_touches_only_the_named_cases(clean_store: GraphStore) -> None:
     in ``submitter_ids`` steht — die Eingrenzung hängt am Fall, nicht an der
     Property allein."""
     store = clean_store
-    kn.load_knowledge(store, _turtle(gender="female"), submitter_ids=[SUBMITTER])
-    assert _values(store, OTHER_DEMO, GENDER) == ["male"]
+    kn.load_knowledge(store, _turtle(sex_at_birth="female"), submitter_ids=[SUBMITTER])
+    assert _values(store, OTHER_DEMO, SEX_AT_BIRTH) == ["male"]
 
-    kn.replace_case_properties(store, case_iris=[CASE], properties=[GENDER])
+    kn.replace_case_properties(store, case_iris=[CASE], properties=[SEX_AT_BIRTH])
 
-    assert _values(store, DEMO, GENDER) == []
-    assert _values(store, OTHER_DEMO, GENDER) == ["male"]
+    assert _values(store, DEMO, SEX_AT_BIRTH) == []
+    assert _values(store, OTHER_DEMO, SEX_AT_BIRTH) == ["male"]
 
 
 def test_tbox_survives_the_upsert(clean_store: GraphStore) -> None:
     """Die TBox liegt im selben Default-Graph wie die ABox; das Löschen ist über
     ``VALUES ?case`` auf Instanz-IRIs verankert und darf sie nicht treffen."""
     store = clean_store
-    kn.load_knowledge(store, _turtle(gender="female"), submitter_ids=[SUBMITTER])
+    kn.load_knowledge(store, _turtle(sex_at_birth="female"), submitter_ids=[SUBMITTER])
     kn.replace_case_properties(
-        store, case_iris=[CASE], properties=[GENDER, TUMOR_STAGE, f"{DB}sampleType"]
+        store, case_iris=[CASE], properties=[SEX_AT_BIRTH, TUMOR_STAGE, f"{DB}sampleType"]
     )
     assert store.ask(PREFIXES + "ASK { db:Case a owl:Class }")
-    assert store.ask(PREFIXES + "ASK { db:gender a owl:DatatypeProperty }")
+    assert store.ask(PREFIXES + "ASK { db:sexAtBirth a owl:DatatypeProperty }")
 
 
 def test_project_node_survives_the_upsert(clean_store: GraphStore) -> None:
     """Projekt-Knoten sind kohortenweit geteilt; ``db:belongsToProject`` steht
     deshalb nicht im Pfad."""
     store = clean_store
-    kn.load_knowledge(store, _turtle(gender="female"), submitter_ids=[SUBMITTER])
+    kn.load_knowledge(store, _turtle(sex_at_birth="female"), submitter_ids=[SUBMITTER])
     kn.replace_case_properties(
-        store, case_iris=[CASE, OTHER_CASE], properties=[GENDER, f"{DB}projectId"]
+        store, case_iris=[CASE, OTHER_CASE], properties=[SEX_AT_BIRTH, f"{DB}projectId"]
     )
     assert store.ask(PREFIXES + f'ASK {{ <{PROJECT}> db:projectId "PYTEST-K14-PROJ" }}')
     assert store.ask(PREFIXES + f"ASK {{ <{CASE}> db:belongsToProject <{PROJECT}> }}")
@@ -246,11 +246,11 @@ def test_feedback_named_graph_survives_upsert(clean_store: GraphStore) -> None:
     graph = fb.write_feedback(store, event)
     try:
         kn.load_knowledge(
-            store, _turtle(gender="female"),
-            submitter_ids=[SUBMITTER], properties=[GENDER, f"{DB}confidence"],
+            store, _turtle(sex_at_birth="female"),
+            submitter_ids=[SUBMITTER], properties=[SEX_AT_BIRTH, f"{DB}confidence"],
         )
         kn.replace_case_properties(
-            store, case_iris=[CASE], properties=[GENDER, f"{DB}confidence"]
+            store, case_iris=[CASE], properties=[SEX_AT_BIRTH, f"{DB}confidence"]
         )
         assert len(fb.list_findings(store, user=event.user)) == 1
         assert len(fb.reclassifications(store, user=event.user)) == 1
@@ -268,7 +268,7 @@ def test_primary_diagnosis_label_also_clears_the_alignment(clean_store: GraphSto
     mehr gibt."""
     store = clean_store
     kn.load_knowledge(
-        store, _turtle(gender="female", with_diagnosis=True),
+        store, _turtle(sex_at_birth="female", with_diagnosis=True),
         submitter_ids=[SUBMITTER], properties=[f"{DB}primaryDiagnosisLabel"],
     )
     assert _values(store, DIAG, f"{DB}primaryDiagnosis") == [NCIT]
@@ -287,8 +287,8 @@ def test_primary_diagnosis_label_also_clears_the_alignment(clean_store: GraphSto
 
 
 def test_expand_properties_only_adds_the_alignment_pair() -> None:
-    props = kn._expand_properties([f"{DB}gender"])
-    assert props == [f"{DB}gender"]
+    props = kn._expand_properties([f"{DB}sexAtBirth"])
+    assert props == [f"{DB}sexAtBirth"]
     props = kn._expand_properties([f"{DB}primaryDiagnosisLabel"])
     assert props == [f"{DB}primaryDiagnosisLabel", f"{DB}primaryDiagnosis"]
     # CURIE-Schreibweise wird genauso erkannt.
