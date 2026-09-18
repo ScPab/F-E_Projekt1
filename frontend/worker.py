@@ -63,3 +63,43 @@ def start_call(payload: dict[str, Any], mode: str, on_finished) -> tuple[QThread
 
     thread.start()
     return thread, worker
+
+
+class DownloadWorker(QObject):
+    """Laedt **eine** Datei vom Mediator herunter und meldet das Ergebnis.
+
+    Eigener Worker statt Wiederverwendung von :class:`SelectionWorker`: ein
+    Download braucht ``download_url``/``dest_path`` statt eines
+    Auswahl-Auftrags, und liefert kein ``mode`` zurueck — beides passt nicht
+    in dessen Signatur. Grund fuer den eigenen Thread ist derselbe wie beim
+    Generieren: die Datei kann gross sein, das Schreiben darf den GUI-Thread
+    nicht blockieren.
+    """
+
+    finished = Signal(object)  # mediator_client.Result
+
+    def __init__(self, download_url: str, dest_path: str) -> None:
+        super().__init__()
+        self._download_url = download_url
+        self._dest_path = dest_path
+
+    def run(self) -> None:
+        result = mc.download(self._download_url, self._dest_path)
+        self.finished.emit(result)
+
+
+def start_download(download_url: str, dest_path: str, on_finished) -> tuple[QThread, DownloadWorker]:
+    """Wie :func:`start_call`, aber fuer einen Datei-Download (siehe dort fuer
+    die Regeln zum Freigeben der Rueckgabe)."""
+    thread = QThread()
+    dl_worker = DownloadWorker(download_url, dest_path)
+    dl_worker.moveToThread(thread)
+
+    thread.started.connect(dl_worker.run)
+    dl_worker.finished.connect(on_finished)
+    dl_worker.finished.connect(thread.quit)
+    dl_worker.finished.connect(dl_worker.deleteLater)
+    thread.finished.connect(thread.deleteLater)
+
+    thread.start()
+    return thread, dl_worker

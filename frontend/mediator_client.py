@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -114,6 +115,44 @@ def preview(payload: dict[str, Any], *, base_url: str = "", timeout: float = PRE
 def generate(payload: dict[str, Any], *, base_url: str = "", timeout: float = GENERATE_TIMEOUT) -> Result:
     """``POST /selection/generate`` — dasselbe, plus Download und ``.h5ad``."""
     return _post("/selection/generate", payload, base_url=base_url, timeout=timeout)
+
+
+def download(download_url: str, dest_path: str, *, base_url: str = "", timeout: float = GENERATE_TIMEOUT) -> Result:
+    """``GET {mediator}{download_url}`` streamen und nach ``dest_path`` schreiben.
+
+    Das ``.h5ad`` entsteht im Mediator-**Container**
+    (``app/semantic/paths.py::export_dir()``) und ist von dort aus nicht als
+    Host-Pfad sichtbar — der Download-Endpunkt ist der einzige Weg auf den
+    Rechner. Dieselbe Streaming-Logik wie ``_download()`` in
+    ``scripts/run_selection.py``/``scripts/fetch_pancancer_h5ad.py``.
+
+    ``Result.data`` traegt bei Erfolg ``{"path": dest_path}`` statt einer
+    Mediator-Antwort — es gibt hier keine.
+    """
+    url = (base_url or default_base_url()).rstrip("/") + download_url
+    try:
+        with requests.get(url, stream=True, timeout=timeout) as resp:
+            if not resp.ok:
+                return Result(
+                    ok=False,
+                    status_code=resp.status_code,
+                    error=f"HTTP {resp.status_code} bei {download_url}: {_detail(resp)}",
+                )
+            out = Path(dest_path)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with open(out, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1 << 16):
+                    if chunk:
+                        fh.write(chunk)
+    except requests.Timeout:
+        return Result(ok=False, error=f"Zeitüberschreitung nach {timeout:.0f}s beim Download.")
+    except requests.ConnectionError:
+        return Result(ok=False, error=f"Mediator nicht erreichbar unter {url}.")
+    except requests.RequestException as exc:
+        return Result(ok=False, error=f"Download fehlgeschlagen: {exc}")
+    except OSError as exc:
+        return Result(ok=False, error=f"Datei konnte nicht geschrieben werden: {exc}")
+    return Result(ok=True, status_code=200, data={"path": str(dest_path)})
 
 
 def _post(path: str, payload: dict[str, Any], *, base_url: str, timeout: float) -> Result:

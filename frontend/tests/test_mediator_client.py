@@ -35,6 +35,30 @@ class FakeResponse:
         return self._payload
 
 
+class FakeStreamResponse:
+    """Minimales ``requests.Response``-Double für ``download()`` — Context-Manager
+    plus ``iter_content`` statt ``json()`` (andere API-Form als ``FakeResponse``,
+    weil ``download()`` streamt statt einmalig ``.json()`` zu lesen)."""
+
+    def __init__(self, status_code: int = 200, chunks: list[bytes] | None = None, text: str = "") -> None:
+        self.status_code = status_code
+        self.ok = 200 <= status_code < 300
+        self._chunks = chunks or []
+        self.text = text
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def iter_content(self, chunk_size=1 << 16):
+        yield from self._chunks
+
+    def json(self):
+        raise ValueError("kein JSON")
+
+
 def _level(**overrides):
     level = {
         "recipe_key": "abc123",
@@ -199,6 +223,53 @@ def test_non_json_answer_is_reported() -> None:
         result = mc.preview({}, base_url="http://localhost:8000")
     assert result.ok is False
     assert "JSON" in result.error
+
+
+# --------------------------------------------------------------------------
+# download
+# --------------------------------------------------------------------------
+def test_download_writes_the_streamed_bytes_to_dest_path(tmp_path) -> None:
+    dest = tmp_path / "sub" / "out.h5ad"
+    with patch.object(mc.requests, "get", return_value=FakeStreamResponse(chunks=[b"hello ", b"world"])) as get:
+        result = mc.download("/export/anndata/download/abc.h5ad", str(dest), base_url="http://testhost:9000")
+    assert get.call_args.args[0] == "http://testhost:9000/export/anndata/download/abc.h5ad"
+    assert get.call_args.kwargs["stream"] is True
+    assert result.ok is True
+    assert result.data == {"path": str(dest)}
+    assert dest.read_bytes() == b"hello world"
+
+
+def test_download_creates_missing_parent_directories(tmp_path) -> None:
+    """Ziel liegt in noch nicht existierenden Ordnern — wie ``wissensnetz/data/``
+    beim allerersten Download."""
+    dest = tmp_path / "does" / "not" / "exist" / "out.h5ad"
+    with patch.object(mc.requests, "get", return_value=FakeStreamResponse(chunks=[b"x"])):
+        result = mc.download("/x", str(dest), base_url="http://h")
+    assert result.ok is True
+    assert dest.exists()
+
+
+def test_download_http_error_is_reported_without_writing_a_file(tmp_path) -> None:
+    dest = tmp_path / "out.h5ad"
+    with patch.object(mc.requests, "get", return_value=FakeStreamResponse(404, text="nicht gefunden")):
+        result = mc.download("/export/anndata/download/missing.h5ad", str(dest), base_url="http://h")
+    assert result.ok is False
+    assert result.status_code == 404
+    assert not dest.exists()
+
+
+def test_download_connection_error_becomes_a_result_not_an_exception(tmp_path) -> None:
+    with patch.object(mc.requests, "get", side_effect=requests.ConnectionError("refused")):
+        result = mc.download("/x", str(tmp_path / "out.h5ad"), base_url="http://h")
+    assert result.ok is False
+    assert "nicht erreichbar" in result.error
+
+
+def test_download_timeout_becomes_a_result_not_an_exception(tmp_path) -> None:
+    with patch.object(mc.requests, "get", side_effect=requests.Timeout()):
+        result = mc.download("/x", str(tmp_path / "out.h5ad"), base_url="http://h")
+    assert result.ok is False
+    assert "Zeitüberschreitung" in result.error
 
 
 # --------------------------------------------------------------------------

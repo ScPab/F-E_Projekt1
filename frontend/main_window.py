@@ -17,15 +17,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
@@ -97,7 +100,14 @@ class MainWindow(QMainWindow):
         # den Prozess hart ("Destroyed while thread is still running").
         self._thread = None
         self._worker = None
+        # Dieselbe Regel fuer den separaten Download-Thread (siehe worker.py).
+        self._dl_thread = None
+        self._dl_worker = None
+        # Ebenen des letzten erfolgreichen 'Generieren'-Laufs mit .h5ad —
+        # Grundlage fuer das Download-Menue (siehe _update_download_menu).
+        self._downloadable: list[dict[str, Any]] = []
 
+        self._build_menu()
         self._build_ui()
         self._fill_panel()
 
@@ -109,6 +119,110 @@ class MainWindow(QMainWindow):
                 f"{len(self._cohorts)} Kohorten geladen.",
                 "info",
             )
+
+    # -- Menue ---------------------------------------------------------------
+    def _build_menu(self) -> None:
+        """Menueleiste mit dem Download-Eintrag.
+
+        Das ``.h5ad`` entsteht im Mediator-Container und ist von dort aus
+        nicht als Host-Pfad sichtbar (siehe ``mediator_client.download``) —
+        dieses Menue ist der Weg, es ohne Docker-Kommandozeile auf die
+        eigene Platte zu bekommen. Ein Untermenue statt einer einzelnen
+        Aktion, weil mehrere angehakte Datenquellen mehrere Ebenen und damit
+        mehrere ``.h5ad``-Dateien liefern koennen (ADR-0003, Entscheidung
+        7.2) — mit nur einer Ebene steht dort eben genau ein Eintrag.
+        Deaktiviert, bis ein 'Generieren'-Lauf etwas Herunterladbares
+        liefert (siehe ``_update_download_menu``).
+        """
+        file_menu = self.menuBar().addMenu("&Datei")
+        self._download_menu = QMenu("Als .h5ad speichern", self)
+        self._download_menu.setEnabled(False)
+        file_menu.addMenu(self._download_menu)
+
+    def _collect_downloadable(self, levels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Ebenen mit erfolgreich erzeugtem ``.h5ad`` aus einer Mediator-Antwort.
+
+        Nur ``status="ok"`` UND vorhandene ``anndata.download_url`` zaehlen —
+        eine fehlgeschlagene Ebene oder eine Vorschau hat keine Datei zum
+        Holen (siehe ``SelectionLevelResult`` im Mediator).
+        """
+        entries: list[dict[str, Any]] = []
+        for level in levels:
+            anndata = level.get("anndata") or {}
+            url = anndata.get("download_url")
+            if level.get("status") != "ok" or not url:
+                continue
+            sel = level.get("selection") or {}
+            cohorts = ", ".join(sel.get("cohorts") or []) or "?"
+            entries.append({
+                "label": f"{sel.get('source') or '?'} — {cohorts}",
+                "download_url": url,
+                "filename": anndata.get("filename") or "export.h5ad",
+            })
+        return entries
+
+    def _update_download_menu(self, entries: list[dict[str, Any]]) -> None:
+        """Download-Untermenue UND den Download-Button neu einrichten (nach
+        jedem 'Generieren') — beide teilen sich dieselbe Liste, damit sie nie
+        auseinanderlaufen."""
+        self._downloadable = entries
+        self._download_menu.clear()
+        self._download_menu.setEnabled(bool(entries))
+        self._download_button.setEnabled(bool(entries))
+        for entry in entries:
+            action = QAction(f"{entry['label']}  ({entry['filename']}) …", self)
+            action.triggered.connect(lambda checked=False, e=entry: self._download_h5ad(e))
+            self._download_menu.addAction(action)
+
+    def _on_download_button_clicked(self) -> None:
+        """Bei genau einer Ebene direkt den Speichern-Dialog oeffnen, bei
+        mehreren (mehrere angehakte Datenquellen) dieselbe Auswahl wie im
+        Menue als Popup unter dem Button zeigen."""
+        if not self._downloadable:
+            return
+        if len(self._downloadable) == 1:
+            self._download_h5ad(self._downloadable[0])
+            return
+        self._download_menu.exec(
+            self._download_button.mapToGlobal(QPoint(0, self._download_button.height()))
+        )
+
+    def _download_h5ad(self, entry: dict[str, Any]) -> None:
+        """Speichern-Dialog zeigen und die Datei im Hintergrund herunterladen.
+
+        Vorschlag fuer Ordner/Name: ``wissensnetz/data/<filename>`` — dieselbe
+        Konvention wie ``start_all.ps1 -DemoGenerate``/``run_selection.py --out``,
+        damit MP-Lite/Explorer dieselben Ablagen kennen. Der Nutzer kann das
+        im Dialog jederzeit aendern.
+        """
+        if self._dl_thread is not None:
+            self.set_status("Es laeuft bereits ein Download — bitte warten.", "warning")
+            return
+
+        default_dir = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
+        suggested = str(default_dir / entry["filename"])
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Als .h5ad speichern", suggested, "AnnData (*.h5ad);;Alle Dateien (*)"
+        )
+        if not path:
+            return
+
+        self.set_status(f"Lade {entry['filename']} herunter … Das Fenster bleibt bedienbar.", "busy")
+        self._dl_thread, self._dl_worker = worker.start_download(
+            entry["download_url"], path, self._on_download_finished
+        )
+        self._dl_thread.finished.connect(self._release_download_thread)
+
+    def _on_download_finished(self, result: mc.Result) -> None:
+        if result.ok:
+            self.set_status(f"Gespeichert: {result.data.get('path')}", "success")
+        else:
+            self.set_status(result.error or "Download fehlgeschlagen.", "error")
+
+    def _release_download_thread(self) -> None:
+        """Wie ``_release_thread``, aber fuer den Download-Thread (siehe dort)."""
+        self._dl_thread = None
+        self._dl_worker = None
 
     # -- Aufbau ------------------------------------------------------------
     def _build_ui(self) -> None:
@@ -185,9 +299,19 @@ class MainWindow(QMainWindow):
         self._generate_button = QPushButton("Generieren")
         self._generate_button.setObjectName(theme.OBJ_PRIMARY_BUTTON)
         self._generate_button.clicked.connect(lambda: self._start("generate"))
+        # Sichtbarer Button statt nur des "Datei"-Menues: ein Menueintrag
+        # allein wurde beim Testen nicht gefunden ("steht nur die download_url
+        # da, aber nirgendwo wo ich es herunterladen kann") — der Button steht
+        # direkt neben den anderen beiden Aktionen und ist daher nicht zu
+        # uebersehen. Deaktiviert, bis 'Generieren' etwas Herunterladbares
+        # liefert (siehe _update_download_menu).
+        self._download_button = QPushButton("Als .h5ad speichern")
+        self._download_button.setEnabled(False)
+        self._download_button.clicked.connect(self._on_download_button_clicked)
 
         button_layout.addWidget(self._preview_button)
         button_layout.addWidget(self._generate_button)
+        button_layout.addWidget(self._download_button)
         button_layout.addStretch(1)
         layout.addWidget(buttons)
         return side
@@ -446,6 +570,12 @@ class MainWindow(QMainWindow):
             )
             self.set_status("Antwort ohne Ebenen.", "warning")
             return
+
+        # Download-Menue nur nach 'Generieren' aktualisieren: eine Vorschau
+        # liefert kein .h5ad und soll ein zuvor erzeugtes nicht aus dem Menue
+        # werfen (die Datei bleibt ja abrufbar).
+        if mode == "generate":
+            self._update_download_menu(self._collect_downloadable(levels))
 
         # Eine Ebene je gewaehlter Datenquelle: alle anzeigen, nicht nur die
         # erste — eine Ebene kann scheitern, ohne die anderen zu beeintraechtigen.
