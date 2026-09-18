@@ -250,7 +250,7 @@ list_findings(store, user="nvaldes")       # -> [{annotation, hypothesis, target
 # Auswahl (Aufgabe 13) — Manifest schreiben, danach begrenzt lesen
 graph_iri = write_selection(
     store, selection_id=recipe_key, source="gdc", cohorts=["TCGA-BRCA"],
-    modality="gene_expression", attributes=["demographic.sex_at_birth", "tumor_stage"],
+    modality="gene_expression", attributes=["sex_at_birth", "tumor_stage"],
     submitter_ids=[...], sample_ids=[...],
 )
 cases_for_selection(store, recipe_key)     # wie all_cases(), aber nur diese Auswahl

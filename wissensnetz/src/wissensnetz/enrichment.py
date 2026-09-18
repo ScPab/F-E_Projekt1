@@ -181,8 +181,6 @@ def case_context(store: GraphStore, case_ref: str) -> dict[str, Any]:
         "submitter_id": _first(rows, "sid"),
         "project_id": _first(rows, "projectId"),
         "sex_at_birth": _first(rows, "sexAtBirth"),
-        # Übergangs-Alias, siehe _CASE_KEYS.
-        "gender": _first(rows, "sexAtBirth"),
         "race": _first(rows, "race"),
         "ethnicity": _first(rows, "ethnicity"),
         "vital_status": _first(rows, "vitalStatus"),
@@ -237,15 +235,11 @@ _CASE_OPTIONALS = """      OPTIONAL {{ ?c db:submitterId ?sid }}
 # Mediator (``_OBS_CASE_FIELDS``) — sie ist Teil der Naht und ändert sich nicht
 # einseitig.
 #
-# ``sex_at_birth`` ist der fachlich richtige Name (GDC hat das Feld von
-# ``gender`` auf ``sex_at_birth`` umbenannt, siehe db:sexAtBirth in der TBox).
-# ``gender`` steht als **Übergangs-Alias** daneben und trägt denselben Wert,
-# damit ``build_obs`` im Mediator nicht bricht, solange dort
-# ``_OBS_CASE_FIELDS`` noch ``gender`` erwartet. Sobald Pablo umgestellt hat,
-# fällt die Alias-Zeile weg.
+# ``sex_at_birth``: GDC hat das Feld von ``gender`` umbenannt, die TBox führt
+# es als ``db:sexAtBirth`` (``db:gender`` bleibt deprecated lesbar).
 _CASE_KEYS = (
     ("submitter_id", "sid"), ("project_id", "projectId"),
-    ("sex_at_birth", "sexAtBirth"), ("gender", "sexAtBirth"),
+    ("sex_at_birth", "sexAtBirth"),
     ("race", "race"), ("ethnicity", "ethnicity"), ("vital_status", "vitalStatus"),
     ("sample_type", "sampleType"),
     ("primary_diagnosis", "label"), ("tumor_stage", "tumorStage"),

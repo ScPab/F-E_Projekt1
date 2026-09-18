@@ -7,7 +7,7 @@
       ],
       "modality": "gene_expression",
       "attributes": [
-        "demographic.sex_at_birth",
+        "sex_at_birth",
         "tumor_stage",
         "primary_diagnosis",
         "sample_type"
