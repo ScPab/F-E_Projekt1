@@ -58,7 +58,7 @@ def test_build_request_has_exactly_one_level_with_the_right_field_names() -> Non
         cohort="TCGA-BRCA",
         modality="gene_expression",
         attributes=["gender", "primary_diagnosis"],
-        source="gdc",
+        sources=["gdc"],
         size=20,
     )
     # Feldnamen gegen die OpenAPI des Mediators (SelectionRequest/SingleSelection).
@@ -76,7 +76,7 @@ def test_build_request_has_exactly_one_level_with_the_right_field_names() -> Non
 def test_build_request_takes_the_checked_attributes_in_order() -> None:
     payload = mc.build_selection_request(
         cohort="TCGA-KIRC", modality="gene_expression",
-        attributes=["tumor_stage", "gender", "sample_type"], source="gdc", size=5,
+        attributes=["tumor_stage", "gender", "sample_type"], sources=["gdc"], size=5,
     )
     assert payload["levels"][0]["attributes"] == ["tumor_stage", "gender", "sample_type"]
 
@@ -84,7 +84,7 @@ def test_build_request_takes_the_checked_attributes_in_order() -> None:
 def test_build_request_accepts_no_attributes() -> None:
     payload = mc.build_selection_request(
         cohort="TCGA-BRCA", modality="gene_expression",
-        attributes=[], source="gdc", size=20,
+        attributes=[], sources=["gdc"], size=20,
     )
     assert payload["levels"][0]["attributes"] == []
 
@@ -93,9 +93,39 @@ def test_build_request_accepts_no_attributes() -> None:
 def test_build_request_clamps_size_to_the_openapi_limits(given, expected) -> None:
     payload = mc.build_selection_request(
         cohort="TCGA-BRCA", modality="gene_expression",
-        attributes=[], source="gdc", size=given,
+        attributes=[], sources=["gdc"], size=given,
     )
     assert payload["size"] == expected
+
+
+def test_several_sources_become_several_levels() -> None:
+    """``SingleSelection.source`` ist ein einzelner Wert — mehrere Quellen
+    werden deshalb zu mehreren Ebenen. Genau dafuer gibt es ``levels``
+    (ADR-0003, Entscheidung 7.2: parallele, gleichrangige Auswahlen)."""
+    payload = mc.build_selection_request(
+        cohort="TCGA-BRCA",
+        modality="gene_expression",
+        attributes=["gender"],
+        sources=["gdc", "ena", "geo"],
+        size=20,
+    )
+    assert [lvl["source"] for lvl in payload["levels"]] == ["gdc", "ena", "geo"]
+    # Alles ausser der Quelle ist je Ebene gleich.
+    for level in payload["levels"]:
+        assert level["cohorts"] == ["TCGA-BRCA"]
+        assert level["modality"] == "gene_expression"
+        assert level["attributes"] == ["gender"]
+    assert payload["size"] == 20
+
+
+def test_no_source_yields_no_level() -> None:
+    """Ohne Quelle entsteht eine leere Ebenenliste. Das Fenster faengt den Fall
+    ab, bevor es sendet — der Mediator verlangt minItems 1."""
+    payload = mc.build_selection_request(
+        cohort="TCGA-BRCA", modality="gene_expression",
+        attributes=[], sources=[], size=20,
+    )
+    assert payload["levels"] == []
 
 
 # --------------------------------------------------------------------------
@@ -177,6 +207,12 @@ def test_non_json_answer_is_reported() -> None:
 def test_first_level_is_empty_without_levels() -> None:
     assert mc.Result(ok=True, data={"levels": []}).first_level() == {}
     assert mc.Result(ok=True, data={}).first_level() == {}
+
+
+def test_levels_returns_all_of_them() -> None:
+    data = {"levels": [{"source": "gdc"}, {"source": "ena"}]}
+    assert [lvl["source"] for lvl in mc.Result(ok=True, data=data).levels()] == ["gdc", "ena"]
+    assert mc.Result(ok=True, data={}).levels() == []
 
 
 def test_failed_level_is_still_an_ok_request() -> None:

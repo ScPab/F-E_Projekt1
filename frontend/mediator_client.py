@@ -61,9 +61,13 @@ class Result:
     data: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
 
+    def levels(self) -> list[dict[str, Any]]:
+        """Alle Auswahl-Ebenen der Antwort (eine je gewaehlter Datenquelle)."""
+        return list(self.data.get("levels") or [])
+
     def first_level(self) -> dict[str, Any]:
         """Die erste Auswahl-Ebene der Antwort, oder ``{}``."""
-        levels = self.data.get("levels") or []
+        levels = self.levels()
         return levels[0] if levels else {}
 
 
@@ -72,15 +76,21 @@ def build_selection_request(
     cohort: str,
     modality: str,
     attributes: list[str],
-    source: str,
+    sources: list[str],
     size: int,
 ) -> dict[str, Any]:
-    """Baut den Auftrag mit genau **einer** Ebene.
+    """Baut den Auftrag: **eine Ebene je gewaehlter Datenquelle**.
 
-    Mehrere Kohorten und geschachtelte Ebenen kann der Mediator, diese Fassung
-    der Oberflaeche nutzt es noch nicht (Aufgabe 17, Abschnitt "Ziel").
-    ``size`` wird auf die Grenzen der OpenAPI geklemmt, damit ein Tippfehler im
-    Panel keinen 422er erzeugt.
+    ``SingleSelection.source`` ist ein einzelner Wert, keine Liste — mehrere
+    Quellen werden deshalb zu mehreren Ebenen. Das ist genau, wofuer ``levels``
+    gedacht ist: parallele, gleichrangige Auswahlen (ADR-0003, Entscheidung
+    7.2), die unabhaengig voneinander gelingen oder scheitern koennen.
+
+    Mehrere Kohorten und geschachtelte Ebenen kann der Mediator ebenfalls, diese
+    Fassung der Oberflaeche nutzt es noch nicht. ``size`` wird auf die Grenzen
+    der OpenAPI geklemmt, damit ein Tippfehler im Panel keinen 422er erzeugt.
+    Ohne gewaehlte Quelle entsteht eine leere Ebenenliste — der Aufrufer faengt
+    das ab, bevor er sendet (der Mediator wuerde mit 422 antworten).
     """
     return {
         "levels": [
@@ -90,6 +100,7 @@ def build_selection_request(
                 "modality": modality,
                 "attributes": list(attributes),
             }
+            for source in sources
         ],
         "size": max(SIZE_MIN, min(SIZE_MAX, int(size))),
     }

@@ -48,6 +48,8 @@ TURTLE_PREVIEW_LINES = 40
 # Rolle, unter der ein Listeneintrag seinen Attributnamen traegt (Gruppen-
 # ueberschriften haben keinen).
 _ATTR_ROLE = Qt.ItemDataRole.UserRole
+# Rolle fuer den Quellen-Wert eines Listeneintrags (gdc, ena, geo).
+_SOURCE_ROLE = Qt.ItemDataRole.UserRole
 
 
 def load_panel_config() -> dict[str, Any]:
@@ -203,8 +205,15 @@ class MainWindow(QMainWindow):
         self._cohort_box = QComboBox()
         self._modality_box = QComboBox()
         self._attribute_list = QListWidget()
-        self._attribute_list.setMinimumHeight(260)
-        self._source_box = QComboBox()
+        self._attribute_list.setMinimumHeight(240)
+        self._attribute_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Datenquellen sind mehrfach waehlbar: je Haekchen eine eigene Ebene.
+        self._source_list = QListWidget()
+        self._source_list.setMaximumHeight(110)
+        # Lange Hinweise sollen nicht waagerecht scrollen, sondern abschneiden;
+        # der vollstaendige Text steht im Tooltip.
+        self._source_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._source_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self._size_spin = QSpinBox()
         self._size_spin.setRange(mc.SIZE_MIN, mc.SIZE_MAX)
         self._size_spin.setValue(20)
@@ -213,7 +222,7 @@ class MainWindow(QMainWindow):
             ("Krebs", self._cohort_box, 0),
             ("Var", self._modality_box, 0),
             ("Obj", self._attribute_list, 1),
-            ("Datenquelle", self._source_box, 0),
+            ("Datenquelle", self._source_list, 0),
             ("Proben", self._size_spin, 0),
         ):
             caption = QLabel(label)
@@ -233,7 +242,7 @@ class MainWindow(QMainWindow):
             self._cohort_box.setCurrentIndex(default_cohort)
 
         self._fill_choice_box(self._modality_box, self._config.get("modalities") or [])
-        self._fill_choice_box(self._source_box, self._config.get("sources") or [])
+        self._fill_sources()
         self._fill_attributes()
 
     @staticmethod
@@ -263,6 +272,44 @@ class MainWindow(QMainWindow):
                 first_enabled = index
         if first_enabled >= 0:
             box.setCurrentIndex(first_enabled)
+
+    def _fill_sources(self) -> None:
+        """Datenquellen als Haekchen-Liste (Mehrfachauswahl).
+
+        Nicht angebundene Quellen stehen sichtbar drin, sind aber nicht
+        anhakbar und tragen den Grund als Text und Tooltip — ehrliche Luecke
+        statt unsichtbarer Grenze. ``POST /selection/*`` kennt heute nur
+        ``gdc``; ENA und GEO haben eigene Endpunkte, sind aber nicht an die
+        Auswahl angebunden (siehe ``config/panel.json``).
+        """
+        preselected = set(self._config.get("default_sources") or [])
+        for entry in self._config.get("sources") or []:
+            value = entry.get("value")
+            enabled = bool(entry.get("enabled", True))
+            note = entry.get("note")
+            label = entry.get("label", value or "")
+            if not enabled and note:
+                label = f"{label}  ({note})"
+
+            item = QListWidgetItem(label)
+            item.setData(_SOURCE_ROLE, value)
+            if enabled:
+                item.setFlags(
+                    Qt.ItemFlag.ItemIsEnabled
+                    | Qt.ItemFlag.ItemIsSelectable
+                    | Qt.ItemFlag.ItemIsUserCheckable
+                )
+                item.setCheckState(
+                    Qt.CheckState.Checked if value in preselected
+                    else Qt.CheckState.Unchecked
+                )
+            else:
+                item.setFlags(Qt.ItemFlag.NoItemFlags)
+                item.setCheckState(Qt.CheckState.Unchecked)
+            # Der ausfuehrliche Grund gehoert in den Tooltip, nicht in die
+            # Beschriftung - das Panel ist nur rund 360 Pixel breit.
+            item.setToolTip(entry.get("detail") or note or "")
+            self._source_list.addItem(item)
 
     def _fill_attributes(self) -> None:
         """Attribute nach Knoten gruppiert, mit Haekchen je Eintrag.
@@ -310,12 +357,22 @@ class MainWindow(QMainWindow):
                 result.append(name)
         return result
 
+    def checked_sources(self) -> list[str]:
+        """Die angehakten Datenquellen in Panel-Reihenfolge."""
+        result = []
+        for row in range(self._source_list.count()):
+            item = self._source_list.item(row)
+            value = item.data(_SOURCE_ROLE)
+            if value and item.checkState() == Qt.CheckState.Checked:
+                result.append(value)
+        return result
+
     def current_payload(self) -> dict[str, Any]:
         return mc.build_selection_request(
             cohort=self._cohort_box.currentText(),
             modality=self._modality_box.currentData(),
             attributes=self.checked_attributes(),
-            source=self._source_box.currentData(),
+            sources=self.checked_sources(),
             size=self._size_spin.value(),
         )
 
@@ -324,13 +381,24 @@ class MainWindow(QMainWindow):
         if not self._cohort_box.currentText():
             self.set_status("Keine Kohorte gewaehlt.", "warning")
             return
+        if not self.checked_sources():
+            self.set_status("Keine Datenquelle angehakt.", "warning")
+            self._output.setPlainText("\n".join([
+                "Keine Datenquelle angehakt.",
+                "",
+                "Rechts unter 'Datenquelle' mindestens eine Quelle ankreuzen.",
+                "Je angehakter Quelle entsteht eine eigene Ebene im Auftrag.",
+            ]))
+            return
         payload = self.current_payload()
 
         self._set_busy(True)
         was = "Vorschau" if mode == "preview" else "Generieren"
+        quellen = ", ".join(lvl["source"] for lvl in payload["levels"])
         self.set_status(
             f"{was} laeuft … {payload['levels'][0]['cohorts'][0]}, "
-            f"{payload['size']} Proben. Das Fenster bleibt bedienbar.",
+            f"{payload['size']} Proben, Quelle(n): {quellen}. "
+            f"Das Fenster bleibt bedienbar.",
             "busy",
         )
         self._output.setPlainText(f"{was} laeuft, bitte warten …")
@@ -370,8 +438,8 @@ class MainWindow(QMainWindow):
             self.set_status((result.error or "Fehler").splitlines()[0], "error")
             return
 
-        level = result.first_level()
-        if not level:
+        levels = result.levels()
+        if not levels:
             self._output.setPlainText(
                 "Der Mediator hat keine Auswahl-Ebene zurueckgegeben.\n\n"
                 + json.dumps(result.data, indent=2, ensure_ascii=False)[:4000]
@@ -379,18 +447,43 @@ class MainWindow(QMainWindow):
             self.set_status("Antwort ohne Ebenen.", "warning")
             return
 
-        lines = self._format_level(level, mode)
-        self._output.setPlainText("\n".join(lines))
+        # Eine Ebene je gewaehlter Datenquelle: alle anzeigen, nicht nur die
+        # erste — eine Ebene kann scheitern, ohne die anderen zu beeintraechtigen.
+        blocks: list[str] = []
+        for index, level in enumerate(levels):
+            if len(levels) > 1:
+                quelle = (level.get("selection") or {}).get("source") or "?"
+                blocks.append(f"### Ebene {index + 1} von {len(levels)} — Quelle: {quelle}")
+            blocks += self._format_level(level, mode)
+            blocks.append("")
+        self._output.setPlainText("\n".join(blocks).rstrip())
 
-        status = level.get("status")
-        failed = level.get("failed_cohorts") or []
-        if status != "ok":
-            self.set_status(f"Ebene fehlgeschlagen: {level.get('error') or 'unbekannt'}", "error")
-        elif failed:
-            self.set_status(f"Fertig, aber ausgefallen: {', '.join(failed)}", "warning")
-        else:
-            was = "Vorschau" if mode == "preview" else "Generieren"
-            self.set_status(f"{was} fertig — recipe_key {level.get('recipe_key')}", "success")
+        self.set_status(*self._summarize(levels, mode))
+
+    @staticmethod
+    def _summarize(levels: list[dict[str, Any]], mode: str) -> tuple[str, str]:
+        """Eine Zeile fuer die Statusleiste plus deren Zustand.
+
+        Mehrere Ebenen koennen unabhaengig voneinander gelingen oder scheitern
+        (ADR-0003, Entscheidung 7.2) — die Zeile muss das unterscheiden, sonst
+        sieht ein Teilausfall wie ein voller Erfolg aus.
+        """
+        was = "Vorschau" if mode == "preview" else "Generieren"
+        ok = [lvl for lvl in levels if lvl.get("status") == "ok"]
+        failed = [lvl for lvl in levels if lvl.get("status") != "ok"]
+        ausgefallen = sorted({c for lvl in levels for c in (lvl.get("failed_cohorts") or [])})
+
+        if not ok:
+            grund = failed[0].get("error") if failed else "unbekannt"
+            return f"{was} fehlgeschlagen: {grund}", "error"
+        if failed:
+            quellen = ", ".join((lvl.get("selection") or {}).get("source") or "?" for lvl in failed)
+            return f"{was}: {len(ok)} von {len(levels)} Ebenen ok — fehlgeschlagen: {quellen}", "warning"
+        if ausgefallen:
+            return f"{was} fertig, aber ausgefallen: {', '.join(ausgefallen)}", "warning"
+        if len(ok) > 1:
+            return f"{was} fertig — {len(ok)} Ebenen", "success"
+        return f"{was} fertig — recipe_key {ok[0].get('recipe_key')}", "success"
 
     def _format_level(self, level: dict[str, Any], mode: str) -> list[str]:
         was = "VORSCHAU" if mode == "preview" else "GENERIEREN"
