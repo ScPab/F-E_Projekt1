@@ -51,7 +51,7 @@ Die Basis-URL des Mediators kommt aus `MEDIATOR_URL`, Voreinstellung
 
 ## Bedienung
 
-Rechts das Auswahlpanel — Kohorte, Modalität, klinische Attribute, Datenquelle,
+Rechts das Auswahlpanel — Kohorte, Modalität, klinische Attribute, Datenquellen,
 Probenzahl. Unten links die beiden Schaltflächen:
 
 | | |
@@ -59,10 +59,23 @@ Probenzahl. Unten links die beiden Schaltflächen:
 | **Vorschau** | `POST /selection/preview` — Abruf, Übersetzung, Laden in den Store. Keine Rohdaten, keine Matrix. Billig. |
 | **Generieren** | `POST /selection/generate` — dasselbe, plus Rohdaten-Download und `.h5ad`. Dauert Minuten. |
 
-Nicht angebundene Werte (DNA-Methylierung, Mutationen, alle Quellen außer GDC)
-stehen sichtbar in der Liste, sind aber deaktiviert und tragen den Grund als
-Hinweistext. Ehrliche Lücke statt unsichtbarer Grenze — dasselbe Prinzip wie bei
-den MP-Lite-Slidern.
+Nicht angebundene Werte (DNA-Methylierung, Mutationen, ENA, GEO) stehen sichtbar
+in der Liste, sind aber deaktiviert und tragen den Grund als Hinweistext und
+Tooltip. Ehrliche Lücke statt unsichtbarer Grenze — dasselbe Prinzip wie bei den
+MP-Lite-Slidern.
+
+**Datenquellen sind mehrfach wählbar.** `SingleSelection.source` ist im Mediator
+ein einzelner Wert, keine Liste — je angehakter Quelle entsteht deshalb eine
+**eigene Ebene** im Auftrag. Genau dafür gibt es `levels`: parallele,
+gleichrangige Auswahlen, die unabhängig voneinander gelingen oder scheitern
+([ADR-0003](../docs/adr/0003-ui-gesteuerte-akquise.md), Entscheidung 7.2). Die
+Anzeigefläche zeigt jede Ebene einzeln, die Statuszeile fasst zusammen.
+
+Heute ist nur **GDC/TCGA** angehakt-bar: `POST /selection/*` kennt in
+`_selection_fetch` ausschließlich `source="gdc"`. ENA und GEO haben zwar eigene
+Endpunkte (`/ena/query`, `/geo/query`), sind aber nicht an die Auswahl
+angebunden. Der Mechanismus steht trotzdem vollständig — sobald Pablo sie
+anbindet, genügt in `config/panel.json` ein `"enabled": true`.
 
 ## Aufbau
 
@@ -88,7 +101,11 @@ wirken. Während eines Aufrufs sind beide Schaltflächen ausgegraut und die
 Statusleiste sagt, was läuft.
 
 **Außerhalb von `theme.py` steht kein Farbwert im Code.** Wer das Aussehen
-ändert, ändert es dort.
+ändert, ändert es dort. Dazu gehören auch der Qt-Stil und die Palette: `app.py`
+setzt `Fusion` und `theme.palette()`. Ohne beides zieht der native Windows-Stil
+die System-Hell/Dunkel-Einstellung mit, und Aufklapplisten werden schwarz
+hinterlegt — mit unserer dunklen Schriftfarbe unlesbar. Aus demselben Grund
+zeichnet das Stylesheet die Häkchen (`QListWidget::indicator`) ausdrücklich.
 
 **Das Panel führt genau die elf Attribute aus `KNOWN_ATTRIBUTES`**
 (`mediator/app/semantic/mapping.py`). Die vollständige GDC-Feldliste steht in
