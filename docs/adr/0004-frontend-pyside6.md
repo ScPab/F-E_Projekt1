@@ -85,6 +85,15 @@ Die Auswahl-Oberfläche wird eine **PySide6-Desktop-Anwendung** unter `frontend/
 - Die Oberfläche hängt zur Laufzeit an zwei Diensten: Mediator für Aufträge, Fuseki für die
   Anzeige. Beide Ausfälle müssen sichtbar behandelt werden.
 
+**Punkt 3 tritt mit Aufgabe 19 in Kraft.** Die Netzansicht (`frontend/netz_view.py`)
+liest über `frontend/store_reader.py` und das Paket `wissensnetz` im eigenen Prozess aus
+Fuseki — drei SPARQL-Abfragen, kein zusätzlicher Endpunkt im Mediator. Damit hängt die
+Oberfläche jetzt tatsächlich an zwei Diensten, und `pip install -e ./wissensnetz` ist keine
+Rückfalloption mehr, sondern Voraussetzung: die Kohortenliste hat bis heute einen Rückfall
+auf `config/panel.json`, die Netzansicht hat keinen. Ein nicht erreichbarer Store legt
+allerdings nur die Anzeige still, nicht die Aufträge — `Vorschau` und `Generieren` sprechen
+mit dem Mediator und bleiben bedienbar.
+
 **Revidieren, falls** die Uni Oviedo eine Web-Version als Abgabeform braucht. Dann bleibt
 die REST-Schnittstelle, und nur die Oberfläche wird ersetzt.
 

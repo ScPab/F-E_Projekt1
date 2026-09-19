@@ -23,8 +23,8 @@ pip install -r requirements.txt
 > gefunden`. Das conda-Paket (6.11.0) ist gegen das vorhandene `qtbase`/`icu`
 > gebaut und funktioniert. Derselbe Hinweis steht in `requirements.txt`.
 
-**Fuseki muss laufen**, obwohl diese Oberfläche selbst nicht aus dem Store
-liest: der **Mediator** schreibt das übersetzte Turtle bei jedem
+**Fuseki muss laufen.** Seit Aufgabe 19 liest die Netzansicht selbst aus dem Store, und
+der **Mediator** schreibt das übersetzte Turtle bei jedem
 `/selection/*`-Aufruf in den Default-Graph (ADR-0003, „der Store wächst mit den
 Aufrufen"). Ohne Fuseki schlägt der Aufruf mediator-seitig fehl.
 
@@ -107,6 +107,61 @@ Endpunkte (`/ena/query`, `/geo/query`), sind aber nicht an die Auswahl
 angebunden. Der Mechanismus steht trotzdem vollständig — sobald Pablo sie
 anbindet, genügt in `config/panel.json` ein `"enabled": true`.
 
+## Netzansicht
+
+Über der Anzeigefläche steht das **Wissensnetz** als gezeichnetes Netz: oben die Wurzel
+`Store`, darunter je Kohorte ein Knoten, darunter — wenn man eine Kohorte anklickt — deren
+Attribute. Ein Klick auf die Wurzel klappt alles zu; es ist immer höchstens eine Kohorte
+aufgeklappt. Der aufgeklappte Knoten trägt einen **dickeren Rand**, keine andere Farbe:
+**Auswahl zeigt der Rand, Wachstum zeigt die Farbe.** Der Klick ändert das Auswahlpanel
+rechts nicht — das Netz ist eine Anzeige, keine Navigation.
+
+**Alles darin kommt aus SPARQL-Abfragen gegen Fuseki, nichts aus der Mediator-Antwort**
+(`store_reader.py`, drei Abfragen). Gelesen wird über das Paket `wissensnetz` im eigenen
+Prozess, nicht über einen zusätzlichen Endpunkt im Mediator (ADR-0004, Punkt 3).
+Geschrieben wird nie; der Store gehört dem Mediator.
+
+**Auch `Vorschau` lässt das Netz wachsen.** `SelectionRequest.load` steht im Mediator auf
+`True`, die Übersetzung wird bei `preview` genauso in den Store geladen wie bei `generate` —
+der billige Knopf erweitert das Netz, der teure fügt nur die Matrix dazu. Die Form des
+Netzes ist damit die Geschichte der Aufrufe: eine nie angefragte Kohorte ist nicht
+ausgegraut, sie existiert nicht.
+
+Nach jedem Aufruf ist markiert, was dazugekommen ist — ein Abzug vor der Anfrage, einer
+danach, beide im Worker-Thread:
+
+| Farbe | Bedeutung |
+| --- | --- |
+| neutral | war vorher da, gleiche Zahl |
+| blau (`ACCENT`) | war vorher da, Zahl ist gestiegen — Zweitzeile mit `+N` |
+| grün (`SUCCESS`) | war vorher nicht da |
+
+Die Markierung gilt nur für den letzten Aufruf und wird **nicht gespeichert**; nach einem
+Neustart zeigt das Netz den aktuellen Stand ohne Markierungen. Eine Historie darüber hinaus
+wäre erfunden, weil der Store nicht weiß, welcher Fall aus welchem Aufruf kam.
+
+Zwei leere Zustände, die Verschiedenes bedeuten und deshalb verschieden aussehen:
+
+- **Leer** (erreichbar, null Fälle): gedämpfter Hinweis, dass jede Vorschau das Netz
+  erweitert. Das ist der normale Anfang nach `docker compose down -v`, **kein** Fehler.
+- **Nicht erreichbar**: die Meldung in Fehlerfarbe, zusätzlich in der Statusleiste. Sie
+  blockiert nichts — `Vorschau` und `Generieren` sprechen mit dem Mediator, nicht mit
+  Fuseki.
+
+Aktualisiert wird beim Start, nach jedem Aufruf und über **`Ansicht > Netz aktualisieren`
+(F5)** — nötig, weil der Store sich auch ohne diese Oberfläche ändert, etwa durch
+`scripts/run_selection.py` oder `start_all.ps1 -FullLoad`. Rechts in der Statusleiste steht
+dauerhaft der Stand (`Store: 20 Fälle · 1 Kohorte`).
+
+**Namen: Store-Property oder Panel-Attribut.** Das Panel schreibt `sex_at_birth`, der Store
+trägt `db:sexAtBirth`. Die Übersetzung gehört dem Mediator (`KNOWN_ATTRIBUTES`), den die
+Oberfläche nicht importieren darf. Deshalb eine mechanische Regel: Titel des
+Attributknotens ist der **lokale Name aus dem Store**, der Panel-Name steht nur darunter,
+wenn er in camelCase genau passt. Zwei der elf bleiben dadurch ohne Panel-Namen —
+`has_metastasis` liegt als `db:metastasisAtDiagnosis` im Store, `primary_diagnosis` als
+`db:primaryDiagnosisLabel`. Eine halb stimmende Rückübersetzung wäre genau die Sorte stiller
+Fehlzuordnung, die uns schon das tote GDC-Feld `gender` eingebrockt hat.
+
 ## Aufbau
 
 | Datei | Zweck |
@@ -118,7 +173,10 @@ anbindet, genügt in `config/panel.json` ein `"enabled": true`.
 | `theme.py` | Farben und Stylesheet an genau einer Stelle |
 | `searchable_select.py` | aufklappende Auswahlmenüs: `SearchableSelect` (einwertig, Kohorte) und `MultiSelect` (Häkchen, `Obj`/`Datenquelle`) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
 | `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
+| `netz_view.py` | das gezeichnete Netz (`QGraphicsView`, kein Browser) |
+| `store_reader.py` | die drei SPARQL-Abfragen gegen Fuseki — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `tests/test_mediator_client.py` | Tests ohne Qt und ohne Netz (`requests` gemockt) |
+| `tests/test_store_reader.py` | Tests der Auswertung, mit einem Doppel für `GraphStore` |
 
 ```powershell
 pytest frontend/tests -q
@@ -166,12 +224,15 @@ umstellen und ADR-0004 entsprechend ergänzen.**
 
 ## Was diese Fassung ausdrücklich nicht tut
 
-Kein Zugriff auf das Wissensnetz — kein `GraphStore`, kein
-`cases_for_selection`, keine Tabelle aus dem Store, keine Graphansicht. Die
-Anzeigefläche zeigt genau das, was der Mediator selbst zurückgibt. Einzige
-Ausnahme beim Import ist die Kohorten-Konstante `wissensnetz.cohorts.COHORT_PROJECT_IDS`,
-damit Ladeskript, MP-Lite und Oberfläche dieselbe Wahrheit nutzen; schlägt der
-Import fehl, greift die Liste aus `panel.json`.
+Seit Aufgabe 19 liest die **Netzansicht** aus dem Store (siehe oben); der
+Antworttext darunter zeigt weiterhin genau das, was der Mediator selbst
+zurückgibt. Was es weiterhin nicht gibt: `cases_for_selection`, eine Tabelle aus
+dem Store, die Werteebene unter den Attributen und jede Form von Schreibzugriff.
+Beim Import kommt zur Netzansicht nur die Kohorten-Konstante
+`wissensnetz.cohorts.COHORT_PROJECT_IDS` hinzu, damit Ladeskript, MP-Lite und
+Oberfläche dieselbe Wahrheit nutzen; schlägt dieser Import fehl, greift die Liste
+aus `panel.json` — die Netzansicht hat keinen solchen Rückfall.
 
 Ebenfalls nicht: geschachtelte Auswahl-Ebenen, Zählungen oder Facetten im Panel,
+Drill-down aus dem Netz in die Auswahl, die NCIt-Hierarchie als zweite Achse,
 Karte oder Plot, PyInstaller-Paket. Das sind Folgeaufgaben.
