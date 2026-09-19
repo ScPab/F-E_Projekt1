@@ -59,7 +59,6 @@ services:
       - "${GRAPH_DB_PORT:-3030}:3030"
     volumes:
       - graph-db-data:/fuseki
-      - ./graph-db/init:/init:ro
 
   # frontend: bewusst noch kein Service. Die Visualisierungsschicht ist noch
   # nicht final entschieden (siehe /frontend/README.md). Sobald die

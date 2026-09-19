@@ -12,12 +12,14 @@ für die Abwägung und den aktuellen Stand der Entscheidung.
 
 `docker-compose.yml` startet aktuell probeweise einen Jena-Fuseki-Container
 (offizielles Image, TDB2 als persistentes Backend) unter dem Service-Namen
-`graph-db`. Es ist **kein eigener Code** enthalten, nur Konfiguration.
+`graph-db`. Es ist **kein eigener Code** enthalten, nur Konfiguration — dieser
+Ordner enthält ausschließlich dieses README.
 
-- `init/` – Ablage für künftige Initialisierungs-/Konfigurationsdateien
-  (z. B. Fuseki-Dataset-Assembler, initiale Turtle-Dateien). Aktuell leer:
-  Für die Dataset-Anlage wurde der ENV-Weg gewählt (siehe unten), nicht ein
-  Assembler-`.ttl` in diesem Ordner.
+Früher lag hier ein leerer Ordner `init/`, gedacht als Ablage für einen
+Fuseki-Dataset-Assembler und als `./graph-db/init:/init:ro` in den Container
+gemountet. Beides ist entfallen: für die Dataset-Anlage wurde der ENV-Weg
+gewählt (siehe unten), der Mount zeigte nicht auf Fusekis
+Konfigurationsverzeichnis, und nichts im Projekt hat `/init` je gelesen.
 
 ## Dataset-Initialisierung (Wissensnetz)
 
@@ -49,7 +51,8 @@ beim Container-Start, TBox anschließend per `wissensnetz init`.**
 Der End-to-End-Ablauf (up → init → load → query → feedback) ist in
 [`../wissensnetz/README.md`](../wissensnetz/README.md) beschrieben.
 
-**Zugriffsschutz:** Die mitgelieferte `shiro.ini` erlaubt SPARQL-*Query* anonym,
+**Zugriffsschutz:** Die `shiro.ini` des Images (nicht in diesem Repo) erlaubt
+SPARQL-*Query* anonym,
 verlangt für SPARQL-*Update* und Graph Store Protocol (`/*/update`, `/*/data`)
 sowie die Admin-API (`/$/`) aber Basic-Auth (`admin`/`admin`). Der
 Wissensnetz-Client sendet die Admin-Credentials für Schreibzugriffe automatisch
