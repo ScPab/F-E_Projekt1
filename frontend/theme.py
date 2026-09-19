@@ -55,6 +55,20 @@ CHECK_RADIUS = 4             # dessen Eckenradius
 CHECK_GAP = 12               # Abstand zwischen Kaestchen und Text
 CHECK_MARK_WIDTH = 2         # Strichstaerke des Hakens
 
+# --- Netzansicht (netz_view.py) --------------------------------------------
+# Masse des gezeichneten Netzes. Sie stehen hier aus demselben Grund wie die
+# Kaestchenmasse: was gezeichnet statt per Stylesheet gesetzt wird, gehoert
+# trotzdem an die eine Stelle.
+NETZ_NODE_WIDTH = 132        # Breite eines Knotens
+NETZ_ROOT_WIDTH = 190        # die Wurzel traegt zwei Zahlen und ist breiter
+NETZ_NODE_WIDTH_3 = 162      # Attributknoten: Faelle, Werte und der Zuwachs
+NETZ_NODE_HEIGHT = 46        # Hoehe eines Knotens (Wurzel, Kohorte)
+NETZ_NODE_HEIGHT_3 = 62      # Attributknoten: eine Zeile mehr (Panel-Name)
+NETZ_NODE_GAP = 12           # Abstand zwischen zwei Knoten einer Reihe
+NETZ_ROW_GAP = 58            # senkrechter Abstand zwischen zwei Reihen
+NETZ_MAX_NODES = 7           # mehr Knoten je Reihe werden zu "… N weitere"
+NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens
+
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
 OBJ_HEADER = "Header"
@@ -71,6 +85,9 @@ OBJ_ROW_CODE = "RowCode"           # gedaempftes Kuerzel rechts
 OBJ_ROW_DOT = "RowDot"             # runder Anker links
 OBJ_SELECT_BUTTON = "SelectButton"  # Schaltflaeche, die die Auswahl aufklappt
 OBJ_POPUP = "SelectPopup"           # die aufklappende Karte selbst
+OBJ_NETZ = "NetzView"               # die gezeichnete Netzansicht
+OBJ_NETZ_TITLE = "NetzTitle"        # fette Ueberschrift ueber dem Netz
+OBJ_NETZ_NOTE = "NetzNote"          # gedaempfter Zusatz rechts daneben
 
 
 def stylesheet() -> str:
@@ -253,6 +270,23 @@ QListWidget::indicator:disabled {{
 QListWidget::item:selected {{
     background-color: {ACCENT_BG};
     color: {TEXT};
+}}
+
+/* --- Netzansicht -------------------------------------------------------- */
+/* Die Szene malt ihre Flaeche selbst (setBackgroundBrush); hier nur der Rahmen,
+   damit das Netz wie die Anzeigeflaeche darunter als Karte wirkt. */
+QGraphicsView#{OBJ_NETZ} {{
+    border: {BORDER_WIDTH}px solid {BORDER};
+    border-radius: {RADIUS}px;
+}}
+QLabel#{OBJ_NETZ_TITLE} {{
+    color: {TEXT};
+    font-weight: 600;
+    background-color: transparent;
+}}
+QLabel#{OBJ_NETZ_NOTE} {{
+    color: {TEXT_MUTED};
+    background-color: transparent;
 }}
 
 /* --- Schaltflaechen ---------------------------------------------------- */
