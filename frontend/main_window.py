@@ -436,8 +436,9 @@ class MainWindow(QMainWindow):
         Nicht angebundene Quellen stehen sichtbar drin, sind aber nicht
         anhakbar und tragen den Grund als Hinweis rechts in der Zeile und als
         Tooltip — ehrliche Luecke statt unsichtbarer Grenze. ``POST /selection/*``
-        kennt heute nur ``gdc``; ENA und GEO haben eigene Endpunkte, sind aber
-        nicht an die Auswahl angebunden (siehe ``config/panel.json``).
+        kennt inzwischen ``gdc``, ``cbioportal`` und ``geo`` (Back-Mediator M9,
+        siehe ``mediator/app/main.py::_fetch_selection_level``); ``ena`` bleibt
+        bewusst deaktiviert (siehe ``config/panel.json``).
         """
         preselected = set(self._config.get("default_sources") or [])
         entries: list[dict[str, Any]] = []

@@ -150,7 +150,13 @@ class SingleSelection(BaseModel):
     Verfeinerung einer übergeordneten Auswahl.
     """
 
-    source: str = Field("gdc", description='Panel-Zeile "Datenquelle" (aktuell nur "gdc" angebunden).')
+    source: str = Field(
+        "gdc",
+        description='Panel-Zeile "Datenquelle": "gdc" und "cbioportal" sind für Vorschau UND Generieren '
+        '(.h5ad) angebunden, "geo" nur für Vorschau sicher (Generieren ist Best-Effort, siehe '
+        "app/main.py::_fetch_selection_level, Back-Mediator M9); \"ena\" ist bewusst nicht angebunden "
+        "(siehe dort für die Begründung).",
+    )
     cohorts: list[str] = Field(
         ..., min_length=1, description='Panel-Zeile "Krebs" (Kohorte/Projekt-ID, mehrfach wählbar via "+").'
     )

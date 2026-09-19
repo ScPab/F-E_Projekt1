@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-09-17
+Stand: 2026-09-19
 
 ## Ziel
 
@@ -73,6 +73,80 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `gdc-client`-Bulk-Download.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
+
+## Umgesetzt seit letztem Stand (2026-09-19)
+
+- **Back-Mediator (M9, "Quellen-Routing vereinheitlichen") umgesetzt** —
+  bisher letzter offener Punkt aus `recherche/Umsetzungsplan_UI-gesteuerte-
+  Akquise.pdf` Abschnitt 3: `POST /selection/preview`/`/generate`
+  übersetzten Menü-Parameter bisher nur für `source="gdc"`, alle anderen
+  Quellen lösten einen `ValueError` aus.
+  - **Kernerkenntnis:** die Panel-Zeile "Krebs" liefert einen GDC-
+    Projekt-Code (z. B. "TCGA-BRCA"), ist aber eigentlich eine **Krebsart**
+    — GEO/cBioPortal kennen keine GDC-Codes, nur Freitext-/Stichwortsuche.
+    Neues Modul `mediator/app/semantic/cancer_types.py`
+    (`TCGA_COHORT_NAMES`/`cancer_name()`) übersetzt daher das Konzept, nicht
+    den rohen String; dieselbe Quelle (GDC `/projects`, Feld `name`) wie
+    `frontend/config/panel.json`s `cohort_labels`, damit keine zwei
+    unabhängig gepflegten Listen auseinanderlaufen.
+  - `mediator/app/main.py::_selection_fetch` (GDC-spezifisch geformt,
+    `(hits, cases, failed_cohorts)`) ersetzt durch einen Dispatcher
+    `_fetch_selection_level()` + `SelectionFetchResult`-Dataclass
+    (`graph`/`star_annotations`/`failed_cohorts` + ein lazy
+    `build_anndata`-Callback, den nur `/generate` aufruft — Entscheidung
+    7.3 bleibt dadurch unverändert gültig). Vier Quell-Zweige:
+    - **`gdc`** — unverändert, nur umverpackt (`_fetch_gdc_level`).
+    - **`cbioportal`** — voll angebunden (Vorschau UND Generieren):
+      `_resolve_cbioportal_study()` bildet Kohorte→Studie ab (gestufte
+      Präferenz: TCGA-PanCancer-Atlas-Studie > irgendeine TCGA-Studie mit
+      dem Code > irgendeine Studie mit dem Code > erster Stichwort-Treffer —
+      cBioPortals Trefferreihenfolge ist keine Qualitätsordnung, live
+      beobachtet für "brca"); `get_molecular_data()` mit neuem, live
+      verifiziertem `cancer_types.DEMO_GENE_PANEL` (15 Onko-Gene,
+      Entrez-IDs gegen `POST /api/genes/fetch` geprüft, explizit als
+      Demo-Panel dokumentiert, kein Vollständigkeitsanspruch).
+    - **`geo`** — Vorschau real (`GEOWrapper.query()` mit
+      `build_search_term(..., extra=[...])`, nicht `.search()`, das kein
+      `extra` durchreicht), Generieren **Best-Effort** (mit dem Nutzer so
+      abgestimmt): lädt Supplementary-Dateien, versucht nur `.txt`/`.tsv`/
+      `.csv`(`.gz`) generisch als ID/Wert-Tabelle zu lesen — GEO hat kein
+      einheitliches Dateiformat je Serie. Scheitert das für eine Ebene,
+      bleibt das RDF/`turtle` dieser Ebene trotzdem erhalten (nur der
+      `.h5ad`-Teil schlägt fehl), andere Ebenen sind unberührt. Live
+      beide Ausgänge beobachtet: TCGA-THCA erfolgreich (4 Proben × 10
+      Feature aus echten Supplementary-Tabellen), TCGA-BRCA/-LUAD sauber
+      gescheitert ("keine auswertbare Tabelle").
+    - **`ena`** — bewusst weiterhin nicht angebunden, jetzt aber mit
+      inhaltlicher Begründung statt "noch nicht angebunden": ENA
+      organisiert nicht nach Krebsart und der Wrapper hat keine
+      Freitextsuche.
+  - **Bug gefunden und behoben** (nicht nur Back-Mediator-Code):
+    `expression.build_var()` konnte eine `symbol`-Spalte aus
+    ausschließlich `None` nicht nach `.h5ad` schreiben (h5py:
+    `TypeError: Can't implicitly convert non-string objects to strings`) —
+    traf jede Quelle ohne `gene_labels` (z. B. GEOs generischer Export).
+    `build_obs()` hatte dieselbe Normalisierung (`None` → `""` für
+    object-Spalten) bereits; `build_var()` jetzt angeglichen. Live als
+    Server-500 reproduziert (GEO-Generate für TCGA-LUAD) und nach dem Fix
+    verifiziert (kein Crash mehr, sauberer Fehl- oder Erfolgsausgang).
+  - `frontend/config/panel.json`: `cbioportal` neu in `sources`
+    (`enabled: true`), `geo` auf `enabled: true` (mit Hinweis "Generieren:
+    Best-Effort"), `ena` bleibt `enabled: false` mit aktualisierter
+    inhaltlicher Begründung. UI ist rein datengetrieben
+    (`main_window.py::_source_entries`) — keine weiteren Codeänderungen im
+    Frontend nötig.
+  - Live gegen den echten, neu gebauten Container verifiziert (nicht nur
+    TestClient/Mock): `/selection/preview` + `/selection/generate` für
+    `cbioportal` (`brca_tcga_pan_can_atlas_2018`, echtes `.h5ad` mit 5
+    Proben × 15 Genen inkl. `X_tsne_genes`), `/selection/preview` für `geo`
+    (echte GSE-Treffer, 1032 Tripel), `/selection/generate` für `geo`
+    (Erfolg UND sauberer Fehlschlag je einmal beobachtet), `/selection/*`
+    für `ena` (klare Fehlermeldung, kein Absturz). Alle 22 Wrapper- und 26
+    Frontend-Tests weiterhin grün.
+  - **Bewusst nicht Teil dieses Durchgangs:** `cBioPortal`s `obs` trägt
+    bislang nur den `sample_id`-Index (keine Klinikfelder wie bei GDC/
+    `build_obs`) — ehrliche Beschränkung des ersten Wurfs, kein Bug;
+    Erweiterung wäre ein separater, kleiner Folgeschritt.
 
 ## Umgesetzt seit letztem Stand (2026-09-17, Teil 3)
 

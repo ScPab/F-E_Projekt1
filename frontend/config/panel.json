@@ -1,7 +1,7 @@
 {
   "_hinweis": "Genau diese elf Attribute, weil nur sie in KNOWN_ATTRIBUTES (mediator/app/semantic/mapping.py) hinterlegt sind. NICHT erweitern um Felder aus den Knoten Exposure, Treatment, Family History, Follow Up oder Pathology Detail (vollstaendige Liste: wissensnetz/GDC_TCGA_Klinische_Datenfelder.md): resolve_attribute() im Mediator nimmt bei einem Namen ohne Punkt 'diagnoses.<name>' an und loest sie damit falsch auf.",
   "_cohorts_hinweis": "Nur Rueckfall, falls der Import von wissensnetz.cohorts.COHORT_PROJECT_IDS scheitert. Fuehrend ist dort die kanonische Oviedo-Reihenfolge.",
-  "_sources_hinweis": "Mehrfachauswahl: je angehakter Quelle entsteht eine eigene Ebene im Auftrag (SelectionRequest.levels, ADR-0003 Entscheidung 7.2 - parallele, gleichrangige Auswahlen). POST /selection/* kennt heute nur source='gdc' (mediator/app/main.py::_selection_fetch); ENA und GEO haben zwar eigene Endpunkte (/ena/query, /geo/query), sind aber nicht an die Auswahl angebunden und deshalb hier deaktiviert. Sobald Pablo sie anbindet, genuegt hier enabled: true.",
+  "_sources_hinweis": "Mehrfachauswahl: je angehakter Quelle entsteht eine eigene Ebene im Auftrag (SelectionRequest.levels, ADR-0003 Entscheidung 7.2 - parallele, gleichrangige Auswahlen). Back-Mediator (M9, mediator/app/main.py::_fetch_selection_level) uebersetzt die Kohorte (Krebsart) je Quelle in deren native Anfrageform: 'gdc' und 'cbioportal' sind fuer Vorschau UND Generieren (.h5ad) angebunden, 'geo' nur fuer Vorschau sicher - Generieren ist Best-Effort (GEO hat kein einheitliches Dateiformat je Serie) und kann pro Ebene sauber scheitern. 'ena' bleibt bewusst deaktiviert: ENA organisiert Daten nicht nach Krankheits-/Krebsart und der Wrapper hat keine Freitextsuche.",
   "sources": [
     {
       "value": "gdc",
@@ -9,18 +9,23 @@
       "enabled": true
     },
     {
-      "value": "ena",
-      "label": "ENA",
-      "enabled": false,
-      "note": "noch nicht angebunden",
-      "detail": "Endpunkt /ena/query vorhanden, aber nicht an POST /selection/* angebunden"
+      "value": "cbioportal",
+      "label": "cBioPortal",
+      "enabled": true
     },
     {
       "value": "geo",
       "label": "GEO",
+      "enabled": true,
+      "note": "Generieren: Best-Effort",
+      "detail": "Vorschau (RDF) ist real angebunden. Generieren (.h5ad) ist Best-Effort: GEO hat kein einheitliches Dateiformat je Serie und kann fuer eine Ebene sauber scheitern, ohne die anderen Ebenen zu beeintraechtigen."
+    },
+    {
+      "value": "ena",
+      "label": "ENA",
       "enabled": false,
-      "note": "noch nicht angebunden",
-      "detail": "Endpunkt /geo/query vorhanden, aber nicht an POST /selection/* angebunden"
+      "note": "nicht angebunden",
+      "detail": "ENA organisiert Daten nicht nach Krankheits-/Krebsart (allgemeines Rohsequenz-Archiv) und der Wrapper hat keine Freitextsuche - eine Kohorten-Anfrage waere hier nicht sinnvoll beantwortbar."
     }
   ],
   "default_sources": [
