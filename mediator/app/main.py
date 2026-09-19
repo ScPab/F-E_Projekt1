@@ -21,17 +21,21 @@ ist über POST /export/anndata angebunden (siehe app/semantic/expression.py).
 """
 
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
+import pandas as pd
 from cbioportal import CBioPortalWrapper
 from ena import ENAWrapper
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from gdc import GDCWrapper, build_filters
-from geo import GEOWrapper
+from geo import GEOWrapper, build_search_term as geo_build_search_term
+from rdflib import Graph
 from requests import RequestException
 from wissensnetz import GraphStore, GraphStoreError, all_cases
+from wissensnetz.cohorts import cancer_code
 
 from .schemas import (
     AnndataExportRequest,
@@ -47,6 +51,7 @@ from .schemas import (
     SingleSelection,
     TransformRequest,
 )
+from .semantic import cancer_types
 from .semantic import expression as expression_export
 from .semantic import mapping as semantic_mapping
 from .semantic import mapping_cbioportal, mapping_ena, mapping_geo
@@ -617,21 +622,61 @@ def _selection_recipe_key(level: SingleSelection, request: SelectionRequest) -> 
     return wrapper.cache.recipes.key_for(recipe)
 
 
-def _selection_fetch(level: SingleSelection, request: SelectionRequest) -> tuple[list[dict], list[dict], list[str]]:
-    """Ruft `fetch_selection_files` (M3) für eine einzelne Auswahl-Ebene auf.
-
-    Nur `source="gdc"` und `modality="gene_expression"` sind heute angebunden
-    (siehe Umsetzungsplan M9 bzw. W6 — beide "Später", nicht Teil dieses
-    Durchgangs); andere Werte lösen einen `ValueError` aus, den die Aufrufer
-    in einen Level-Fehler übersetzen, statt die ganze Anfrage abzubrechen
-    (Entscheidung 7.2: Ebenen sind unabhängig voneinander).
+@dataclass
+class SelectionFetchResult:
+    """Ergebnis des quellen-abhängigen Abrufs+Übersetzung einer Auswahl-Ebene
+    (Back-Mediator, M9, siehe recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf) —
+    gemeinsame Form für beide Endpunkte: `graph`/`star_annotations` (RDF,
+    immer gebraucht) und ein lazy `build_anndata`-Callback, das NUR
+    `/selection/generate` aufruft, damit `/selection/preview` keine teuren
+    Downloads/Matrixaufbauten auslöst (Entscheidung 7.3).
     """
-    if level.source != "gdc":
-        raise ValueError(f"Datenquelle {level.source!r} noch nicht angebunden (siehe Umsetzungsplan M9).")
+
+    graph: Graph
+    build_anndata: Callable[[], dict]
+    star_annotations: list = field(default_factory=list)
+    failed_cohorts: list[str] = field(default_factory=list)
+
+
+def _fetch_selection_level(
+    level: SingleSelection, request: SelectionRequest, recipe_key: str, alignment: dict[str, str]
+) -> SelectionFetchResult:
+    """Back-Mediator-Dispatcher (M9): übersetzt eine generische Auswahl-Ebene
+    (Kohorte/Modalität/Attribute/Datenquelle aus dem UI-Panel) in die jeweils
+    native Anfrageform der gewählten Datenquelle.
+
+    `gdc` und `cbioportal` sind für preview UND generate angebunden, `geo`
+    nur für preview real (generate best-effort, siehe
+    `_build_anndata_from_geo_best_effort`) — beide Endpunkte behandeln eine
+    fehlschlagende Ebene unabhängig von den anderen (Entscheidung 7.2).
+    """
     if level.modality != "gene_expression":
         raise ValueError(f"Modalität {level.modality!r} noch nicht angebunden (siehe Umsetzungsplan W6).")
+
+    if level.source == "gdc":
+        return _fetch_gdc_level(level, request, recipe_key, alignment)
+    if level.source == "cbioportal":
+        return _fetch_cbioportal_level(level, request, recipe_key)
+    if level.source == "geo":
+        return _fetch_geo_level(level, request, recipe_key)
+    if level.source == "ena":
+        raise ValueError(
+            "Datenquelle 'ena' ist im Back-Mediator (M9) bewusst nicht angebunden: ENA organisiert Daten "
+            "nicht nach Krankheits-/Krebsart (allgemeines Rohsequenz-Archiv, kein kuratierter Krebs-"
+            "Datenbestand), und der Wrapper hat keine Freitextsuche — eine Kohorten-Anfrage wäre hier "
+            "nicht sinnvoll beantwortbar, nicht nur technisch offen."
+        )
+    raise ValueError(f"Unbekannte Datenquelle {level.source!r}.")
+
+
+def _fetch_gdc_level(
+    level: SingleSelection, request: SelectionRequest, recipe_key: str, alignment: dict[str, str]
+) -> SelectionFetchResult:
+    """GDC-Zweig des Back-Mediators — unverändert die bisherige Logik (M3/M4),
+    nur um das gemeinsame `SelectionFetchResult` herum verpackt.
+    """
     wrapper = get_gdc_wrapper()
-    return fetch_selection_files(
+    hits, cases, failed_cohorts = fetch_selection_files(
         wrapper,
         cohorts=level.cohorts,
         attributes=level.attributes,
@@ -640,6 +685,344 @@ def _selection_fetch(level: SingleSelection, request: SelectionRequest) -> tuple
         size=request.size,
         per_cohort_size=request.per_cohort_size,
     )
+    if not cases:
+        raise ValueError(f"Keine Treffer für Kohorte(n) {level.cohorts!r}.")
+    graph, star_annotations = semantic_mapping.cases_to_graph(cases, alignment=alignment, attributes=level.attributes)
+
+    def build_anndata() -> dict:
+        if not hits:
+            raise ValueError(f"Keine Expressions-Files für Kohorte(n) {level.cohorts!r}.")
+        return _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True)
+
+    return SelectionFetchResult(
+        graph=graph, star_annotations=star_annotations, failed_cohorts=failed_cohorts, build_anndata=build_anndata
+    )
+
+
+def _resolve_cbioportal_study(wrapper: CBioPortalWrapper, cohort: str) -> Optional[str]:
+    """Back-Mediator-Kern für cBioPortal: Krebsart -> passende Studie.
+
+    `list_studies(keyword=...)` sucht per Stichwort (siehe
+    `cancer_types.cancer_name`); die Treffer-Reihenfolge von cBioPortal ist
+    keine Qualitäts-/Vollständigkeitsordnung (live beobachtet z. B. für
+    "brca": eine kleine HTAN-Teilstudie vor der etablierten TCGA-
+    PanCancer-Atlas-Referenzstudie) — deshalb eine gestufte Präferenz statt
+    des ersten Treffers: zuerst eine Studie, deren `studyId` den
+    Kohorten-Code UND "tcga_pan_can_atlas" enthält (breites, gepflegtes
+    mRNA-Profil), sonst Code+"tcga", sonst nur der Code, sonst der erste
+    Treffer der Stichwortsuche. `None`, wenn keine Studie gefunden wurde oder
+    die Anfrage fehlschlägt.
+    """
+    keyword = cancer_types.cancer_name(cohort)
+    code = (cancer_code(cohort) or cohort).lower()
+    try:
+        result = wrapper.list_studies(keyword=keyword, size=50)
+    except RequestException:
+        return None
+    studies = result.get("results") or []
+    if not studies:
+        return None
+
+    def _find(predicate: Callable[[str], bool]) -> Optional[dict]:
+        return next((s for s in studies if predicate((s.get("studyId") or "").lower())), None)
+
+    study = (
+        _find(lambda sid: code in sid and "tcga_pan_can_atlas" in sid)
+        or _find(lambda sid: code in sid and "tcga" in sid)
+        or _find(lambda sid: code in sid)
+        or studies[0]
+    )
+    return study.get("studyId")
+
+
+def _pick_cbioportal_profile(wrapper: CBioPortalWrapper, study_id: str) -> Optional[str]:
+    """Wählt ein mRNA-Expressionsprofil einer Studie (Heuristik: `molecularProfileId`
+    enthält "mrna" oder `molecularAlterationType` ist "MRNA_EXPRESSION") — für
+    `get_molecular_data()`, das `_build_anndata_from_cbioportal` braucht.
+    """
+    try:
+        profiles = wrapper.list_molecular_profiles(study_id)
+    except RequestException:
+        return None
+    candidates = [
+        p
+        for p in profiles
+        if "mrna" in (p.get("molecularProfileId") or "").lower()
+        or (p.get("molecularAlterationType") or "").upper() == "MRNA_EXPRESSION"
+    ]
+    return candidates[0].get("molecularProfileId") if candidates else None
+
+
+def _pick_cbioportal_sample_list(wrapper: CBioPortalWrapper, study_id: str) -> Optional[str]:
+    """Wählt eine Sample-Liste einer Studie (bevorzugt eine, deren ID auf
+    "_all" endet, sonst die größte) — für `get_molecular_data()`.
+    """
+    try:
+        sample_lists = wrapper.list_sample_lists(study_id)
+    except RequestException:
+        return None
+    if not sample_lists:
+        return None
+    preferred = next((sl for sl in sample_lists if (sl.get("sampleListId") or "").endswith("_all")), None)
+    if preferred:
+        return preferred.get("sampleListId")
+    largest = max(sample_lists, key=lambda sl: len(sl.get("sampleIds") or []))
+    return largest.get("sampleListId")
+
+
+def _fetch_cbioportal_level(level: SingleSelection, request: SelectionRequest, recipe_key: str) -> SelectionFetchResult:
+    """cBioPortal-Zweig des Back-Mediators (M9): jede Kohorte wird über
+    `_resolve_cbioportal_study` auf eine Studie abgebildet, deren
+    Klinikdaten real geholt und via `mapping_cbioportal.clinical_data_to_graph`
+    (unverändert wiederverwendet) übersetzt werden. Mehrere `level.cohorts`
+    ergeben mehrere Studien, deren Graphen vereinigt werden (analog zu GDCs
+    Multi-Kohorten-Support).
+    """
+    wrapper = get_cbioportal_wrapper()
+    n_each = request.per_cohort_size or request.size
+    combined = Graph()
+    combined.bind("db", semantic_mapping.DB)
+    failed_cohorts: list[str] = []
+    resolved: list[tuple[str, list[str]]] = []  # (study_id, sample_ids)
+
+    for cohort in level.cohorts:
+        study_id = _resolve_cbioportal_study(wrapper, cohort)
+        if not study_id:
+            failed_cohorts.append(cohort)
+            continue
+        try:
+            patient_rows = wrapper.get_clinical_data(study_id, clinical_data_type="PATIENT", size=2000)["results"]
+            sample_rows = wrapper.get_clinical_data(study_id, clinical_data_type="SAMPLE", size=2000)["results"]
+        except RequestException:
+            failed_cohorts.append(cohort)
+            continue
+        graph, _stars = mapping_cbioportal.clinical_data_to_graph(patient_rows, sample_rows, study_id=study_id)
+        combined += graph
+        sample_ids = sorted({row.get("sampleId") for row in sample_rows if row.get("sampleId")})[:n_each]
+        if sample_ids:
+            resolved.append((study_id, sample_ids))
+
+    def build_anndata() -> dict:
+        if not resolved:
+            raise ValueError(f"Keine cBioPortal-Studie mit Proben gefunden für Kohorte(n) {level.cohorts!r}.")
+        return _build_anndata_from_cbioportal(wrapper, resolved, recipe_key, compute_tsne=True)
+
+    return SelectionFetchResult(graph=combined, failed_cohorts=failed_cohorts, build_anndata=build_anndata)
+
+
+def _build_anndata_from_cbioportal(
+    wrapper: CBioPortalWrapper,
+    resolved: list[tuple[str, list[str]]],
+    recipe_key: str,
+    *,
+    compute_tsne: bool = False,
+) -> dict:
+    """Baut ein `.h5ad` aus cBioPortals `get_molecular_data()` (Back-Mediator M9).
+
+    Anders als GDC liefert cBioPortal bereits fertige, tabellarische Werte
+    (kein Rohdaten-Download/gdc-client nötig) — `get_molecular_data()`
+    verlangt aber eine explizite `entrezGeneIds`-Liste, dafür das kleine,
+    live verifizierte `cancer_types.DEMO_GENE_PANEL` (siehe dort). Je
+    resolvierter Studie wird ein mRNA-Profil + eine Sample-Liste gewählt
+    (siehe `_pick_cbioportal_profile`/`_pick_cbioportal_sample_list`); fehlt
+    eines davon, wird nur diese Studie übersprungen, nicht die ganze Ebene.
+    """
+    gene_ids_str = [str(g) for g in cancer_types.DEMO_GENE_PANEL.values()]
+    gene_labels = {str(entrez_id): symbol for symbol, entrez_id in cancer_types.DEMO_GENE_PANEL.items()}
+    entrez_ids = list(cancer_types.DEMO_GENE_PANEL.values())
+
+    values: dict[str, dict[str, float]] = {}
+    for study_id, sample_ids in resolved:
+        profile_id = _pick_cbioportal_profile(wrapper, study_id)
+        sample_list_id = _pick_cbioportal_sample_list(wrapper, study_id)
+        if not profile_id or not sample_list_id:
+            continue
+        try:
+            result = wrapper.get_molecular_data(profile_id, sample_list_id=sample_list_id, entrez_gene_ids=entrez_ids)
+        except RequestException:
+            continue
+        wanted = set(sample_ids)
+        for row in result.get("results") or []:
+            sample_id = row.get("sampleId")
+            entrez_id = row.get("entrezGeneId")
+            value = row.get("value")
+            if sample_id not in wanted or entrez_id is None or value is None:
+                continue
+            try:
+                values.setdefault(sample_id, {})[str(int(entrez_id))] = float(value)
+            except (TypeError, ValueError):
+                continue
+
+    if not values:
+        raise HTTPException(
+            status_code=502,
+            detail="cBioPortal lieferte keine molekularen Werte für das Demo-Genpanel "
+            "(fehlendes mRNA-Profil, leere Sample-Liste oder unbekanntes Panel für diese Studie(n)).",
+        )
+
+    X, sample_ids_out = expression_export.assemble_matrix_from_values(values, gene_ids_str)
+    obs = pd.DataFrame(index=pd.Index(sample_ids_out, name="sample_id"))
+    var = expression_export.build_var(gene_ids_str, gene_labels)
+
+    obsm: dict[str, Any] = {}
+    if compute_tsne:
+        tsne = expression_export.compute_tsne(X)
+        if tsne is not None:
+            obsm["X_tsne_genes"] = tsne
+
+    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
+    filename = f"{recipe_key}.h5ad"
+    out_path = expression_export.write_h5ad(adata, export_dir() / filename)
+
+    return {
+        "n_obs": int(adata.n_obs),
+        "n_vars": int(adata.n_vars),
+        "obs_columns": list(obs.columns),
+        "var_columns": list(var.columns),
+        "obsm_keys": list(obsm.keys()),
+        "missing_files": [],
+        "filename": filename,
+        "path": str(out_path),
+        "download_url": f"/export/anndata/download/{filename}",
+    }
+
+
+def _fetch_geo_level(level: SingleSelection, request: SelectionRequest, recipe_key: str) -> SelectionFetchResult:
+    """GEO-Zweig des Back-Mediators (M9): jede Kohorte wird über
+    `cancer_types.cancer_name` auf einen Freitext-Suchbegriff abgebildet und
+    per `GEOWrapper.query()` (nicht `.search()`, das kein `extra` durchreicht,
+    siehe cancer_types.py-Modul-Docstring) gegen `gds` gesucht. Preview ist
+    real (`mapping_geo.series_to_graph`); Generate ist Best-Effort, siehe
+    `_build_anndata_from_geo_best_effort`.
+    """
+    wrapper = get_geo_wrapper()
+    n_each = request.per_cohort_size or request.size
+    combined = Graph()
+    combined.bind("db", semantic_mapping.DB)
+    failed_cohorts: list[str] = []
+    all_series: list[dict] = []
+
+    for cohort in level.cohorts:
+        term = geo_build_search_term(
+            organism="Homo sapiens", entry_type="gse", extra=[f'"{cancer_types.cancer_name(cohort)}"']
+        )
+        try:
+            result = wrapper.query(term=term, db="gds", size=n_each)
+        except RequestException:
+            failed_cohorts.append(cohort)
+            continue
+        hits = result.get("results") or []
+        if not hits:
+            failed_cohorts.append(cohort)
+            continue
+        all_series.extend(hits)
+
+    if all_series:
+        graph, _stars = mapping_geo.series_to_graph(all_series)
+        combined += graph
+
+    def build_anndata() -> dict:
+        return _build_anndata_from_geo_best_effort(wrapper, all_series, recipe_key, compute_tsne=True)
+
+    return SelectionFetchResult(graph=combined, failed_cohorts=failed_cohorts, build_anndata=build_anndata)
+
+
+# Dateiendungen, die der Best-Effort-GEO-Parser als tabellenartig versucht
+# (siehe `_build_anndata_from_geo_best_effort`) — bewusst eng gefasst, damit
+# z. B. `.tar`/`.RData`/`.CEL`-Archive gar nicht erst erfolglos geparst werden.
+_GEO_TABLE_SUFFIXES = (".txt", ".tsv", ".csv", ".txt.gz", ".tsv.gz", ".csv.gz")
+
+
+def _build_anndata_from_geo_best_effort(
+    wrapper: GEOWrapper, series_list: list[dict], recipe_key: str, *, compute_tsne: bool = False
+) -> dict:
+    """Best-Effort-Matrixaufbau aus GEO-Supplementary-Dateien (Back-Mediator M9,
+    mit dem Nutzer als "GEO zusätzlich versuchen (best effort)" abgestimmt).
+
+    GEO hat — anders als GDCs einheitliche STAR-Gene-Counts-Dateien — KEIN
+    einheitliches Dateiformat über Serien hinweg. Dieser Versuch lädt je
+    Serie die erste Datei mit einer tabellenartigen Endung
+    (`_GEO_TABLE_SUFFIXES`) und liest sie generisch als ID/Wert-Tabelle
+    (erste String-Spalte = ID, erste numerische Spalte = Wert). Scheitert das
+    für ALLE Serien, wird ein klarer Fehler geworfen statt einer erfundenen
+    Matrix; scheitert es nur für einzelne Serien, werden die übrigen trotzdem
+    genutzt.
+    """
+    raw_dir = export_dir() / "geo_raw" / recipe_key
+    values: dict[str, dict[str, float]] = {}
+    feature_ids: list[str] = []
+    used_series: list[str] = []
+
+    for series in series_list:
+        accession = series.get("accession")
+        if not accession:
+            continue
+        series_dir = raw_dir / accession
+        try:
+            download = wrapper.download_supplementary_files(accession, str(series_dir))
+        except RequestException:
+            continue
+        if download.get("status") != "completed":
+            continue
+        candidate_name = next(
+            (name for name in download.get("files") or [] if name.lower().endswith(_GEO_TABLE_SUFFIXES)), None
+        )
+        if not candidate_name:
+            continue
+        try:
+            df = pd.read_csv(series_dir / candidate_name, sep=None, engine="python", comment="#")
+        except (OSError, ValueError, UnicodeDecodeError, pd.errors.ParserError):
+            continue
+        id_col = next((c for c in df.columns if df[c].dtype == object), None)
+        numeric_cols = [c for c in df.columns if c != id_col and pd.api.types.is_numeric_dtype(df[c])]
+        if id_col is None or not numeric_cols:
+            continue
+        value_col = numeric_cols[0]
+        sample_values: dict[str, float] = {}
+        for feature_id, value in zip(df[id_col], df[value_col]):
+            if pd.isna(feature_id) or pd.isna(value):
+                continue
+            fid = str(feature_id)
+            sample_values[fid] = float(value)
+            if fid not in feature_ids:
+                feature_ids.append(fid)
+        if sample_values:
+            values[accession] = sample_values
+            used_series.append(accession)
+
+    if not values:
+        raise HTTPException(
+            status_code=502,
+            detail="Keine der gefundenen GEO-Serien lieferte eine auswertbare Supplementary-Tabelle "
+            "(Best-Effort-Parser für .txt/.tsv/.csv — GEO hat kein einheitliches Dateiformat je Serie).",
+        )
+
+    X, sample_ids = expression_export.assemble_matrix_from_values(values, feature_ids)
+    obs = pd.DataFrame(index=pd.Index(sample_ids, name="accession"))
+    var = expression_export.build_var(feature_ids)
+
+    obsm: dict[str, Any] = {}
+    if compute_tsne:
+        tsne = expression_export.compute_tsne(X)
+        if tsne is not None:
+            obsm["X_tsne_genes"] = tsne
+
+    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
+    filename = f"{recipe_key}.h5ad"
+    out_path = expression_export.write_h5ad(adata, export_dir() / filename)
+
+    return {
+        "n_obs": int(adata.n_obs),
+        "n_vars": int(adata.n_vars),
+        "obs_columns": list(obs.columns),
+        "var_columns": list(var.columns),
+        "obsm_keys": list(obsm.keys()),
+        "missing_files": [],
+        "used_series": used_series,
+        "filename": filename,
+        "path": str(out_path),
+        "download_url": f"/export/anndata/download/{filename}",
+    }
 
 
 def _load_selection_knowledge(turtle: str) -> None:
@@ -689,15 +1072,10 @@ async def selection_preview(request: SelectionRequest) -> SelectionPreviewRespon
             requested_fields=resolve_case_fields(level.attributes),
         )
         try:
-            _hits, cases, failed_cohorts = _selection_fetch(level, request)
-            result.failed_cohorts = failed_cohorts
-            if not cases:
-                raise ValueError(f"Keine Treffer für Kohorte(n) {level.cohorts!r}.")
-            graph, star_annotations = semantic_mapping.cases_to_graph(
-                cases, alignment=alignment, attributes=level.attributes
-            )
-            result.turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
-            result.triple_count = len(graph)
+            fetched = _fetch_selection_level(level, request, result.recipe_key, alignment)
+            result.failed_cohorts = fetched.failed_cohorts
+            result.turtle = semantic_mapping.serialize_with_provenance(fetched.graph, fetched.star_annotations)
+            result.triple_count = len(fetched.graph)
             if request.load:
                 _load_selection_knowledge(result.turtle)
         except (ValueError, HTTPException) as exc:
@@ -738,18 +1116,13 @@ async def selection_generate(request: SelectionRequest) -> SelectionGenerateResp
                 levels.append(result)
                 continue
 
-            hits, cases, failed_cohorts = _selection_fetch(level, request)
-            result.failed_cohorts = failed_cohorts
-            if not hits:
-                raise ValueError(f"Keine Expressions-Files für Kohorte(n) {level.cohorts!r}.")
-            graph, star_annotations = semantic_mapping.cases_to_graph(
-                cases, alignment=alignment, attributes=level.attributes
-            )
-            result.turtle = semantic_mapping.serialize_with_provenance(graph, star_annotations)
-            result.triple_count = len(graph)
+            fetched = _fetch_selection_level(level, request, recipe_key, alignment)
+            result.failed_cohorts = fetched.failed_cohorts
+            result.turtle = semantic_mapping.serialize_with_provenance(fetched.graph, fetched.star_annotations)
+            result.triple_count = len(fetched.graph)
             if request.load:
                 _load_selection_knowledge(result.turtle)
-            anndata_meta = _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True)
+            anndata_meta = fetched.build_anndata()
             wrapper.cache.materialized.set(recipe_key, anndata_meta)
             result.anndata = anndata_meta
         except (ValueError, HTTPException) as exc:

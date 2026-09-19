@@ -167,6 +167,28 @@ def assemble_matrix(
     return X, sample_ids, gene_ids, gene_labels
 
 
+def assemble_matrix_from_values(
+    values: dict[str, dict[str, float]],
+    feature_ids: list[str],
+) -> tuple[np.ndarray, list[str]]:
+    """Baut eine dichte Matrix aus bereits aufbereiteten Werten (kein Datei-
+    Parsing) — Gegenstück zu `assemble_matrix()` für Quellen, die (anders als
+    GDC) schon fertige numerische Werte liefern, z. B. cBioPortals
+    `get_molecular_data()` oder ein generisch eingelesener GEO-Supplementary-
+    Wert (siehe app/main.py, Back-Mediator M9).
+
+    ``values``: ``{sample_id: {feature_id: wert}}``. Fehlt ein Feature für
+    eine Probe, wird ``0.0`` eingesetzt (wie bei `assemble_matrix`).
+    """
+    sample_ids = list(values.keys())
+    X = np.zeros((len(sample_ids), len(feature_ids)), dtype=np.float32)
+    for row, sid in enumerate(sample_ids):
+        row_values = values[sid]
+        for col, fid in enumerate(feature_ids):
+            X[row, col] = row_values.get(fid, 0.0)
+    return X, sample_ids
+
+
 def build_obs(
     sample_case_map: dict[str, str],
     cases_by_submitter: dict[str, dict[str, Any]],
@@ -233,10 +255,18 @@ def build_var(gene_ids: list[str], gene_labels: Optional[dict[str, str]] = None)
     nicht Teil dieser ersten Ausbaustufe.
     """
     gene_labels = gene_labels or {}
-    return pd.DataFrame(
+    var = pd.DataFrame(
         {"symbol": [gene_labels.get(gid) for gid in gene_ids]},
         index=pd.Index(gene_ids, name="feature_id"),
     )
+    # anndata/h5py kann eine object-Spalte aus ausschließlich ``None`` nicht als
+    # vlen-String schreiben (TypeError: Can't implicitly convert non-string
+    # objects to strings) — trifft z. B. jede Quelle ohne `gene_labels` (siehe
+    # app/main.py, GEO-Best-Effort-Export). Gleiche Normalisierung wie in
+    # `build_obs` (dort mit ausführlicherem Kommentar).
+    if var["symbol"].dtype == object:
+        var["symbol"] = var["symbol"].where(var["symbol"].notna(), "").astype(str)
+    return var
 
 
 def compute_tsne(X: np.ndarray, *, n_components: int = 2, random_state: int = 0) -> Optional[np.ndarray]:
