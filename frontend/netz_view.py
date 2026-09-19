@@ -53,7 +53,7 @@ EDGE_ENTITY = "db:hasDemographic | db:hasDiagnosis | db:hasSample"
 # Die beiden leeren Zustaende. Sie sehen sonst gleich aus und bedeuten
 # Verschiedenes: ein leerer Store ist der normale Anfang nach
 # `docker compose down -v`, kein Fehler.
-TEXT_LEER = ("Der Store enthaelt noch keine Faelle.\n"
+TEXT_LEER = ("Zu dieser Auswahl liegt noch nichts im Store.\n"
              "Jede Vorschau erweitert das Netz.")
 
 
@@ -137,10 +137,14 @@ class _Knoten(QGraphicsItem):
 class NetzView(QGraphicsView):
     """Die Netzflaeche: zeichnet einen Abzug und markiert, was dazukam.
 
-    Bedienung: Klick auf eine Kohorte klappt sie auf (Reihe 3 zeigt dann ihre
-    Attribute), erneuter Klick klappt sie zu, Klick auf die Wurzel klappt alles
-    zu. Es ist immer **hoechstens eine** Kohorte aufgeklappt, sonst wird Reihe 3
-    beliebig breit.
+    Gezeigt wird **die Auswahl aus dem Panel**, nicht der ganze Store: die
+    gewaehlte Kohorte und die angehakten Attribute. Die Zahlen kommen weiter aus
+    dem Store, was noch nie abgerufen wurde steht mit 0 da — so sieht man vor
+    dem Klick, was die Auswahl im Netz bewegen wird.
+
+    Bedienung: Klick auf die Kohorte klappt ihre Attribute zu und wieder auf,
+    Klick auf die Wurzel klappt zu. Es ist immer **hoechstens eine** Kohorte
+    aufgeklappt, sonst wird Reihe 3 beliebig breit.
 
     **Der Klick aendert das Auswahlpanel rechts nicht.** Das Netz ist in dieser
     Fassung eine Anzeige, keine Navigation; "im Netz klicken und damit den
@@ -169,12 +173,20 @@ class NetzView(QGraphicsView):
 
     # -- Inhalt setzen -----------------------------------------------------
     def zeige_abzug(self, abzug: dict[str, Any],
-                    unterschied: dict[str, Any] | None = None) -> None:
-        """Einen Abzug anzeigen, optional mit der Markierung des letzten Aufrufs."""
+                    unterschied: dict[str, Any] | None = None,
+                    offen: str | None = None) -> None:
+        """Einen Abzug anzeigen, optional mit der Markierung des letzten Aufrufs.
+
+        ``offen`` ist die Kohorte, deren Attribute gleich mitkommen sollen — das
+        Netz zeigt die Auswahl aus dem Panel, und dazu gehoeren die angehakten
+        Attribute, ohne dass man erst klicken muss.
+        """
         self._abzug = abzug or sr.leerer_abzug()
         self._unterschied = unterschied or {}
         self._meldung = None
         self._meldung_fehler = False
+        if offen is not None:
+            self._offene_kohorte = offen
         # Eine Kohorte, die es nicht mehr gibt, darf nicht aufgeklappt bleiben.
         if self._offene_kohorte not in (self._abzug.get("cohorts") or {}):
             self._offene_kohorte = None
@@ -217,7 +229,7 @@ class NetzView(QGraphicsView):
         # Reihe 1: Wurzel. Breiter als die uebrigen Knoten — sie traegt zwei
         # Zahlen, und abgeschnitten ("18 Fa…") nuetzt die zweite nichts.
         wurzel = self._neuer_knoten(
-            "Store",
+            "Auswahl",
             f"{_anzahl(len(self._abzug.get('cohorts') or {}), 'Kohorte', 'Kohorten')} · "
             f"{_anzahl(self._abzug.get('cases', 0), 'Fall', 'Faelle')}",
             zustand=self._zustand_wurzel(),
@@ -448,8 +460,9 @@ class NetzPanel(QWidget):
 
     # Durchreichen, damit das Fenster nur das Panel kennt.
     def zeige_abzug(self, abzug: dict[str, Any],
-                    unterschied: dict[str, Any] | None = None) -> None:
-        self.view.zeige_abzug(abzug, unterschied)
+                    unterschied: dict[str, Any] | None = None,
+                    offen: str | None = None) -> None:
+        self.view.zeige_abzug(abzug, unterschied, offen)
 
     def zeige_nicht_erreichbar(self, url: str) -> None:
         self.view.zeige_nicht_erreichbar(url)

@@ -45,6 +45,7 @@
       "note": "noch nicht angebunden"
     }
   ],
+  "_store_property_hinweis": "Nur fuer die Netzansicht (frontend/netz_view.py): sie zeigt die angehakten Attribute und muss dafuer wissen, unter welcher Property ein Attribut im Store liegt. Neun der elf ergeben sich mechanisch aus dem camelCase des Panel-Namens (sex_at_birth -> db:sexAtBirth); nur diese beiden nicht, deshalb stehen sie hier ausdruecklich statt geraten zu werden. Fuehrend bleibt KNOWN_ATTRIBUTES im Mediator (mediator/app/semantic/mapping.py) - aendert sich dort ein Name, muss er hier nachgezogen werden. Auf den Auftrag hat das Feld KEINEN Einfluss: gesendet wird immer 'value'.",
   "attribute_groups": [
     {
       "node": "Demographic",
@@ -58,12 +59,18 @@
     {
       "node": "Diagnosis",
       "attributes": [
-        "primary_diagnosis",
+        {
+          "value": "primary_diagnosis",
+          "store_property": "primaryDiagnosisLabel"
+        },
         "age_at_diagnosis",
         "morphology",
         "site_of_resection_or_biopsy",
         "tumor_stage",
-        "has_metastasis"
+        {
+          "value": "has_metastasis",
+          "store_property": "metastasisAtDiagnosis"
+        }
       ]
     },
     {

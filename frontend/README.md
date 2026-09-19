@@ -110,9 +110,17 @@ anbindet, genügt in `config/panel.json` ein `"enabled": true`.
 ## Netzansicht
 
 Über der Anzeigefläche steht das **Wissensnetz** als gezeichnetes Netz: oben die Wurzel
-`Store`, darunter je Kohorte ein Knoten, darunter — wenn man eine Kohorte anklickt — deren
-Attribute. Ein Klick auf die Wurzel klappt alles zu; es ist immer höchstens eine Kohorte
-aufgeklappt. Der aufgeklappte Knoten trägt einen **dickeren Rand**, keine andere Farbe:
+`Auswahl`, darunter die gewählte Kohorte, darunter deren angehakte Attribute.
+
+**Gezeigt wird genau die Auswahl aus dem Panel, sonst nichts** — nicht alles, was im Store
+liegt. Das Netz zieht sofort mit, wenn man rechts die Kohorte wechselt oder ein Attribut an-
+oder abhakt; ein Aufruf ist dafür nicht nötig. Die **Zahlen** kommen weiterhin aus dem
+Store: was noch nie abgerufen wurde, steht mit `0 Faelle · 0 Werte` da, statt zu fehlen. So
+sieht man vor dem Klick, was die Auswahl im Netz bewegen wird. Der Gesamtstand des Stores
+steht weiterhin rechts in der Statusleiste.
+
+Ein Klick auf die Kohorte klappt ihre Attribute zu und wieder auf, ein Klick auf die Wurzel
+klappt zu; der aufgeklappte Knoten trägt einen **dickeren Rand**, keine andere Farbe:
 **Auswahl zeigt der Rand, Wachstum zeigt die Farbe.** Der Klick ändert das Auswahlpanel
 rechts nicht — das Netz ist eine Anzeige, keine Navigation.
 
@@ -142,8 +150,9 @@ wäre erfunden, weil der Store nicht weiß, welcher Fall aus welchem Aufruf kam.
 
 Zwei leere Zustände, die Verschiedenes bedeuten und deshalb verschieden aussehen:
 
-- **Leer** (erreichbar, null Fälle): gedämpfter Hinweis, dass jede Vorschau das Netz
-  erweitert. Das ist der normale Anfang nach `docker compose down -v`, **kein** Fehler.
+- **Leer** (erreichbar, aber nichts zur Auswahl im Store): gedämpfter Hinweis, dass jede
+  Vorschau das Netz erweitert. Das ist der normale Anfang nach `docker compose down -v`,
+  **kein** Fehler.
 - **Nicht erreichbar**: die Meldung in Fehlerfarbe, zusätzlich in der Statusleiste. Sie
   blockiert nichts — `Vorschau` und `Generieren` sprechen mit dem Mediator, nicht mit
   Fuseki.
@@ -161,6 +170,13 @@ wenn er in camelCase genau passt. Zwei der elf bleiben dadurch ohne Panel-Namen 
 `has_metastasis` liegt als `db:metastasisAtDiagnosis` im Store, `primary_diagnosis` als
 `db:primaryDiagnosisLabel`. Eine halb stimmende Rückübersetzung wäre genau die Sorte stiller
 Fehlzuordnung, die uns schon das tote GDC-Feld `gender` eingebrockt hat.
+
+Für die **Gegenrichtung** — welche Property gehört zu einem angehakten Attribut, damit der
+Filter sie findet — reicht Raten erst recht nicht. Neun der elf ergeben sich aus dem
+camelCase; genau diese beiden stehen deshalb als `store_property` in `config/panel.json`.
+Das Feld dient **nur der Netzansicht** und hat auf den Auftrag keinen Einfluss: gesendet
+wird immer `value`. Führend bleibt `KNOWN_ATTRIBUTES` im Mediator — ändert sich dort ein
+Name, muss er in `panel.json` nachgezogen werden.
 
 ## Aufbau
 

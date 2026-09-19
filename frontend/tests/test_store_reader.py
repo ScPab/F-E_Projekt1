@@ -177,3 +177,73 @@ def test_panel_name_raet_nicht(local: str) -> None:
     Rueckuebersetzung waere genau die Sorte stiller Fehlzuordnung, die uns schon
     das tote GDC-Feld 'gender' eingebrockt hat."""
     assert sr.panel_name(local, PANEL_NAMEN) is None
+
+
+# --- Einschraenkung auf die Auswahl im Panel ---------------------------------
+ZUORDNUNG = {"primary_diagnosis": "primaryDiagnosisLabel",
+             "has_metastasis": "metastasisAtDiagnosis"}
+
+
+def test_store_property_folgt_dem_camelcase() -> None:
+    assert sr.store_property("sex_at_birth", ZUORDNUNG) == "sexAtBirth"
+    assert sr.store_property("site_of_resection_or_biopsy", ZUORDNUNG) == \
+        "siteOfResectionOrBiopsy"
+
+
+def test_store_property_nimmt_die_ausdrueckliche_zuordnung() -> None:
+    """Die zwei, die nicht mechanisch folgen, stehen in config/panel.json."""
+    assert sr.store_property("primary_diagnosis", ZUORDNUNG) == "primaryDiagnosisLabel"
+    assert sr.store_property("has_metastasis", ZUORDNUNG) == "metastasisAtDiagnosis"
+
+
+def test_auswahl_abzug_zeigt_nur_die_gewaehlte_kohorte() -> None:
+    abzug = _abzug(70, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2)),
+                        "TCGA-LUAD": _kohorte(20, sexAtBirth=(20, 2))})
+    gefiltert = sr.auswahl_abzug(abzug, "TCGA-BRCA", ["sex_at_birth"], ZUORDNUNG)
+    assert list(gefiltert["cohorts"]) == ["TCGA-BRCA"]
+    assert gefiltert["cases"] == 50
+
+
+def test_auswahl_abzug_zeigt_nur_angehakte_attribute() -> None:
+    abzug = _abzug(50, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2),
+                                              vitalStatus=(50, 2),
+                                              primaryDiagnosisLabel=(50, 6))})
+    gefiltert = sr.auswahl_abzug(abzug, "TCGA-BRCA",
+                                 ["sex_at_birth", "primary_diagnosis"], ZUORDNUNG)
+    assert set(gefiltert["cohorts"]["TCGA-BRCA"]["attributes"]) == {
+        "sexAtBirth", "primaryDiagnosisLabel",
+    }
+
+
+def test_auswahl_abzug_zeigt_noch_nicht_abgerufenes_mit_null() -> None:
+    """Vor dem Klick sichtbar machen, was die Auswahl bewegen wird — fehlende
+    Knoten waeren dafuer nutzlos."""
+    abzug = _abzug(50, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2))})
+    gefiltert = sr.auswahl_abzug(abzug, "TCGA-BRCA",
+                                 ["sex_at_birth", "tumor_stage"], ZUORDNUNG)
+    assert gefiltert["cohorts"]["TCGA-BRCA"]["attributes"]["tumorStage"] == {
+        "cases": 0, "values": 0,
+    }
+
+
+def test_auswahl_abzug_einer_nie_abgerufenen_kohorte() -> None:
+    gefiltert = sr.auswahl_abzug(_abzug(0, {}), "TCGA-LUAD", ["sex_at_birth"],
+                                 ZUORDNUNG)
+    assert gefiltert["cohorts"]["TCGA-LUAD"]["cases"] == 0
+    assert gefiltert["cohorts"]["TCGA-LUAD"]["attributes"]["sexAtBirth"]["cases"] == 0
+
+
+def test_auswahl_abzug_ohne_kohorte_ist_leer() -> None:
+    assert sr.auswahl_abzug(_abzug(50, {"TCGA-BRCA": _kohorte(50)}), "",
+                            ["sex_at_birth"], ZUORDNUNG) == sr.leerer_abzug()
+
+
+def test_auswahl_abzug_behaelt_die_store_namen_als_schluessel() -> None:
+    """Sonst faende diff() seine Eintraege nicht wieder."""
+    vorher = _abzug(20, {"TCGA-BRCA": _kohorte(20, sexAtBirth=(20, 2))})
+    nachher = _abzug(50, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2))})
+    unterschied = sr.diff(vorher, nachher)
+    gefiltert = sr.auswahl_abzug(nachher, "TCGA-BRCA", ["sex_at_birth"], ZUORDNUNG)
+    assert set(gefiltert["cohorts"]["TCGA-BRCA"]["attributes"]) <= set(
+        unterschied["attributes"]["TCGA-BRCA"]
+    )

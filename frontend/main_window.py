@@ -128,6 +128,11 @@ class MainWindow(QMainWindow):
         self._letzter_abzug: dict[str, Any] | None = None
         self._netz_aktualisieren()
 
+        # Das Netz zieht mit der Auswahl mit, ohne den Store erneut zu fragen:
+        # gezeichnet wird aus dem zuletzt gelesenen Abzug.
+        self._cohort_select.selection_changed.connect(self._auswahl_geaendert)
+        self._attribute_select.selection_changed.connect(self._auswahl_geaendert)
+
     # -- Menue ---------------------------------------------------------------
     def _build_menu(self) -> None:
         """Menueleiste mit dem Download-Eintrag.
@@ -520,6 +525,9 @@ class MainWindow(QMainWindow):
                 entries.append({
                     "value": attribute,
                     "label": beschriftung,
+                    # Nur fuer die Netzansicht; auf den Auftrag ohne Einfluss.
+                    "store_property": (eintrag.get("store_property")
+                                       if isinstance(eintrag, dict) else None),
                     "checked": attribute in preselected,
                     "tooltip": f"{knoten}.{attribute}" if knoten else attribute,
                     "search": f"{attribute} {beschriftung} {knoten}",
@@ -554,6 +562,17 @@ class MainWindow(QMainWindow):
         (siehe ``store_reader.panel_name``)."""
         return [e["value"] for e in self._attribute_entries() if e.get("value")]
 
+    def _store_zuordnung(self) -> dict[str, str]:
+        """Panel-Name -> Store-Property, soweit sie nicht mechanisch folgt.
+
+        Nur ``primary_diagnosis`` und ``has_metastasis`` stehen dafuer in
+        ``config/panel.json``; die uebrigen neun ergeben sich aus dem camelCase
+        (siehe ``store_reader.store_property``).
+        """
+        return {e["value"]: e["store_property"]
+                for e in self._attribute_entries()
+                if e.get("value") and e.get("store_property")}
+
     def _abzug_vorher(self) -> dict[str, Any]:
         """Abzug A, **bevor** die Anfrage abgeschickt wird. Laeuft im
         Worker-Thread (siehe ``worker.SelectionWorker``)."""
@@ -573,6 +592,15 @@ class MainWindow(QMainWindow):
         if self._abzug_a is None:
             return None
         return sr.diff(self._abzug_a, abzug)
+
+    def _auswahl_geaendert(self, *_: Any) -> None:
+        """Auswahl im Panel geaendert — Netz neu zeichnen, ohne neue Abfrage.
+
+        Ohne Markierung: die Wachstumsfarben gehoeren zum letzten **Aufruf**,
+        nicht zum letzten Klick im Panel.
+        """
+        if self._letzter_abzug is not None:
+            self._netz_zeigen(self._letzter_abzug)
 
     def _netz_aktualisieren(self) -> None:
         """Das Netz frisch lesen — beim Start und ueber ``Ansicht > Netz
@@ -608,7 +636,15 @@ class MainWindow(QMainWindow):
             self._netz.zeige_nicht_erreichbar(sr.store_url(sr.default_store()))
             self._store_label.setText("Store: nicht erreichbar")
             return
-        self._netz.zeige_abzug(abzug, unterschied)
+        # Das Netz zeigt die Auswahl aus dem Panel, nicht den ganzen Store —
+        # der Gesamtstand steht rechts in der Statusleiste.
+        kohorte = self.current_cohort()
+        self._netz.zeige_abzug(
+            sr.auswahl_abzug(abzug, kohorte, self.checked_attributes(),
+                             self._store_zuordnung()),
+            unterschied,
+            offen=kohorte,
+        )
         self._store_label.setText(self._store_stand(abzug))
 
     @staticmethod

@@ -267,3 +267,48 @@ def panel_name(local: str, panel_namen: list[str]) -> str | None:
         if _camel(name) == local:
             return name
     return None
+
+
+# --- Auf die Auswahl im Panel einschraenken --------------------------------
+def store_property(panel: str, zuordnung: dict[str, str] | None = None) -> str:
+    """Unter welcher Property ein Panel-Attribut im Store liegt.
+
+    Neun der elf ergeben sich mechanisch aus dem camelCase des Panel-Namens;
+    ``primary_diagnosis`` und ``has_metastasis`` nicht. Die beiden stehen
+    deshalb ausdruecklich als ``store_property`` in ``config/panel.json`` —
+    geraten wird hier nichts (siehe :func:`panel_name` zur selben Frage in der
+    Gegenrichtung).
+    """
+    return (zuordnung or {}).get(panel) or _camel(panel)
+
+
+def auswahl_abzug(abzug: dict[str, Any], kohorte: str, attribute: list[str],
+                  zuordnung: dict[str, str] | None = None) -> dict[str, Any]:
+    """Einen Abzug auf die Auswahl im Panel einschraenken.
+
+    Gezeigt wird genau die gewaehlte Kohorte mit genau den angehakten
+    Attributen — nicht alles, was im Store liegt. Die **Zahlen** kommen
+    weiterhin aus dem Store; was noch nie abgerufen wurde, steht mit 0 da,
+    statt zu fehlen. So sieht man vor dem Klick, was die Auswahl im Netz
+    bewegen wird.
+
+    Die Schluessel bleiben die Store-Namen, damit ein Vergleich aus
+    :func:`diff` weiterhin passt.
+    """
+    if not kohorte:
+        return leerer_abzug()
+
+    vorhanden = (abzug.get("cohorts") or {}).get(kohorte) or {}
+    im_store = vorhanden.get("attributes") or {}
+
+    gewaehlt: dict[str, Any] = {}
+    for panel in attribute:
+        name = store_property(panel, zuordnung)
+        gewaehlt[name] = im_store.get(name) or {"cases": 0, "values": 0}
+
+    faelle = vorhanden.get("cases", 0)
+    return {
+        "cases": faelle,
+        "projects": 1,
+        "cohorts": {kohorte: {"cases": faelle, "attributes": gewaehlt}},
+    }
