@@ -494,6 +494,10 @@ class SearchableSelect(_AufklappAuswahl):
         )
         self._value = ""
         self._fill(entries)
+        # Ohne Vorauswahl starten: die Oberflaeche waehlt nicht fuer den
+        # Forscher. Eine vorbelegte Kohorte wird sonst leicht uebersehen und
+        # landet im Auftrag, ohne dass jemand sie gewollt hat.
+        self._beschrifte()
 
     def _fill(self, entries: list[dict[str, str]]) -> None:
         for entry in entries:
@@ -511,14 +515,27 @@ class SearchableSelect(_AufklappAuswahl):
         return self._value
 
     def set_value(self, value: str) -> None:
+        """Einen Wert waehlen; ``""`` setzt die Auswahl zurueck."""
+        if not value:
+            self._value = ""
+            self._list.setCurrentRow(-1)
+            self._beschrifte()
+            self.selection_changed.emit("")
+            return
         for row in range(self._list.count()):
             item = self._list.item(row)
             if item.data(VALUE_ROLE) == value:
                 self._value = value
                 self._list.setCurrentItem(item)
-                self._button.setText(f"{item.data(LABEL_ROLE)}   ·   {item.data(CODE_ROLE)}")
+                self._beschrifte(f"{item.data(LABEL_ROLE)}   ·   {item.data(CODE_ROLE)}")
                 self.selection_changed.emit(value)
                 return
+
+    def _beschrifte(self, text: str = "") -> None:
+        """Die Schaltflaeche beschriften — ohne Auswahl gedaempft, wie bei der
+        Mehrfachauswahl."""
+        self._button.setText(text or "Keine Auswahl")
+        self._button.setStyleSheet(theme.select_button_style(not text))
 
     def _aktiviere(self, item: QListWidgetItem) -> None:
         self.set_value(item.data(VALUE_ROLE) or "")

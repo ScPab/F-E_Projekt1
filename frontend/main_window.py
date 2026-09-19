@@ -415,8 +415,11 @@ class MainWindow(QMainWindow):
 
     # -- Panel befuellen ----------------------------------------------------
     def _fill_panel(self) -> None:
-        self._cohort_select.set_value("TCGA-BRCA")
-
+        # Keine Vorauswahl — weder Kohorte noch Attribute noch Quelle. Die
+        # Oberflaeche waehlt nicht fuer den Forscher; was im Auftrag landet,
+        # hat er selbst angehakt. (Die Listen 'default_attributes' und
+        # 'default_sources' in config/panel.json stehen als Schalter weiter
+        # bereit, sind aber leer.)
         self._fill_choice_box(self._modality_box, self._config.get("modalities") or [])
 
     @staticmethod
@@ -635,6 +638,15 @@ class MainWindow(QMainWindow):
         if abzug is None:
             self._netz.zeige_nicht_erreichbar(sr.store_url(sr.default_store()))
             self._store_label.setText("Store: nicht erreichbar")
+            return
+        if not self.current_cohort():
+            # Ohne Auswahl hat das Netz nichts zu zeigen — und "leer" hiesse
+            # hier faelschlich, im Store liege nichts.
+            self._netz.zeige_hinweis(
+                "Noch nichts ausgewaehlt.\n"
+                "Rechts eine Kohorte waehlen und Attribute anhaken."
+            )
+            self._store_label.setText(self._store_stand(abzug))
             return
         # Das Netz zeigt die Auswahl aus dem Panel, nicht den ganzen Store —
         # der Gesamtstand steht rechts in der Statusleiste.

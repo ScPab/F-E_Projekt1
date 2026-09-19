@@ -54,6 +54,12 @@ Die Basis-URL des Mediators kommt aus `MEDIATOR_URL`, Voreinstellung
 Rechts das Auswahlpanel — Kohorte, Modalität, klinische Attribute, Datenquellen,
 Probenzahl. Unten links die beiden Schaltflächen:
 
+**Der Start ist leer.** Kohorte, `Obj` und `Datenquelle` stehen auf `Keine Auswahl`; die
+Oberfläche wählt nichts vor, der Forscher stellt seine Auswahl selbst zusammen. Ohne
+Kohorte oder ohne Datenquelle sagt die Statusleiste das und schickt nichts ab. Wer wieder
+vorbelegen will, trägt Werte in `default_attributes` / `default_sources` in
+`config/panel.json` ein — beide stehen dort als Schalter bereit und sind leer.
+
 | | |
 | --- | --- |
 | **Vorschau** | `POST /selection/preview` — Abruf, Übersetzung, Laden in den Store. Keine Rohdaten, keine Matrix. Billig. |

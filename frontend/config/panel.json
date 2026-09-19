@@ -23,9 +23,8 @@
       "detail": "Endpunkt /geo/query vorhanden, aber nicht an POST /selection/* angebunden"
     }
   ],
-  "default_sources": [
-    "gdc"
-  ],
+  "_default_hinweis": "Bewusst leer: die Oberflaeche trifft keine Vorauswahl, der Forscher waehlt Kohorte, Attribute und Quelle selbst. Die beiden Listen bleiben als Schalter stehen - wer wieder vorbelegen will, traegt hier Werte ein, ohne Code zu aendern.",
+  "default_sources": [],
   "modalities": [
     {
       "value": "gene_expression",
@@ -80,10 +79,7 @@
       ]
     }
   ],
-  "default_attributes": [
-    "sex_at_birth",
-    "primary_diagnosis"
-  ],
+  "default_attributes": [],
   "cohorts": [
     "TCGA-ACC",
     "TCGA-CHOL",

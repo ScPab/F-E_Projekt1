@@ -192,6 +192,16 @@ class NetzView(QGraphicsView):
             self._offene_kohorte = None
         self.zeichne()
 
+    def zeige_hinweis(self, text: str) -> None:
+        """Eine gedaempfte Meldung statt eines Netzes — etwa, solange nichts
+        ausgewaehlt ist. Kein Fehler, also keine Fehlerfarbe."""
+        self._abzug = sr.leerer_abzug()
+        self._unterschied = {}
+        self._offene_kohorte = None
+        self._meldung = text
+        self._meldung_fehler = False
+        self.zeichne()
+
     def zeige_nicht_erreichbar(self, url: str) -> None:
         """Fuseki antwortet nicht — das ist ein anderer Zustand als "leer"."""
         self._abzug = sr.leerer_abzug()
@@ -208,7 +218,7 @@ class NetzView(QGraphicsView):
         szene.clear()
 
         if self._meldung is not None:
-            self._male_meldung(self._meldung, fehler=True)
+            self._male_meldung(self._meldung, fehler=self._meldung_fehler)
             return
         if not (self._abzug.get("cohorts") or self._abzug.get("cases")):
             # Leer, aber erreichbar: gedaempft, KEINE Fehlerfarbe.
@@ -463,6 +473,9 @@ class NetzPanel(QWidget):
                     unterschied: dict[str, Any] | None = None,
                     offen: str | None = None) -> None:
         self.view.zeige_abzug(abzug, unterschied, offen)
+
+    def zeige_hinweis(self, text: str) -> None:
+        self.view.zeige_hinweis(text)
 
     def zeige_nicht_erreichbar(self, url: str) -> None:
         self.view.zeige_nicht_erreichbar(url)
