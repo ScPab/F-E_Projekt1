@@ -26,22 +26,51 @@ class SelectionWorker(QObject):
     nicht im GUI-Thread.
     """
 
-    finished = Signal(object, str)  # (Result, "preview" | "generate")
+    finished = Signal(object, str, object)  # (Result, mode, diff | None)
 
-    def __init__(self, payload: dict[str, Any], mode: str) -> None:
+    def __init__(self, payload: dict[str, Any], mode: str, *,
+                 vorher=None, nachher=None) -> None:
         super().__init__()
         self._payload = payload
         self._mode = mode
+        # Zwei parameterlose Rueckrufe, die das Fenster uebergibt. Der Worker
+        # ruft sie auf und weiss nicht, was sie tun — damit bleibt der Grundsatz
+        # oben in Kraft: er entscheidet nichts und kennt den Store nicht.
+        # ``store_reader`` wird hier ausdruecklich NICHT importiert.
+        self._vorher = vorher
+        self._nachher = nachher
 
     def run(self) -> None:
+        # Abzug A **vor** dem Aufruf. Nebenlaeufig geholt koennte er bereits
+        # geladene Daten enthalten und der Unterschied fiele zu klein aus; im
+        # GUI-Thread wuerde das Fenster genau im Moment des Klicks einfrieren.
+        self._rufe(self._vorher)
+
         if self._mode == "generate":
             result = mc.generate(self._payload)
         else:
             result = mc.preview(self._payload)
-        self.finished.emit(result, self._mode)
+
+        # Was ``nachher`` zurueckgibt, reicht der Worker unbesehen weiter — was
+        # dort verglichen wird, geht ihn nichts an.
+        self.finished.emit(result, self._mode, self._rufe(self._nachher))
+
+    @staticmethod
+    def _rufe(rueckruf):
+        """Einen Rueckruf ausfuehren; scheitert er, ist das Ergebnis ``None``.
+
+        Ein nicht erreichbarer Store darf einen Auftrag nie verhindern.
+        """
+        if rueckruf is None:
+            return None
+        try:
+            return rueckruf()
+        except Exception:      # noqa: BLE001 - jede Store-Stoerung ist hier gleich
+            return None
 
 
-def start_call(payload: dict[str, Any], mode: str, on_finished) -> tuple[QThread, SelectionWorker]:
+def start_call(payload: dict[str, Any], mode: str, on_finished, *,
+               vorher=None, nachher=None) -> tuple[QThread, SelectionWorker]:
     """Worker in einem neuen Thread starten und beides zurueckgeben.
 
     Der Aufrufer muss die Rueckgabe festhalten, **bis der Thread sein
@@ -52,7 +81,7 @@ def start_call(payload: dict[str, Any], mode: str, on_finished) -> tuple[QThread
     selbst ab (``quit``/``deleteLater``).
     """
     thread = QThread()
-    worker = SelectionWorker(payload, mode)
+    worker = SelectionWorker(payload, mode, vorher=vorher, nachher=nachher)
     worker.moveToThread(thread)
 
     thread.started.connect(worker.run)
