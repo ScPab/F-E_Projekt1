@@ -38,8 +38,10 @@ from PySide6.QtWidgets import (
 )
 
 import mediator_client as mc
+import store_reader as sr
 import theme
 import worker
+from netz_view import NetzPanel
 from searchable_select import KIND_HEADER, MultiSelect, SearchableSelect
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "panel.json"
@@ -119,6 +121,13 @@ class MainWindow(QMainWindow):
                 "info",
             )
 
+        # Abzug A des laufenden Aufrufs und der zuletzt gezeichnete Stand.
+        # Beide werden im Worker-Thread gesetzt und erst danach im GUI-Thread
+        # gelesen (siehe _abzug_vorher/_abzug_nachher und _on_finished).
+        self._abzug_a: dict[str, Any] | None = None
+        self._letzter_abzug: dict[str, Any] | None = None
+        self._netz_aktualisieren()
+
     # -- Menue ---------------------------------------------------------------
     def _build_menu(self) -> None:
         """Menueleiste mit dem Download-Eintrag.
@@ -137,6 +146,15 @@ class MainWindow(QMainWindow):
         self._download_menu = QMenu("Als .h5ad speichern", self)
         self._download_menu.setEnabled(False)
         file_menu.addMenu(self._download_menu)
+
+        # Der Store aendert sich auch ohne diese Oberflaeche, etwa durch
+        # scripts/run_selection.py oder start_all.ps1 -FullLoad. Ohne diesen
+        # Eintrag altert das Bild still.
+        view_menu = self.menuBar().addMenu("&Ansicht")
+        refresh = QAction("Netz aktualisieren", self)
+        refresh.setShortcut("F5")
+        refresh.triggered.connect(self._netz_aktualisieren)
+        view_menu.addAction(refresh)
 
     def _collect_downloadable(self, levels: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Ebenen mit erfolgreich erzeugtem ``.h5ad`` aus einer Mediator-Antwort.
@@ -248,6 +266,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         self._status = QStatusBar()
+        # Zusaetzlich rechts ein dauerhaftes Feld mit dem Stand des Stores:
+        # set_status() schreibt weiterhin links, die beiden kollidieren nicht.
+        self._store_label = QLabel("Store: —")
+        self._status.addPermanentWidget(self._store_label)
         self.setStatusBar(self._status)
 
     def _build_header(self) -> QWidget:
@@ -286,7 +308,20 @@ class MainWindow(QMainWindow):
             "oder 'Generieren' (zusaetzlich Rohdaten und .h5ad).\n\n"
             "Angezeigt wird genau die Antwort des Mediators."
         )
-        layout.addWidget(self._output, stretch=1)
+        # Senkrechter Splitter statt der einen Zeile: oben das Netz, unten
+        # unveraendert self._output (dasselbe Widget, nicht neu gebaut). Ein
+        # Splitter im Splitter — gewollt und der kleinstmoegliche Eingriff.
+        # Die Stellung wird bewusst nicht gespeichert.
+        self._netz = NetzPanel(self._attribut_namen())
+        self._netz.setMinimumHeight(260)
+        self._output.setMinimumHeight(120)
+        anzeige = QSplitter(Qt.Orientation.Vertical)
+        anzeige.addWidget(self._netz)
+        anzeige.addWidget(self._output)
+        anzeige.setStretchFactor(0, 3)
+        anzeige.setStretchFactor(1, 2)
+        anzeige.setSizes([360, 240])
+        layout.addWidget(anzeige, stretch=1)
 
         buttons = QWidget()
         button_layout = QHBoxLayout(buttons)
@@ -513,6 +548,76 @@ class MainWindow(QMainWindow):
             size=self._size_spin.value(),
         )
 
+    # -- Netzansicht ---------------------------------------------------------
+    def _attribut_namen(self) -> list[str]:
+        """Die Panel-Namen der Attribute — Grundlage der Namensregel im Netz
+        (siehe ``store_reader.panel_name``)."""
+        return [e["value"] for e in self._attribute_entries() if e.get("value")]
+
+    def _abzug_vorher(self) -> dict[str, Any]:
+        """Abzug A, **bevor** die Anfrage abgeschickt wird. Laeuft im
+        Worker-Thread (siehe ``worker.SelectionWorker``)."""
+        self._abzug_a = None
+        self._abzug_a = sr.snapshot(sr.default_store())
+        return self._abzug_a
+
+    def _abzug_nachher(self) -> dict[str, Any] | None:
+        """Abzug B, nachdem die Antwort da ist, und der Vergleich.
+
+        Verglichen wird hier und nicht im Worker: der kennt den Store nicht.
+        Ohne Abzug A gibt es keinen Vergleich — sonst saehe nach einem
+        zwischenzeitlich gestarteten Fuseki alles neu aus, was laengst da war.
+        """
+        abzug = sr.snapshot(sr.default_store())
+        self._letzter_abzug = abzug
+        if self._abzug_a is None:
+            return None
+        return sr.diff(self._abzug_a, abzug)
+
+    def _netz_aktualisieren(self) -> None:
+        """Das Netz frisch lesen — beim Start und ueber ``Ansicht > Netz
+        aktualisieren`` (F5).
+
+        Bewusst geradeaus im GUI-Thread: hier laeuft kein Mediator-Aufruf
+        daneben, auf den gewartet werden muesste. Der teure Weg — Abzug vor und
+        nach einem Aufruf — liegt im Worker (Deliverable 4).
+        """
+        store = sr.default_store()
+        url = sr.store_url(store)
+        if not sr.is_reachable(store):
+            self._netz_zeigen(None)
+            # Nicht erreichbar heisst NICHT blockiert: Vorschau und Generieren
+            # sprechen mit dem Mediator, nicht mit Fuseki.
+            self.set_status(
+                f"Fuseki unter {url} nicht erreichbar. Laeuft `docker compose up`?",
+                "error",
+            )
+            return
+        try:
+            self._letzter_abzug = sr.snapshot(store)
+        except Exception as fehler:          # noqa: BLE001 - jede Stoerung gleich
+            self._netz_zeigen(None)
+            self.set_status(f"Netz konnte nicht gelesen werden: {fehler}", "error")
+            return
+        self._netz_zeigen(self._letzter_abzug)
+
+    def _netz_zeigen(self, abzug: dict[str, Any] | None,
+                     unterschied: dict[str, Any] | None = None) -> None:
+        """Netzflaeche und Statusfeld rechts auf denselben Stand bringen."""
+        if abzug is None:
+            self._netz.zeige_nicht_erreichbar(sr.store_url(sr.default_store()))
+            self._store_label.setText("Store: nicht erreichbar")
+            return
+        self._netz.zeige_abzug(abzug, unterschied)
+        self._store_label.setText(self._store_stand(abzug))
+
+    @staticmethod
+    def _store_stand(abzug: dict[str, Any]) -> str:
+        faelle = abzug.get("cases", 0)
+        kohorten = len(abzug.get("cohorts") or {})
+        return (f"Store: {faelle} {'Fall' if faelle == 1 else 'Faelle'} · "
+                f"{kohorten} {'Kohorte' if kohorten == 1 else 'Kohorten'}")
+
     # -- Aufruf -------------------------------------------------------------
     def _start(self, mode: str) -> None:
         if not self.current_cohort():
@@ -539,10 +644,13 @@ class MainWindow(QMainWindow):
             "busy",
         )
         self._output.setPlainText(f"{was} laeuft, bitte warten …")
-        self._thread, self._worker = worker.start_call(payload, mode, self._on_finished)
+        self._thread, self._worker = worker.start_call(
+            payload, mode, self._on_finished,
+            vorher=self._abzug_vorher, nachher=self._abzug_nachher,
+        )
         self._thread.finished.connect(self._release_thread)
 
-    def _on_finished(self, result: mc.Result, mode: str) -> None:
+    def _on_finished(self, result: mc.Result, mode: str, unterschied=None) -> None:
         """Ergebnis anzeigen. Gibt die Thread-Referenz **nicht** frei.
 
         ``worker.finished`` erreicht diesen Slot, bevor der QThread seine
@@ -553,6 +661,7 @@ class MainWindow(QMainWindow):
         """
         self._set_busy(False)
         self._render(result, mode)
+        self._netz_zeigen(self._letzter_abzug, unterschied)
 
     def _release_thread(self) -> None:
         """Referenzen freigeben, sobald der Thread wirklich gestoppt ist."""
