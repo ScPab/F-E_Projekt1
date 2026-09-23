@@ -282,11 +282,12 @@ def store_property(panel: str, zuordnung: dict[str, str] | None = None) -> str:
     return (zuordnung or {}).get(panel) or _camel(panel)
 
 
-def auswahl_abzug(abzug: dict[str, Any], kohorte: str, attribute: list[str],
+def auswahl_abzug(abzug: dict[str, Any], kohorten: str | list[str],
+                  attribute: list[str],
                   zuordnung: dict[str, str] | None = None) -> dict[str, Any]:
     """Einen Abzug auf die Auswahl im Panel einschraenken.
 
-    Gezeigt wird genau die gewaehlte Kohorte mit genau den angehakten
+    Gezeigt werden genau die gewaehlten Kohorten mit genau den angehakten
     Attributen — nicht alles, was im Store liegt. Die **Zahlen** kommen
     weiterhin aus dem Store; was noch nie abgerufen wurde, steht mit 0 da,
     statt zu fehlen. So sieht man vor dem Klick, was die Auswahl im Netz
@@ -295,20 +296,26 @@ def auswahl_abzug(abzug: dict[str, Any], kohorte: str, attribute: list[str],
     Die Schluessel bleiben die Store-Namen, damit ein Vergleich aus
     :func:`diff` weiterhin passt.
     """
-    if not kohorte:
+    # Eine einzelne Kohorte darf auch als Zeichenkette kommen; ohne diese Zeile
+    # liefe sie als Liste ihrer Buchstaben durch.
+    if isinstance(kohorten, str):
+        kohorten = [kohorten] if kohorten else []
+    if not kohorten:
         return leerer_abzug()
 
-    vorhanden = (abzug.get("cohorts") or {}).get(kohorte) or {}
-    im_store = vorhanden.get("attributes") or {}
+    gefiltert: dict[str, Any] = {}
+    gesamt = 0
+    for kohorte in kohorten:
+        vorhanden = (abzug.get("cohorts") or {}).get(kohorte) or {}
+        im_store = vorhanden.get("attributes") or {}
 
-    gewaehlt: dict[str, Any] = {}
-    for panel in attribute:
-        name = store_property(panel, zuordnung)
-        gewaehlt[name] = im_store.get(name) or {"cases": 0, "values": 0}
+        gewaehlt: dict[str, Any] = {}
+        for panel in attribute:
+            name = store_property(panel, zuordnung)
+            gewaehlt[name] = im_store.get(name) or {"cases": 0, "values": 0}
 
-    faelle = vorhanden.get("cases", 0)
-    return {
-        "cases": faelle,
-        "projects": 1,
-        "cohorts": {kohorte: {"cases": faelle, "attributes": gewaehlt}},
-    }
+        faelle = vorhanden.get("cases", 0)
+        gesamt += faelle
+        gefiltert[kohorte] = {"cases": faelle, "attributes": gewaehlt}
+
+    return {"cases": gesamt, "projects": len(gefiltert), "cohorts": gefiltert}

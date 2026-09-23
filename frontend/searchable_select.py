@@ -570,6 +570,7 @@ class MultiSelect(_AufklappAuswahl):
         mit_suche: bool = False,
         platzhalter: str = "",
         leer_text: str = "Kein Eintrag passt",
+        mit_punkt: bool = False,
         max_hoehe: int = MAX_CARD_HEIGHT,
         parent: QWidget | None = None,
     ) -> None:
@@ -577,7 +578,9 @@ class MultiSelect(_AufklappAuswahl):
             mit_suche=mit_suche,
             platzhalter=platzhalter,
             leer_text=leer_text,
-            mit_punkt=False,       # der farbige Anker haette hier keine Bedeutung
+            # In ``Obj`` und ``Datenquelle`` haette der farbige Anker keine
+            # Bedeutung; die Kohortenliste behaelt ihn, sie hatte ihn schon.
+            mit_punkt=mit_punkt,
             mit_kaestchen=True,
             max_hoehe=max_hoehe,
             parent=parent,
@@ -674,20 +677,25 @@ class MultiSelect(_AufklappAuswahl):
         Das Panel ist rund 360 Pixel breit: ab drei Werten stehen dort die
         ersten beiden plus ``+N``, der vollstaendige Satz im Tooltip.
         """
-        namen = []
+        kurz, namen = [], []
         for row in range(self._list.count()):
             item = self._list.item(row)
             if item.data(VALUE_ROLE) and item.checkState() == Qt.CheckState.Checked:
-                namen.append(item.data(LABEL_ROLE) or item.data(VALUE_ROLE))
+                name = item.data(LABEL_ROLE) or item.data(VALUE_ROLE)
+                namen.append(name)
+                # Auf der Schaltflaeche steht das Kuerzel, wo es eines gibt:
+                # "BRCA · KIRC +1" passt ins Panel, drei Klarnamen nicht. Der
+                # volle Satz steht im Tooltip.
+                kurz.append(item.data(CODE_ROLE) or name)
 
         if not namen:
             self._button.setText("Keine Auswahl")
             self._button.setToolTip("")
-        elif len(namen) <= 2:
-            self._button.setText(" · ".join(namen))
+        elif len(kurz) <= 2:
+            self._button.setText(" · ".join(kurz))
             self._button.setToolTip(", ".join(namen))
         else:
-            self._button.setText(f"{namen[0]} · {namen[1]} +{len(namen) - 2}")
+            self._button.setText(f"{kurz[0]} · {kurz[1]} +{len(kurz) - 2}")
             self._button.setToolTip(", ".join(namen))
         self._button.setStyleSheet(theme.select_button_style(not namen))
         self.selection_changed.emit(self.checked_values())

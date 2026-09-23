@@ -45,7 +45,7 @@ import theme
 import worker
 from netz_view import NetzPanel
 from projektion_view import ProjektionPanel
-from searchable_select import KIND_HEADER, MultiSelect, SearchableSelect
+from searchable_select import KIND_HEADER, MultiSelect
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "panel.json"
 
@@ -570,11 +570,19 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(6)
 
-        # Kohorte: aufklappende Auswahl mit Suchfeld. 32 Eintraege sind zum
-        # Durchscrollen zu viele, und gesucht wird nach Krebsart, nicht nach
-        # Projektkuerzel — deshalb steht der Klarname vorn und das Kuerzel rechts.
-        # Eine dauerhaft sichtbare Liste hat das schmale Panel gesprengt.
-        self._cohort_select = SearchableSelect(self._cohort_entries())
+        # Kohorte: aufklappende Haekchenliste mit Suchfeld. Mehrere Kohorten
+        # sind der Normalfall, sobald man vergleicht — der Mediator nimmt sie in
+        # DERSELBEN Ebene entgegen (``SingleSelection.cohorts`` ist eine Liste)
+        # und holt je Kohorte ``size`` Proben. 32 Eintraege sind zum
+        # Durchscrollen zu viele, und gesucht wird ueber das Studienkuerzel —
+        # deshalb steht der Klarname vorn und das Kuerzel rechts.
+        self._cohort_select = MultiSelect(
+            self._cohort_entries(),
+            mit_suche=True,
+            platzhalter="Kuerzel suchen, z. B. BRCA …",
+            leer_text="Kein Kuerzel passt",
+            mit_punkt=True,
+        )
 
         self._modality_box = QComboBox()
 
@@ -656,7 +664,7 @@ class MainWindow(QMainWindow):
             box.setCurrentIndex(first_enabled)
 
     def _cohort_entries(self) -> list[dict[str, str]]:
-        """Die Kohorten als Eintraege fuer :class:`SearchableSelect`.
+        """Die Kohorten als Eintraege fuer :class:`MultiSelect`.
 
         Gesendet wird die ``project_id``; angezeigt wird der Klarname aus
         ``config/panel.json`` (einmalig von GDC geholt), rechts das Kuerzel.
@@ -671,12 +679,17 @@ class MainWindow(QMainWindow):
                 "value": project_id,
                 "label": labels.get(project_id) or project_id,
                 "code": code,
+                # Bewusst NUR Kuerzel und project_id, nicht der Klarname:
+                # gesucht wird mit der offiziellen Studienabkuerzung (BRCA,
+                # LUAD, KIRC). Der Klarname steht weiter in der Zeile, damit man
+                # sieht, was sich hinter dem Kuerzel verbirgt.
+                "search": f"{code} {project_id}",
             })
         return entries
 
-    def current_cohort(self) -> str:
-        """Die gewaehlte ``project_id``, oder '' wenn nichts ausgewaehlt ist."""
-        return self._cohort_select.current_value()
+    def current_cohorts(self) -> list[str]:
+        """Die angehakten ``project_id`` in Panel-Reihenfolge."""
+        return self._cohort_select.checked_values()
 
     def _source_entries(self) -> list[dict[str, Any]]:
         """Die Datenquellen als Eintraege fuer :class:`MultiSelect`.
@@ -758,7 +771,7 @@ class MainWindow(QMainWindow):
 
     def current_payload(self) -> dict[str, Any]:
         return mc.build_selection_request(
-            cohort=self.current_cohort(),
+            cohorts=self.current_cohorts(),
             modality=self._modality_box.currentData(),
             attributes=self.checked_attributes(),
             sources=self.checked_sources(),
@@ -845,23 +858,25 @@ class MainWindow(QMainWindow):
             self._netz.zeige_nicht_erreichbar(sr.store_url(sr.default_store()))
             self._store_label.setText("Store: nicht erreichbar")
             return
-        if not self.current_cohort():
+        if not self.current_cohorts():
             # Ohne Auswahl hat das Netz nichts zu zeigen — und "leer" hiesse
             # hier faelschlich, im Store liege nichts.
             self._netz.zeige_hinweis(
                 "Noch nichts ausgewaehlt.\n"
-                "Rechts eine Kohorte waehlen und Attribute anhaken."
+                "Rechts Kohorten anhaken und Attribute waehlen."
             )
             self._store_label.setText(self._store_stand(abzug))
             return
         # Das Netz zeigt die Auswahl aus dem Panel, nicht den ganzen Store —
         # der Gesamtstand steht rechts in der Statusleiste.
-        kohorte = self.current_cohort()
+        kohorten = self.current_cohorts()
         self._netz.zeige_abzug(
-            sr.auswahl_abzug(abzug, kohorte, self.checked_attributes(),
+            sr.auswahl_abzug(abzug, kohorten, self.checked_attributes(),
                              self._store_zuordnung()),
             unterschied,
-            offen=kohorte,
+            # Aufgeklappt bleibt, was aufgeklappt war; sonst die erste Kohorte.
+            offen=(self._netz.offene_kohorte() if
+                   self._netz.offene_kohorte() in kohorten else kohorten[0]),
         )
         self._store_label.setText(self._store_stand(abzug))
 
@@ -874,8 +889,8 @@ class MainWindow(QMainWindow):
 
     # -- Aufruf -------------------------------------------------------------
     def _start(self, mode: str) -> None:
-        if not self.current_cohort():
-            self.set_status("Keine Kohorte gewaehlt.", "warning")
+        if not self.current_cohorts():
+            self.set_status("Keine Kohorte angehakt.", "warning")
             return
         if not self.checked_sources():
             self.set_status("Keine Datenquelle angehakt.", "warning")
@@ -891,9 +906,10 @@ class MainWindow(QMainWindow):
         self._set_busy(True)
         was = "Vorschau" if mode == "preview" else "Generieren"
         quellen = ", ".join(lvl["source"] for lvl in payload["levels"])
+        kohorten = payload["levels"][0]["cohorts"]
         self.set_status(
-            f"{was} laeuft … {payload['levels'][0]['cohorts'][0]}, "
-            f"{payload['size']} Proben, Quelle(n): {quellen}. "
+            f"{was} laeuft … {', '.join(kohorten)}, "
+            f"{payload['size']} Proben je Kohorte, Quelle(n): {quellen}. "
             f"Das Fenster bleibt bedienbar.",
             "busy",
         )

@@ -170,6 +170,10 @@ class NetzView(QGraphicsView):
         self.zeichne()
 
     # -- Inhalt setzen -----------------------------------------------------
+    def offene_kohorte(self) -> str | None:
+        """Welche Kohorte gerade aufgeklappt ist — das Fenster laesst sie beim
+        Neuzeichnen offen, statt immer auf die erste zu springen."""
+        return self._offene_kohorte
     def zeige_abzug(self, abzug: dict[str, Any],
                     unterschied: dict[str, Any] | None = None,
                     offen: str | None = None) -> None:
@@ -460,6 +464,9 @@ class NetzPanel(QWidget):
                     unterschied: dict[str, Any] | None = None,
                     offen: str | None = None) -> None:
         self.view.zeige_abzug(abzug, unterschied, offen)
+
+    def offene_kohorte(self) -> str | None:
+        return self.view.offene_kohorte()
 
     def zeige_hinweis(self, text: str) -> None:
         self.view.zeige_hinweis(text)

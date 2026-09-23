@@ -74,7 +74,7 @@ class Result:
 
 def build_selection_request(
     *,
-    cohort: str,
+    cohorts: list[str],
     modality: str,
     attributes: list[str],
     sources: list[str],
@@ -87,9 +87,15 @@ def build_selection_request(
     gedacht ist: parallele, gleichrangige Auswahlen (ADR-0003, Entscheidung
     7.2), die unabhaengig voneinander gelingen oder scheitern koennen.
 
-    Mehrere Kohorten und geschachtelte Ebenen kann der Mediator ebenfalls, diese
-    Fassung der Oberflaeche nutzt es noch nicht. ``size`` wird auf die Grenzen
-    der OpenAPI geklemmt, damit ein Tippfehler im Panel keinen 422er erzeugt.
+    **Mehrere Kohorten stehen in DERSELBEN Ebene**, nicht in mehreren:
+    ``SingleSelection.cohorts`` ist eine Liste ("mehrfach waehlbar"), und der
+    Mediator holt je Kohorte ``per_cohort_size or size`` Proben
+    (``main.py``: ``n_each = per_cohort_size or size``). ``size`` gilt damit pro
+    Kohorte — genau das, was man beim Vergleichen will. Geschachtelte Ebenen
+    kann der Mediator ebenfalls, diese Fassung nutzt es nicht.
+
+    ``size`` wird auf die Grenzen der OpenAPI geklemmt, damit ein Tippfehler im
+    Panel keinen 422er erzeugt.
     Ohne gewaehlte Quelle entsteht eine leere Ebenenliste — der Aufrufer faengt
     das ab, bevor er sendet (der Mediator wuerde mit 422 antworten).
     """
@@ -97,7 +103,7 @@ def build_selection_request(
         "levels": [
             {
                 "source": source,
-                "cohorts": [cohort],
+                "cohorts": list(cohorts),
                 "modality": modality,
                 "attributes": list(attributes),
             }

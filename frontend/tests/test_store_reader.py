@@ -247,3 +247,29 @@ def test_auswahl_abzug_behaelt_die_store_namen_als_schluessel() -> None:
     assert set(gefiltert["cohorts"]["TCGA-BRCA"]["attributes"]) <= set(
         unterschied["attributes"]["TCGA-BRCA"]
     )
+
+
+def test_auswahl_abzug_nimmt_mehrere_kohorten() -> None:
+    """Vergleichen heisst mehrere Kohorten nebeneinander — alle gewaehlten
+    stehen im Netz, die uebrigen aus dem Store nicht."""
+    abzug = _abzug(90, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2)),
+                        "TCGA-LUAD": _kohorte(30, sexAtBirth=(30, 2)),
+                        "TCGA-KIRC": _kohorte(10, sexAtBirth=(10, 2))})
+    gefiltert = sr.auswahl_abzug(abzug, ["TCGA-BRCA", "TCGA-LUAD"],
+                                 ["sex_at_birth"], ZUORDNUNG)
+    assert set(gefiltert["cohorts"]) == {"TCGA-BRCA", "TCGA-LUAD"}
+    assert gefiltert["cases"] == 80          # Summe der gewaehlten, nicht 90
+    assert gefiltert["projects"] == 2
+
+
+def test_auswahl_abzug_mischt_bekannte_und_neue_kohorten() -> None:
+    abzug = _abzug(50, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2))})
+    gefiltert = sr.auswahl_abzug(abzug, ["TCGA-BRCA", "TCGA-LUAD"],
+                                 ["sex_at_birth"], ZUORDNUNG)
+    assert gefiltert["cohorts"]["TCGA-LUAD"]["cases"] == 0
+    assert gefiltert["cohorts"]["TCGA-BRCA"]["cases"] == 50
+
+
+def test_auswahl_abzug_leere_liste_ist_leer() -> None:
+    assert sr.auswahl_abzug(_abzug(50, {"TCGA-BRCA": _kohorte(50)}), [],
+                            ["sex_at_birth"], ZUORDNUNG) == sr.leerer_abzug()

@@ -79,7 +79,7 @@ def _level(**overrides):
 # --------------------------------------------------------------------------
 def test_build_request_has_exactly_one_level_with_the_right_field_names() -> None:
     payload = mc.build_selection_request(
-        cohort="TCGA-BRCA",
+        cohorts=["TCGA-BRCA"],
         modality="gene_expression",
         attributes=["sex_at_birth", "primary_diagnosis"],
         sources=["gdc"],
@@ -99,7 +99,7 @@ def test_build_request_has_exactly_one_level_with_the_right_field_names() -> Non
 
 def test_build_request_takes_the_checked_attributes_in_order() -> None:
     payload = mc.build_selection_request(
-        cohort="TCGA-KIRC", modality="gene_expression",
+        cohorts=["TCGA-KIRC"], modality="gene_expression",
         attributes=["tumor_stage", "sex_at_birth", "sample_type"], sources=["gdc"], size=5,
     )
     assert payload["levels"][0]["attributes"] == ["tumor_stage", "sex_at_birth", "sample_type"]
@@ -107,7 +107,7 @@ def test_build_request_takes_the_checked_attributes_in_order() -> None:
 
 def test_build_request_accepts_no_attributes() -> None:
     payload = mc.build_selection_request(
-        cohort="TCGA-BRCA", modality="gene_expression",
+        cohorts=["TCGA-BRCA"], modality="gene_expression",
         attributes=[], sources=["gdc"], size=20,
     )
     assert payload["levels"][0]["attributes"] == []
@@ -116,7 +116,7 @@ def test_build_request_accepts_no_attributes() -> None:
 @pytest.mark.parametrize("given, expected", [(0, 1), (1, 1), (20, 20), (200, 200), (5000, 200)])
 def test_build_request_clamps_size_to_the_openapi_limits(given, expected) -> None:
     payload = mc.build_selection_request(
-        cohort="TCGA-BRCA", modality="gene_expression",
+        cohorts=["TCGA-BRCA"], modality="gene_expression",
         attributes=[], sources=["gdc"], size=given,
     )
     assert payload["size"] == expected
@@ -127,7 +127,7 @@ def test_several_sources_become_several_levels() -> None:
     werden deshalb zu mehreren Ebenen. Genau dafuer gibt es ``levels``
     (ADR-0003, Entscheidung 7.2: parallele, gleichrangige Auswahlen)."""
     payload = mc.build_selection_request(
-        cohort="TCGA-BRCA",
+        cohorts=["TCGA-BRCA"],
         modality="gene_expression",
         attributes=["sex_at_birth"],
         sources=["gdc", "ena", "geo"],
@@ -146,7 +146,7 @@ def test_no_source_yields_no_level() -> None:
     """Ohne Quelle entsteht eine leere Ebenenliste. Das Fenster faengt den Fall
     ab, bevor es sendet — der Mediator verlangt minItems 1."""
     payload = mc.build_selection_request(
-        cohort="TCGA-BRCA", modality="gene_expression",
+        cohorts=["TCGA-BRCA"], modality="gene_expression",
         attributes=[], sources=[], size=20,
     )
     assert payload["levels"] == []
@@ -295,3 +295,25 @@ def test_failed_level_is_still_an_ok_request() -> None:
     assert result.ok is True
     assert result.first_level()["status"] == "error"
     assert result.first_level()["error"] == "Keine Treffer."
+
+
+def test_mehrere_kohorten_stehen_in_derselben_ebene() -> None:
+    """``SingleSelection.cohorts`` ist eine Liste — mehrere Kohorten ergeben
+    KEINE weiteren Ebenen (anders als mehrere Quellen)."""
+    payload = mc.build_selection_request(
+        cohorts=["TCGA-BRCA", "TCGA-LUAD", "TCGA-KIRC"],
+        modality="gene_expression", attributes=["sex_at_birth"],
+        sources=["gdc"], size=20,
+    )
+    assert len(payload["levels"]) == 1
+    assert payload["levels"][0]["cohorts"] == ["TCGA-BRCA", "TCGA-LUAD", "TCGA-KIRC"]
+
+
+def test_mehrere_kohorten_und_mehrere_quellen_kreuzen_sich() -> None:
+    payload = mc.build_selection_request(
+        cohorts=["TCGA-BRCA", "TCGA-LUAD"], modality="gene_expression",
+        attributes=[], sources=["gdc", "geo"], size=20,
+    )
+    assert [lvl["source"] for lvl in payload["levels"]] == ["gdc", "geo"]
+    for level in payload["levels"]:
+        assert level["cohorts"] == ["TCGA-BRCA", "TCGA-LUAD"]

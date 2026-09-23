@@ -70,16 +70,24 @@ in der Liste, sind aber deaktiviert und tragen den Grund als Hinweistext und
 Tooltip. Ehrliche Lücke statt unsichtbarer Grenze — dasselbe Prinzip wie bei den
 MP-Lite-Slidern.
 
-**Alle drei Auswahlen klappen auf.** Das Panel hat fünf einzeilige Felder; ein
-Klick auf eines davon öffnet eine Karte darunter. Kohorte ist **einwertig**,
-`Obj` und `Datenquelle` sind **Häkchenlisten**: dort schaltet ein Klick das
-Häkchen um und die Karte bleibt offen, sonst müsste man sie für jedes Attribut
-neu aufklappen. Geschlossen wird über Escape, Klick daneben oder erneuten Klick
-auf die Schaltfläche; die Leertaste schaltet die Zeile unter dem Cursor um.
+**Alle drei Auswahlen klappen auf, und alle drei sind Häkchenlisten.** Das Panel
+hat fünf einzeilige Felder; ein Klick auf eines davon öffnet eine Karte darunter.
+Ein Klick auf eine Zeile schaltet das Häkchen um und die Karte bleibt offen,
+sonst müsste man sie für jede Kohorte neu aufklappen. Geschlossen wird über
+Escape, Klick daneben oder erneuten Klick auf die Schaltfläche; die Leertaste
+schaltet die Zeile unter dem Cursor um.
+
+**Mehrere Kohorten sind der Normalfall, sobald man vergleicht.** Sie landen in
+**derselben Ebene** des Auftrags — `SingleSelection.cohorts` ist eine Liste —,
+nicht in mehreren: mehrere Ebenen entstehen nur durch mehrere **Datenquellen**.
+Der Mediator holt je Kohorte `per_cohort_size or size` Proben, `Proben` im Panel
+gilt also **pro Kohorte**. Im Netz stehen die gewählten Kohorten nebeneinander;
+aufgeklappt bleibt die, die man angeklickt hat.
 
 Die Schaltfläche zeigt die Auswahl gekürzt — ab drei Werten die ersten beiden
-plus `+N` (`sex_at_birth · primary_diagnosis +2`) —, den vollständigen Satz im
-Tooltip.
+plus `+N` —, den vollständigen Satz im Tooltip. Wo es ein Kürzel gibt, steht es
+dort statt des Klarnamens (`BRCA · KIRC +1`): drei Klarnamen passen nicht in ein
+360 Pixel breites Panel.
 
 **Ein Suchfeld gibt es nur bei Kohorte und `Obj`.** Über drei Datenquellen wäre
 es Ballast. In `Obj` wird über **Attributname und Knoten** gesucht: `stage`
@@ -87,7 +95,7 @@ findet `tumor_stage`, `diag` die ganze Diagnose-Gruppe. Die Gruppenüberschrifte
 (`Demographic`, `Diagnosis`, `Sample`) sind nicht anwählbar und verschwinden
 beim Filtern, wenn keines ihrer Attribute mehr passt.
 
-**Die Kohorte wird gesucht, nicht gescrollt.** Ein Klick auf das Feld klappt
+**Die Kohorten werden gesucht, nicht gescrollt.** Ein Klick auf das Feld klappt
 eine Karte mit Suchfeld auf. Gesucht wird **über die offizielle
 TCGA-Studienabkürzung** — `BRCA`, `LUAD`, `KIRC` — oder über die volle
 Projekt-ID (`TCGA-OV`); ein Präfix genügt, `ki` findet KICH, KIRC und KIRP.
@@ -258,7 +266,7 @@ sind bewusst nicht Teil dieser Fassung.
 | `mediator_client.py` | HTTP gegen den Mediator — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `worker.py` | `QThread`-Worker für die langen Aufrufe |
 | `theme.py` | Farben und Stylesheet an genau einer Stelle |
-| `searchable_select.py` | aufklappende Auswahlmenüs: `SearchableSelect` (einwertig, Kohorte) und `MultiSelect` (Häkchen, `Obj`/`Datenquelle`) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
+| `searchable_select.py` | aufklappende Auswahlmenüs: `MultiSelect` (Häkchen; Kohorte, `Obj`, `Datenquelle`) und `SearchableSelect` (einwertig, zurzeit ungenutzt) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
 | `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
 | `netz_view.py` | das gezeichnete Netz (`QGraphicsView`, kein Browser) |
 | `projektion_view.py` | die Morphing-Karte (`pyqtgraph`, Regler, Auswahl) |
