@@ -155,3 +155,18 @@ def test_encodings_haben_die_form_der_punktzahl() -> None:
         if eintrag.nutzbar:
             assert eintrag.encoding.shape == (8, 2), eintrag.name
     assert morph.positionen(modell, modell.startwerte).shape == (8, 2)
+
+
+# --- Meldung ohne 2D-Layout --------------------------------------------------
+def test_meldung_nennt_die_probenzahl_als_grund() -> None:
+    """Zwei Proben ergeben auch mit compute_tsne=true kein obsm — dann muss die
+    Meldung das sagen, sonst sucht man am Schalter statt an der Probenzahl."""
+    text = morph.text_ohne_layout(2)
+    assert "nur 2 Proben" in text
+    assert "keine tSNE" in text
+    assert morph.TEXT_OHNE_LAYOUT in text
+
+
+def test_meldung_bleibt_knapp_bei_genug_proben() -> None:
+    assert morph.text_ohne_layout(200) == morph.TEXT_OHNE_LAYOUT
+    assert morph.text_ohne_layout(0) == morph.TEXT_OHNE_LAYOUT

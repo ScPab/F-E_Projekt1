@@ -293,8 +293,8 @@ class ProjektionPanel(QWidget):
 
         if not modell.hat_basis:
             # Kein 2D-Layout, also keine Karte — und schon gar keine erfundenen
-            # Koordinaten (siehe morph.TEXT_OHNE_LAYOUT).
-            self._zeige_hinweis(morph.TEXT_OHNE_LAYOUT)
+            # Koordinaten (siehe morph.text_ohne_layout).
+            self._zeige_hinweis(morph.text_ohne_layout(modell.anzahl))
             return
 
         self._farben = [theme.cohort_color(code) for code in modell.kohorten]

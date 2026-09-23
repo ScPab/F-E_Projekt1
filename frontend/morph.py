@@ -60,6 +60,28 @@ TEXT_OHNE_LAYOUT = (
     "`start_all.ps1 -DemoGenerate` oder `scripts/fetch_pancancer_h5ad.py`."
 )
 
+# Unterhalb dieser Probenzahl liefert ``expression.compute_tsne`` im Mediator
+# ``None``: tSNE braucht perplexity < n_samples, und darunter ist das nicht
+# sinnvoll zu rechnen. Die Datei hat dann kein ``obsm``, **obwohl**
+# ``compute_tsne=true`` gesetzt war — ohne diesen Hinweis sucht man den Fehler
+# an der falschen Stelle.
+TSNE_MIN_PROBEN = 4
+
+
+def text_ohne_layout(anzahl: int = 0) -> str:
+    """Die Meldung fuer eine Datei ohne 2D-Layout.
+
+    Bei sehr wenigen Proben steht der tatsaechliche Grund davor: dann liegt es
+    nicht am fehlenden Schalter, sondern an der Probenzahl.
+    """
+    if 0 < anzahl < TSNE_MIN_PROBEN:
+        probe = "Probe" if anzahl == 1 else "Proben"
+        return (f"Diese Datei enthaelt nur {anzahl} {probe}. Unter "
+                f"{TSNE_MIN_PROBEN} Proben rechnet der Mediator keine tSNE,\n"
+                "auch mit compute_tsne=true — mehr Proben abrufen.\n\n"
+                + TEXT_OHNE_LAYOUT)
+    return TEXT_OHNE_LAYOUT
+
 
 # --- mp_lite-Hilfsmodule per Dateipfad laden (siehe Modul-Docstring) ---------
 _MP_LITE = (Path(__file__).resolve().parent.parent
