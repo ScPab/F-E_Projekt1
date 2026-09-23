@@ -20,6 +20,7 @@ from typing import Any
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -42,6 +44,7 @@ import store_reader as sr
 import theme
 import worker
 from netz_view import NetzPanel
+from projektion_view import ProjektionPanel
 from searchable_select import KIND_HEADER, MultiSelect, SearchableSelect
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "panel.json"
@@ -85,6 +88,24 @@ def load_cohorts(config: dict[str, Any]) -> tuple[list[str], str | None]:
         )
 
 
+def _kontext_aus_store(barcode: str) -> dict[str, Any] | None:
+    """Kontext einer Probe aus dem Wissensnetz — laeuft im Worker-Thread.
+
+    Der Schluessel ist ``obs["submitter_id"]`` gegen ``db:submitterId``;
+    ``case_context`` nimmt beides, Case-IRI oder ``submitterId``. Der Store kommt
+    aus ``store_reader``, es wird keine zweite Instanz angelegt.
+    """
+    from wissensnetz.enrichment import case_context
+
+    store = sr.default_store()
+    if not sr.is_reachable(store):
+        raise RuntimeError(
+            f"Fuseki unter {sr.store_url(store)} nicht erreichbar. "
+            "Laeuft `docker compose up`? Die Karte bleibt bedienbar."
+        )
+    return case_context(store, barcode)
+
+
 class MainWindow(QMainWindow):
     """Das Hauptfenster: Auswahl zusammenstellen, abschicken, Antwort zeigen."""
 
@@ -104,6 +125,14 @@ class MainWindow(QMainWindow):
         # Dieselbe Regel fuer den separaten Download-Thread (siehe worker.py).
         self._dl_thread = None
         self._dl_worker = None
+        # Ebenso fuer das Laden einer .h5ad und die Kontextabfrage der Projektion.
+        self._h5_thread = None
+        self._h5_worker = None
+        self._kontext_thread = None
+        self._kontext_worker = None
+        # Zuletzt gespeicherte .h5ad — die Projektion laedt sie, sobald man auf
+        # sie umschaltet (nicht vorher, siehe _wechsle_ansicht).
+        self._offene_h5ad = ""
         # Ebenen des letzten erfolgreichen 'Generieren'-Laufs mit .h5ad —
         # Grundlage fuer das Download-Menue (siehe _update_download_menu).
         self._downloadable: list[dict[str, Any]] = []
@@ -237,6 +266,9 @@ class MainWindow(QMainWindow):
 
     def _on_download_finished(self, result: mc.Result) -> None:
         if result.ok:
+            # Die gerade erzeugte Datei ist der erste der drei Wege zur
+            # Projektion (geladen wird sie erst beim Umschalten).
+            self._offene_h5ad = str(result.data.get("path") or "")
             self.set_status(f"Gespeichert: {result.data.get('path')}", "success")
         else:
             self.set_status(result.error or "Download fehlgeschlagen.", "error")
@@ -313,22 +345,34 @@ class MainWindow(QMainWindow):
             "oder 'Generieren' (zusaetzlich Rohdaten und .h5ad).\n\n"
             "Angezeigt wird genau die Antwort des Mediators."
         )
-        # Senkrechter Splitter statt der einen Zeile: oben das Netz, unten
+        # Senkrechter Splitter statt der einen Zeile: oben die Ansichten, unten
         # unveraendert self._output (dasselbe Widget, nicht neu gebaut). Ein
         # Splitter im Splitter — gewollt und der kleinstmoegliche Eingriff.
         # Die Stellung wird bewusst nicht gespeichert.
         self._netz = NetzPanel(self._attribut_namen())
-        self._netz.setMinimumHeight(260)
+        self._projektion = ProjektionPanel()
+        self._projektion.datei_gewuenscht.connect(self._lade_h5ad)
+        self._projektion.probe_geklickt.connect(self._hole_kontext)
+
+        self._ansichten = QStackedWidget()
+        self._ansichten.addWidget(self._netz)
+        self._ansichten.addWidget(self._projektion)
+        self._ansichten.setMinimumHeight(260)
         self._output.setMinimumHeight(120)
-        anzeige = QSplitter(Qt.Orientation.Vertical)
-        anzeige.addWidget(self._netz)
+
+        self._anzeige = anzeige = QSplitter(Qt.Orientation.Vertical)
+        anzeige.addWidget(self._baue_umschalter())
+        anzeige.addWidget(self._ansichten)
         anzeige.addWidget(self._output)
-        anzeige.setStretchFactor(0, 3)
-        anzeige.setStretchFactor(1, 2)
-        anzeige.setSizes([360, 240])
+        # Die Titelzeile ist kein Feld zum Ziehen: nur die beiden Flaechen
+        # darunter teilen sich den Platz.
+        anzeige.setStretchFactor(1, 3)
+        anzeige.setStretchFactor(2, 2)
+        anzeige.setSizes([28, 360, 240])
+        anzeige.handle(1).setEnabled(False)
         layout.addWidget(anzeige, stretch=1)
 
-        buttons = QWidget()
+        self._aktionen = buttons = QWidget()
         button_layout = QHBoxLayout(buttons)
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(10)
@@ -354,6 +398,167 @@ class MainWindow(QMainWindow):
         button_layout.addStretch(1)
         layout.addWidget(buttons)
         return side
+
+    def _baue_umschalter(self) -> QWidget:
+        """Die Titelzeile ueber der Anzeige: links der Umschalter, rechts ein
+        Hinweis, der zur jeweiligen Ansicht passt.
+
+        Umschalten ist rein optisch und hat **keine Nebenwirkung**: es stoesst
+        keinen Abruf an, laedt keine Datei und verwirft keinen Zustand.
+        """
+        zeile = QWidget()
+        layout = QHBoxLayout(zeile)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(0)
+
+        self._knopf_netz = QPushButton("Wissensnetz")
+        self._knopf_netz.setObjectName(theme.OBJ_SWITCH_LEFT)
+        self._knopf_projektion = QPushButton("Projektion")
+        self._knopf_projektion.setObjectName(theme.OBJ_SWITCH_RIGHT)
+        for knopf in (self._knopf_netz, self._knopf_projektion):
+            knopf.setCheckable(True)
+        self._knopf_netz.setChecked(True)
+
+        self._ansichtsgruppe = QButtonGroup(self)
+        self._ansichtsgruppe.setExclusive(True)
+        self._ansichtsgruppe.addButton(self._knopf_netz, 0)
+        self._ansichtsgruppe.addButton(self._knopf_projektion, 1)
+        self._ansichtsgruppe.idClicked.connect(self._wechsle_ansicht)
+
+        layout.addWidget(self._knopf_netz)
+        layout.addWidget(self._knopf_projektion)
+        layout.addStretch(1)
+
+        self._ansicht_hinweis = QLabel("Struktur und Zaehlungen, keine Messdaten")
+        self._ansicht_hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
+        layout.addWidget(self._ansicht_hinweis)
+        return zeile
+
+    # -- Projektion ----------------------------------------------------------
+    def _wechsle_ansicht(self, index: int) -> None:
+        self._ansichten.setCurrentIndex(index)
+        self._raum_fuer_projektion(index == 1)
+        if index == 0:
+            self._ansicht_hinweis.setText("Struktur und Zaehlungen, keine Messdaten")
+            return
+        self._ansicht_hinweis.setText(self._projektion_hinweis())
+        # Erst beim Umschalten laden, nicht vorher: 44 MB sollen nicht ungefragt
+        # von der Platte kommen, nur weil ein Auftrag fertig wurde.
+        if not self._projektion.hat_modell() and self._offene_h5ad:
+            self._lade_h5ad(self._offene_h5ad)
+
+    def _raum_fuer_projektion(self, ganz: bool) -> None:
+        """In der Projektion das ganze Fenster freimachen.
+
+        Die Karte braucht Flaeche: bei 900 x 600 blieb neben Auswahlpanel und
+        Antworttext ein Streifen uebrig, in dem der Kreis der Kohorten kaum zu
+        erkennen war. Auswahl und Antwort gehoeren ausserdem zum Auftrag, nicht
+        zur Karte — sie stehen im Wissensnetz wieder da, wo sie waren.
+
+        Zurueckgeschaltet wird nichts verworfen: die Splitterstellungen werden
+        gemerkt und unveraendert wiederhergestellt.
+        """
+        panel = self._splitter.widget(1)
+        if ganz:
+            self._breiten = self._splitter.sizes()
+            self._hoehen = self._anzeige.sizes()
+            panel.hide()
+            self._output.hide()
+            self._aktionen.hide()
+            return
+        panel.show()
+        self._output.show()
+        self._aktionen.show()
+        if getattr(self, "_breiten", None):
+            self._splitter.setSizes(self._breiten)
+            self._anzeige.setSizes(self._hoehen)
+
+    def _projektion_hinweis(self) -> str:
+        name = self._projektion.dateiname()
+        return f"Messdaten aus {name}" if name else "Keine Datei geladen"
+
+    def _lade_h5ad(self, pfad: str) -> None:
+        """Eine ``.h5ad`` im Worker-Thread laden (siehe ``worker.H5adWorker``)."""
+        if self._h5_thread is not None:
+            self.set_status("Es wird bereits eine Datei geladen — bitte warten.",
+                            "warning")
+            return
+        self._offene_h5ad = pfad
+        name = Path(pfad).name
+        self._projektion.zeige_laden(name)
+        self.set_status(f"Lade {name} … Das Fenster bleibt bedienbar.", "busy")
+        self._h5_thread, self._h5_worker = worker.start_h5ad(pfad, self._h5ad_fertig)
+        self._h5_thread.finished.connect(self._release_h5_thread)
+
+    def _h5ad_fertig(self, modell, fehler: str) -> None:
+        if modell is None:
+            self._projektion.zeige_fehler(fehler)
+            self.set_status(fehler, "error")
+        elif modell.hat_basis:
+            self._projektion.zeige_modell(modell)
+            self.set_status(
+                f"{modell.anzahl} Proben aus {modell.dateiname} geladen.", "success")
+        else:
+            # Kein 2D-Layout: kein Absturz, aber auch kein Erfolg.
+            self._projektion.zeige_modell(modell)
+            self.set_status(
+                f"{modell.dateiname} enthaelt kein 2D-Layout — keine Karte.",
+                "warning")
+        self._ansicht_hinweis.setText(self._projektion_hinweis())
+
+    def _release_h5_thread(self) -> None:
+        """Wie ``_release_thread``, aber fuer den .h5ad-Thread (siehe dort)."""
+        self._h5_thread = None
+        self._h5_worker = None
+
+    def _hole_kontext(self, schluessel: str) -> None:
+        """Kontext einer angeklickten Probe aus dem Wissensnetz holen.
+
+        Im Worker, damit ein Klick nicht haengt, wenn Fuseki langsam antwortet.
+        Der Store kommt aus ``store_reader``; eine zweite Instanz wird nicht
+        angelegt.
+        """
+        if not schluessel or self._kontext_thread is not None:
+            return
+        self._projektion.zeige_kontext(f"{schluessel} — Kontext wird geholt …")
+        self._kontext_thread, self._kontext_worker = worker.start_kontext(
+            schluessel, _kontext_aus_store, self._kontext_fertig
+        )
+        self._kontext_thread.finished.connect(self._release_kontext_thread)
+
+    def _kontext_fertig(self, schluessel: str, kontext, fehler: str) -> None:
+        self._projektion.zeige_kontext(self._kontext_text(schluessel, kontext, fehler))
+
+    @staticmethod
+    def _kontext_text(schluessel: str, kontext, fehler: str) -> str:
+        """Der Kontextblock unter der Karte — beide leeren Faelle ehrlich benannt."""
+        if fehler:
+            return fehler
+        if not kontext:
+            # Die .h5ad kann aelter sein als der Storeinhalt oder aus einer
+            # anderen Auswahl stammen. Das ist normal, kein Fehler.
+            return (f"{schluessel}: Dieser Fall liegt nicht im Store. "
+                    "Eine Vorschau mit dieser Kohorte laedt ihn nachtraeglich.")
+        teile = [str(schluessel)]
+        projekt = kontext.get("project_id")
+        if projekt:
+            teile.append(f"Projekt {projekt}")
+        diagnosen = kontext.get("diagnoses") or []
+        if diagnosen:
+            erste = diagnosen[0]
+            beschriftung = erste.get("label") or erste.get("primary_diagnosis")
+            if beschriftung:
+                teile.append(str(beschriftung))
+        for feld in ("sex_at_birth", "race", "ethnicity", "vital_status"):
+            wert = kontext.get(feld)
+            if wert:
+                teile.append(f"{feld}: {wert}")
+        return "  ·  ".join(teile)
+
+    def _release_kontext_thread(self) -> None:
+        """Wie ``_release_thread``, aber fuer den Kontext-Thread (siehe dort)."""
+        self._kontext_thread = None
+        self._kontext_worker = None
 
     def _build_panel(self) -> QWidget:
         panel = QFrame()

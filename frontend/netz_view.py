@@ -29,8 +29,6 @@ from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsScene,
     QGraphicsView,
-    QHBoxLayout,
-    QLabel,
     QVBoxLayout,
     QWidget,
 )
@@ -441,29 +439,18 @@ class NetzView(QGraphicsView):
 
 
 class NetzPanel(QWidget):
-    """Titelzeile plus Netzflaeche — das, was oben in die Anzeigeflaeche kommt.
+    """Die Netzflaeche als Seite der Anzeige.
 
-    Die Zeile darueber ist eine Zeile, keine eigene Kartenflaeche: links fett
-    ``Wissensnetz``, rechts gedaempft der Hinweis, dass hier Struktur und
-    Zaehlungen stehen und keine Messdaten (wie in der Skizze).
+    Die Titelzeile hat dieses Panel frueher selbst gebaut. Seit es eine zweite
+    Ansicht gibt (Projektion), steht sie im Fenster und ueberschreibt beide —
+    hier bleibt die reine Ansicht.
     """
 
     def __init__(self, panel_namen: list[str] | None = None, parent=None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-
-        kopf = QHBoxLayout()
-        kopf.setContentsMargins(2, 0, 2, 0)
-        titel = QLabel("Wissensnetz")
-        titel.setObjectName(theme.OBJ_NETZ_TITLE)
-        hinweis = QLabel("Struktur und Zaehlungen, keine Messdaten")
-        hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
-        kopf.addWidget(titel)
-        kopf.addStretch(1)
-        kopf.addWidget(hinweis)
-        layout.addLayout(kopf)
+        layout.setSpacing(0)
 
         self.view = NetzView(panel_namen)
         layout.addWidget(self.view, stretch=1)
