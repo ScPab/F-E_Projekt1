@@ -132,3 +132,86 @@ def start_download(download_url: str, dest_path: str, on_finished) -> tuple[QThr
 
     thread.start()
     return thread, dl_worker
+
+
+class H5adWorker(QObject):
+    """Laedt **eine** ``.h5ad`` und baut daraus das Morphmodell.
+
+    Eigener Worker aus demselben Grund wie :class:`DownloadWorker`: das Lesen
+    von ``wissensnetz/data/pancancer.h5ad`` (44 MB) samt tSNE-Skalierung dauert
+    mehrere Sekunden, im GUI-Thread friert das Fenster genau dann ein, wenn der
+    Forscher gerade eine Datei gewaehlt hat.
+
+    Der Worker kennt ``morph`` und sonst nichts von der Oberflaeche; was mit dem
+    Modell geschieht, entscheidet das Fenster. Fuer die Regeln zum Festhalten
+    der Thread-Referenz siehe :func:`start_call`.
+    """
+
+    finished = Signal(object, str)  # (Morphmodell | None, Fehlertext)
+
+    def __init__(self, pfad: str) -> None:
+        super().__init__()
+        self._pfad = pfad
+
+    def run(self) -> None:
+        import morph
+
+        modell, fehler = morph.lade_modell(self._pfad)
+        self.finished.emit(modell, fehler)
+
+
+def start_h5ad(pfad: str, on_finished) -> tuple[QThread, H5adWorker]:
+    """Wie :func:`start_call`, aber fuer das Laden einer ``.h5ad`` (siehe dort
+    fuer die Regeln zum Freigeben der Rueckgabe)."""
+    thread = QThread()
+    h5_worker = H5adWorker(pfad)
+    h5_worker.moveToThread(thread)
+
+    thread.started.connect(h5_worker.run)
+    h5_worker.finished.connect(on_finished)
+    h5_worker.finished.connect(thread.quit)
+    h5_worker.finished.connect(h5_worker.deleteLater)
+    thread.finished.connect(thread.deleteLater)
+
+    thread.start()
+    return thread, h5_worker
+
+
+class KontextWorker(QObject):
+    """Holt den Kontext **einer** Probe aus dem Wissensnetz.
+
+    Eigener Thread, damit ein Klick in die Karte nicht haengt, wenn Fuseki
+    langsam antwortet oder gar nicht laeuft. Der Worker bekommt eine fertige
+    Funktion und ruft sie nur auf — er kennt den Store so wenig wie
+    :class:`SelectionWorker`.
+    """
+
+    finished = Signal(str, object, str)  # (schluessel, kontext | None, Fehlertext)
+
+    def __init__(self, schluessel: str, holen) -> None:
+        super().__init__()
+        self._schluessel = schluessel
+        self._holen = holen
+
+    def run(self) -> None:
+        try:
+            self.finished.emit(self._schluessel, self._holen(self._schluessel), "")
+        except Exception as fehler:      # noqa: BLE001 - jede Stoerung gleich
+            self.finished.emit(self._schluessel, None, str(fehler))
+
+
+def start_kontext(schluessel: str, holen, on_finished) -> tuple[QThread, KontextWorker]:
+    """Wie :func:`start_call`, aber fuer eine Kontextabfrage (siehe dort fuer
+    die Regeln zum Freigeben der Rueckgabe)."""
+    thread = QThread()
+    kontext_worker = KontextWorker(schluessel, holen)
+    kontext_worker.moveToThread(thread)
+
+    thread.started.connect(kontext_worker.run)
+    kontext_worker.finished.connect(on_finished)
+    kontext_worker.finished.connect(thread.quit)
+    kontext_worker.finished.connect(kontext_worker.deleteLater)
+    thread.finished.connect(thread.deleteLater)
+
+    thread.start()
+    return thread, kontext_worker
