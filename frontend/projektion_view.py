@@ -178,8 +178,8 @@ class ProjektionPanel(QWidget):
         # Zahlen sind nach dem Morphen keine Messgroessen, sie machen aber
         # Abstaende und Lage vergleichbar, wenn man die Karte verschiebt.
         for achse in ("left", "bottom"):
-            self._plot.getAxis(achse).setPen(pg.mkPen(theme.BORDER))
-            self._plot.getAxis(achse).setTextPen(pg.mkPen(theme.TEXT_MUTED))
+            self._plot.getAxis(achse).setPen(pg.mkPen(theme.AXIS))
+            self._plot.getAxis(achse).setTextPen(pg.mkPen(theme.AXIS))
         self._plot.showGrid(x=True, y=True, alpha=theme.GRID_ALPHA)
         # Sonst verzerren die Kreis-Encodings zu Ellipsen.
         self._plot.setAspectLocked(True)

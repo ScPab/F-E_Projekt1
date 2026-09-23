@@ -74,7 +74,10 @@ SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte
 SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte
 MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens
 LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte
-GRID_ALPHA = 0.25            # Deckkraft des Gitters in der Karte
+# Achsen und Gitter der Karte bewusst dunkler als BORDER: der Rahmen einer
+# Eingabe darf zurueckhaltend sein, eine Achse muss man ablesen koennen.
+AXIS = "#6b7280"             # Achsenlinie, Beschriftung und Gitter
+GRID_ALPHA = 0.6             # Deckkraft des Gitters in der Karte
 NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
