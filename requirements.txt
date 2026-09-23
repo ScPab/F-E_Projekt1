@@ -38,6 +38,11 @@ pyvis>=0.3
 # Die Zeile unten bleibt als Dokumentation der Abhaengigkeit stehen; ist
 # pyside6 bereits per conda installiert, ist sie ein No-op.
 pyside6>=6.6
+# pyqtgraph zeichnet die Morphing-Karte (frontend/projektion_view.py): beim Ziehen
+# mehrerer Regler werden tausende Punkte neu gesetzt, und matplotlib wird dabei
+# zaeh. Anders als bei pyside6 ist pip hier unbedenklich - pyqtgraph ist reines
+# Python, ohne kompilierte Teile und ohne ICU-Bindung.
+pyqtgraph>=0.13
 # requests kommt bereits ueber ./wissensnetz und ./wrappers mit, steht hier aber
 # explizit: frontend/mediator_client.py importiert es direkt.
 requests>=2.28
