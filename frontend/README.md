@@ -184,6 +184,71 @@ Das Feld dient **nur der Netzansicht** und hat auf den Auftrag keinen Einfluss: 
 wird immer `value`. Führend bleibt `KNOWN_ATTRIBUTES` im Mediator — ändert sich dort ein
 Name, muss er in `panel.json` nachgezogen werden.
 
+## Projektion
+
+Über der Anzeigefläche stehen zwei Schaltflächen, **Wissensnetz** und **Projektion**.
+Umschalten stößt keinen Abruf an, lädt keine Datei und verwirft keinen Zustand.
+
+**Die Projektion bekommt das ganze Fenster.** Auswahlpanel, Antworttext und die drei
+Schaltflächen treten dabei zurück: die Karte braucht Fläche, und bei 900 × 600 blieb
+daneben nur ein Streifen, in dem der Kohortenkreis kaum zu erkennen war. Auswahl und
+Antwort gehören ohnehin zum Auftrag, nicht zur Karte. Zurück im `Wissensnetz` steht
+alles wieder da, wo es war — auch die Splitterstellungen.
+
+Die Projektion ist die **Morphing-Karte**: ein Scatter, dessen Punktpositionen die
+softmax-gewichtete Summe mehrerer Encodings sind — `pos = Σ aᵢ · E[i]` mit
+`a = softmax(10 · Regler)`, genau wie im Oviedo-Original. Rechts stehen dessen 15 Regler
+in fester Reihenfolge; `genes` startet auf 0,50, alle anderen auf 0. Zieht man `cancer`
+hoch, wandert die tSNE-Wolke auf die Kreispositionen der Kohorten. Die Punktfarbe kodiert
+die Kohorte (dieselbe `nipy_spectral`-Palette wie MP-Lite, über `OVIEDO_COHORTS`), die
+Legende nennt nur die im Datensatz vorkommenden.
+
+**Die Mathematik kommt aus MP-Lite und wird nicht nachgebaut.** `encodings.py` und
+`h5ad_source.py` aus `wissensnetz/prototype/mp_lite/` sind Qt-frei und werden hier
+wiederverwendet — **per Dateipfad geladen, nicht per `import`**: `prototype/` ist kein
+Paket, und `import encodings` träfe Pythons stdlib-Paket `encodings` (Codecs).
+`mp_lite/app.py` macht es aus demselben Grund genauso. Einzige Kopie ist
+`skaliere_layout` (dort `_scale_layout`), weil `app.py` Bokeh im Modulkopf importiert und
+deshalb nicht importierbar ist. **MP-Lite selbst bleibt unberührt** und startet weiter
+über `start_all.ps1 -WithMpLite`; es ist der Vergleichsmaßstab gegenüber Oviedo.
+
+Drei Wege zur `.h5ad`, in dieser Rangfolge:
+
+1. **Die gerade erzeugte Datei.** Nach `Als .h5ad speichern` merkt sich das Fenster den
+   Pfad und lädt ihn, sobald man auf `Projektion` schaltet — nicht vorher: 44 MB sollen
+   nicht ungefragt von der Platte kommen.
+2. **`Datei oeffnen …`** über der Karte, Startordner `wissensnetz/data`.
+3. **`DATABRIDGE_H5AD`**, über `h5ad_source.resolve_h5ad_path()` — dieselbe Variable, die
+   MP-Lite und `start_all.ps1 -DemoGenerate` schon nutzen.
+
+Geladen wird im Worker-Thread (`worker.H5adWorker`), das Fenster bleibt dabei bedienbar.
+
+**Kein erfundenes Layout.** Fehlt in `obsm` sowohl `X_tsne_genes` als auch
+`X_tsne_mirna`, gibt es keine Basis-View und damit keine Karte; die Fläche nennt dann im
+Klartext, was fehlt und wie man es bekommt (`compute_tsne=true`). Das ist der eine Punkt,
+an dem sich die Projektion von MP-Lite **unterscheiden muss**: der Prototyp darf auf
+synthetische Punkte zurückfallen, um die Bedienung ohne Daten vorzuführen, der Explorer
+nicht. Mit ihm wird geforscht, und eine erfundene Punktwolke wäre dort eine Lüge. Fehlt
+nur eines der beiden Layouts, ist der zugehörige Regler deaktiviert.
+
+Ein Regler ist ebenso deaktiviert, wenn seine Variable nicht encodierbar ist. Er bleibt
+**sichtbar und an seinem Platz**, mit dem Grund im Tooltip: `Spalte fehlt in obs`,
+`nur ein Wert vorhanden` oder `Marker nicht in var` — ehrliche Lücke statt unsichtbarer
+Grenze, dieselbe Regel wie bei ENA und GEO im Auswahlpanel.
+
+**Klick auf einen Punkt** holt den Kontext dieser Probe aus dem Wissensnetz
+(`enrichment.case_context`, im eigenen Prozess, kein Endpunkt im Mediator) und zeigt ihn
+unter der Karte. Der Schlüssel ist `obs["submitter_id"]` gegen `db:submitterId`. Zwei
+Fälle sind normal und werden als solche benannt: die Probe liegt **nicht im Store** (die
+`.h5ad` kann älter sein oder aus einer anderen Auswahl stammen), oder **Fuseki läuft
+nicht** — die Karte bleibt in beiden Fällen voll bedienbar, das Morphing braucht den
+Store nicht.
+
+**Ein Rechteck aufziehen** wählt die Punkte darin aus; die Anzahl steht unter der Karte,
+ausgewählte Punkte bekommen einen Rand in der Akzentfarbe, die Füllung bleibt die
+Kohortenfarbe. Klick daneben hebt die Auswahl auf. Lasso und Rückkanal (`write_feedback`)
+sind bewusst nicht Teil dieser Fassung.
+
 ## Aufbau
 
 | Datei | Zweck |
@@ -196,9 +261,12 @@ Name, muss er in `panel.json` nachgezogen werden.
 | `searchable_select.py` | aufklappende Auswahlmenüs: `SearchableSelect` (einwertig, Kohorte) und `MultiSelect` (Häkchen, `Obj`/`Datenquelle`) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
 | `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
 | `netz_view.py` | das gezeichnete Netz (`QGraphicsView`, kein Browser) |
+| `projektion_view.py` | die Morphing-Karte (`pyqtgraph`, Regler, Auswahl) |
+| `morph.py` | Encodings und Positionen — **ohne Qt-Import**, nutzt die mp_lite-Module per Dateipfad |
 | `store_reader.py` | die drei SPARQL-Abfragen gegen Fuseki — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `tests/test_mediator_client.py` | Tests ohne Qt und ohne Netz (`requests` gemockt) |
 | `tests/test_store_reader.py` | Tests der Auswertung, mit einem Doppel für `GraphStore` |
+| `tests/test_morph.py` | Tests der Morphing-Rechnung, mit einem kuenstlichen AnnData |
 
 ```powershell
 pytest frontend/tests -q
