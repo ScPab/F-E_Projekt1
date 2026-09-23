@@ -179,9 +179,10 @@ class NetzView(QGraphicsView):
                     offen: str | None = None) -> None:
         """Einen Abzug anzeigen, optional mit der Markierung des letzten Aufrufs.
 
-        ``offen`` ist die Kohorte, deren Attribute gleich mitkommen sollen — das
-        Netz zeigt die Auswahl aus dem Panel, und dazu gehoeren die angehakten
-        Attribute, ohne dass man erst klicken muss.
+        ``offen`` ist die Kohorte, auf deren Zahlen die Attributreihe
+        eingeschraenkt wird. Leer heisst **alle gewaehlten Kohorten** — so
+        stehen die Attribute auch im Auftrag: neben den Kohorten, nicht unter
+        einer davon.
         """
         self._abzug = abzug or sr.leerer_abzug()
         self._unterschied = unterschied or {}
@@ -231,9 +232,14 @@ class NetzView(QGraphicsView):
         gezeigt = kohorten[:theme.NETZ_MAX_NODES]
 
         breite_reihe2 = self._reihenbreite(len(gezeigt))
+        # Ohne aufgeklappte Kohorte gelten die Attribute der GANZEN Auswahl —
+        # so stehen sie auch im Auftrag: neben den Kohorten, nicht unter einer
+        # davon. Ein Klick auf eine Kohorte schraenkt sie auf deren Zahlen ein.
         attribute = (sr.sortierte_attribute(self._abzug, self._offene_kohorte,
                                             self._unterschied)
-                     if self._offene_kohorte else [])
+                     if self._offene_kohorte
+                     else sr.sortierte_gesamt_attribute(self._abzug,
+                                                        self._unterschied))
         gezeigte_attribute = attribute[:theme.NETZ_MAX_NODES]
         breite_reihe3 = self._reihenbreite(len(gezeigte_attribute), KIND_ATTRIBUTE)
         breite = max(breite_reihe2, breite_reihe3, theme.NETZ_NODE_WIDTH * 3)
@@ -261,18 +267,25 @@ class NetzView(QGraphicsView):
         self._male_rest(len(kohorten) - len(gezeigt), "Kohorten",
                         y2 + theme.NETZ_NODE_HEIGHT + 4, breite)
 
-        # Reihe 3: Attribute der aufgeklappten Kohorte.
-        if self._offene_kohorte and gezeigte_attribute:
+        # Reihe 3: die Attribute. Ohne aufgeklappte Kohorte haengen sie an
+        # allen, sonst nur an der aufgeklappten.
+        if gezeigte_attribute:
             y3 = y2 + theme.NETZ_NODE_HEIGHT + theme.NETZ_ROW_GAP
-            eltern = next((k for k in knoten2 if k.data(KEY_ROLE) == self._offene_kohorte),
-                          None)
+            if self._offene_kohorte:
+                eltern = [k for k in knoten2
+                          if k.data(KEY_ROLE) == self._offene_kohorte]
+            else:
+                eltern = knoten2
             knoten3 = self._male_reihe(gezeigte_attribute, y3, breite, KIND_ATTRIBUTE)
-            if eltern is not None:
+            for elternknoten in eltern:
                 for knoten in knoten3:
-                    self._male_kante(eltern, knoten)
+                    self._male_kante(elternknoten, knoten)
             self._male_kantenetikett(EDGE_ENTITY, y3 - theme.NETZ_ROW_GAP + 8)
+            hinweis = ("" if self._offene_kohorte
+                       else "Attribute gelten fuer alle gewaehlten Kohorten")
             self._male_rest(len(attribute) - len(gezeigte_attribute), "Attribute",
-                            y3 + theme.NETZ_NODE_HEIGHT_3 + 4, breite)
+                            y3 + theme.NETZ_NODE_HEIGHT_3 + 4, breite,
+                            zusatz=hinweis)
 
         szene.setSceneRect(szene.itemsBoundingRect().adjusted(-12, -12, 12, 12))
         self._einpassen()
@@ -345,7 +358,22 @@ class NetzView(QGraphicsView):
     def _attribut_text(self, name: str) -> tuple[str, str, str, str]:
         """Titel ist der **lokale Name der Property aus dem Store**; der
         Panel-Name steht nur darunter, wenn er mechanisch genau passt (siehe
-        ``store_reader.panel_name``) — kein Raten, keine Tabelle."""
+        ``store_reader.panel_name``) — kein Raten, keine Tabelle.
+
+        Ohne aufgeklappte Kohorte stehen die Faelle **aller** gewaehlten
+        Kohorten zusammen; die Zahl der Werte fehlt dann, weil distinkte Werte
+        je Kohorte sich nicht addieren lassen (siehe
+        ``store_reader.gesamt_attribute``).
+        """
+        panel = sr.panel_name(name, self._panel_namen) or ""
+        if not self._offene_kohorte:
+            daten = sr.gesamt_attribute(self._abzug).get(name) or {}
+            zustand = sr.gesamt_zustand(self._unterschied, name)
+            zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')} · "
+                          f"{_anzahl(daten.get('kohorten', 0), 'Kohorte', 'Kohorten')}"
+                          f"{self._zusatz(zustand)}")
+            return name, panel, zaehlungen, zustand.get("state", sr.UNVERAENDERT)
+
         kohorte = (self._abzug.get("cohorts") or {}).get(self._offene_kohorte) or {}
         daten = (kohorte.get("attributes") or {}).get(name) or {}
         zustand = ((self._unterschied.get("attributes") or {})
@@ -353,10 +381,7 @@ class NetzView(QGraphicsView):
         zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')} · "
                       f"{_anzahl(daten.get('values', 0), 'Wert', 'Werte')}"
                       f"{self._zusatz(zustand)}")
-        return (name,
-                sr.panel_name(name, self._panel_namen) or "",
-                zaehlungen,
-                zustand.get("state", sr.UNVERAENDERT))
+        return name, panel, zaehlungen, zustand.get("state", sr.UNVERAENDERT)
 
     def _male_kante(self, oben: _Knoten, unten: _Knoten) -> None:
         """Weiche Kurve von der Unterkante des Elternknotens zur Oberkante des
@@ -380,11 +405,19 @@ class NetzView(QGraphicsView):
         etikett.setFont(schrift)
         etikett.setPos(0, y)
 
-    def _male_rest(self, anzahl: int, was: str, y: float, breite: float) -> None:
-        """``… N weitere Kohorten`` unter der Reihe, gedaempft."""
-        if anzahl <= 0:
+    def _male_rest(self, anzahl: int, was: str, y: float, breite: float, *,
+                   zusatz: str = "") -> None:
+        """``… N weitere Kohorten`` unter der Reihe, gedaempft.
+
+        ``zusatz`` steht daneben, wenn es sonst nichts zu melden gibt — etwa der
+        Hinweis, dass die Attribute fuer alle Kohorten gelten.
+        """
+        text = f"… {anzahl} weitere {was}" if anzahl > 0 else ""
+        if zusatz:
+            text = f"{text}   ·   {zusatz}" if text else zusatz
+        if not text:
             return
-        etikett = self.scene().addText(f"… {anzahl} weitere {was}")
+        etikett = self.scene().addText(text)
         etikett.setDefaultTextColor(theme.qcolor(theme.TEXT_MUTED))
         etikett.setPos((breite - etikett.boundingRect().width()) / 2, y)
 

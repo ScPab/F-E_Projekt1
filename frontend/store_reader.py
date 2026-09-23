@@ -319,3 +319,47 @@ def auswahl_abzug(abzug: dict[str, Any], kohorten: str | list[str],
         gefiltert[kohorte] = {"cases": faelle, "attributes": gewaehlt}
 
     return {"cases": gesamt, "projects": len(gefiltert), "cohorts": gefiltert}
+
+
+def gesamt_attribute(abzug: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Die Attribute ueber **alle** Kohorten des Abzugs zusammengefasst.
+
+    Die Attribute gelten der ganzen Auswahl, nicht einer einzelnen Kohorte —
+    im Auftrag stehen sie neben den Kohorten, nicht unter einer davon. Fuer die
+    Anzeige werden deshalb die **Faelle summiert**.
+
+    Die Zahl der **Werte** wird bewusst nicht summiert: das sind distinkte Werte
+    je Kohorte, und "female" in zwei Kohorten waere sonst zweimal gezaehlt. Wer
+    sie braucht, klappt eine Kohorte auf.
+    """
+    gesamt: dict[str, dict[str, Any]] = {}
+    for kohorte in (abzug.get("cohorts") or {}).values():
+        for name, werte in (kohorte.get("attributes") or {}).items():
+            eintrag = gesamt.setdefault(name, {"cases": 0, "values": 0, "kohorten": 0})
+            eintrag["cases"] += werte.get("cases", 0)
+            eintrag["kohorten"] += 1
+    return gesamt
+
+
+def gesamt_zustand(unterschied: dict[str, Any] | None,
+                   name: str) -> dict[str, Any]:
+    """Zustand eines Attributs ueber alle Kohorten: neu, wenn es in einer neu
+    ist; gewachsen mit der Summe der Zuwaechse."""
+    if not unterschied:
+        return {"state": UNVERAENDERT, "plus": 0}
+    zustaende = [je.get(name) for je in (unterschied.get("attributes") or {}).values()
+                 if je.get(name)]
+    if any(z["state"] == NEU for z in zustaende):
+        return {"state": NEU, "plus": sum(z["plus"] for z in zustaende)}
+    zuwachs = sum(z["plus"] for z in zustaende)
+    if zuwachs:
+        return {"state": GEWACHSEN, "plus": zuwachs}
+    return {"state": UNVERAENDERT, "plus": 0}
+
+
+def sortierte_gesamt_attribute(abzug: dict[str, Any],
+                               unterschied: dict[str, Any] | None = None) -> list[str]:
+    """Die zusammengefassten Attribute in Anzeigereihenfolge."""
+    eintraege = gesamt_attribute(abzug)
+    zustaende = {name: gesamt_zustand(unterschied, name) for name in eintraege}
+    return _sortiere(eintraege, zustaende)

@@ -81,8 +81,13 @@ schaltet die Zeile unter dem Cursor um.
 **derselben Ebene** des Auftrags — `SingleSelection.cohorts` ist eine Liste —,
 nicht in mehreren: mehrere Ebenen entstehen nur durch mehrere **Datenquellen**.
 Der Mediator holt je Kohorte `per_cohort_size or size` Proben, `Proben` im Panel
-gilt also **pro Kohorte**. Im Netz stehen die gewählten Kohorten nebeneinander;
-aufgeklappt bleibt die, die man angeklickt hat.
+gilt also **pro Kohorte**. Im Netz stehen die gewählten Kohorten nebeneinander, und die
+**Attributreihe hängt an allen** — so wie die Attribute im Auftrag neben den
+Kohorten stehen, nicht unter einer davon. Dort zählt sie die Fälle über alle
+gewählten Kohorten zusammen (`130 Faelle · 5 Kohorten`); die Zahl der Werte
+fehlt dann bewusst, weil distinkte Werte je Kohorte sich nicht addieren lassen.
+Ein Klick auf eine Kohorte schränkt die Reihe auf deren Zahlen ein und zeigt
+auch die Werte, ein Klick auf `Auswahl` geht zurück auf alle.
 
 Die Schaltfläche zeigt die Auswahl gekürzt — ab drei Werten die ersten beiden
 plus `+N` —, den vollständigen Satz im Tooltip. Wo es ein Kürzel gibt, steht es

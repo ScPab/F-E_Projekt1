@@ -273,3 +273,41 @@ def test_auswahl_abzug_mischt_bekannte_und_neue_kohorten() -> None:
 def test_auswahl_abzug_leere_liste_ist_leer() -> None:
     assert sr.auswahl_abzug(_abzug(50, {"TCGA-BRCA": _kohorte(50)}), [],
                             ["sex_at_birth"], ZUORDNUNG) == sr.leerer_abzug()
+
+
+# --- Attribute ueber alle gewaehlten Kohorten --------------------------------
+def test_gesamt_attribute_summiert_die_faelle() -> None:
+    """Die Attribute gelten der ganzen Auswahl — im Auftrag stehen sie neben den
+    Kohorten, nicht unter einer davon."""
+    abzug = _abzug(70, {"TCGA-ACC": _kohorte(50, race=(50, 4), sexAtBirth=(50, 2)),
+                        "TCGA-BLCA": _kohorte(20, race=(20, 3), sexAtBirth=(0, 0))})
+    gesamt = sr.gesamt_attribute(abzug)
+    assert gesamt["race"]["cases"] == 70
+    assert gesamt["sexAtBirth"]["cases"] == 50      # eine Kohorte hat dazu nichts
+    assert gesamt["race"]["kohorten"] == 2
+
+
+def test_gesamt_attribute_summiert_die_werte_nicht() -> None:
+    """Distinkte Werte je Kohorte lassen sich nicht addieren — 'female' in zwei
+    Kohorten waere sonst zweimal gezaehlt."""
+    abzug = _abzug(70, {"TCGA-ACC": _kohorte(50, sexAtBirth=(50, 2)),
+                        "TCGA-BLCA": _kohorte(20, sexAtBirth=(20, 2))})
+    assert sr.gesamt_attribute(abzug)["sexAtBirth"]["values"] == 0
+
+
+def test_gesamt_zustand_ist_neu_wenn_es_in_einer_kohorte_neu_ist() -> None:
+    vorher = _abzug(50, {"TCGA-ACC": _kohorte(50, race=(50, 4)),
+                         "TCGA-BLCA": _kohorte(20)})
+    nachher = _abzug(70, {"TCGA-ACC": _kohorte(50, race=(50, 4)),
+                          "TCGA-BLCA": _kohorte(20, race=(20, 3))})
+    unterschied = sr.diff(vorher, nachher)
+    assert sr.gesamt_zustand(unterschied, "race") == {"state": sr.NEU, "plus": 20}
+
+
+def test_gesamt_zustand_summiert_den_zuwachs() -> None:
+    vorher = _abzug(30, {"TCGA-ACC": _kohorte(20, race=(20, 4)),
+                         "TCGA-BLCA": _kohorte(10, race=(10, 3))})
+    nachher = _abzug(70, {"TCGA-ACC": _kohorte(50, race=(50, 4)),
+                          "TCGA-BLCA": _kohorte(20, race=(20, 3))})
+    unterschied = sr.diff(vorher, nachher)
+    assert sr.gesamt_zustand(unterschied, "race") == {"state": sr.GEWACHSEN, "plus": 40}

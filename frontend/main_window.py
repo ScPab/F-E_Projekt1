@@ -874,9 +874,12 @@ class MainWindow(QMainWindow):
             sr.auswahl_abzug(abzug, kohorten, self.checked_attributes(),
                              self._store_zuordnung()),
             unterschied,
-            # Aufgeklappt bleibt, was aufgeklappt war; sonst die erste Kohorte.
-            offen=(self._netz.offene_kohorte() if
-                   self._netz.offene_kohorte() in kohorten else kohorten[0]),
+            # Aufgeklappt bleibt, was aufgeklappt war. Sonst KEINE: die
+            # Attribute gelten der ganzen Auswahl, und eine willkuerlich
+            # aufgeklappte erste Kohorte liess sie aussehen, als gaelten sie nur
+            # fuer diese.
+            offen=(self._netz.offene_kohorte()
+                   if self._netz.offene_kohorte() in kohorten else ""),
         )
         self._store_label.setText(self._store_stand(abzug))
 
