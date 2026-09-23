@@ -69,6 +69,13 @@ NETZ_ROW_GAP = 58            # senkrechter Abstand zwischen zwei Reihen
 NETZ_MAX_NODES = 7           # mehr Knoten je Reihe werden zu "… N weitere"
 NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens
 
+# --- Projektion (projektion_view.py) ---------------------------------------
+SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte
+SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte
+MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens
+LEGEND_MAX_HEIGHT = 72       # darueber rollt die Kohorten-Legende
+NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend
+
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
 OBJ_HEADER = "Header"
@@ -88,6 +95,11 @@ OBJ_POPUP = "SelectPopup"           # die aufklappende Karte selbst
 OBJ_NETZ = "NetzView"               # die gezeichnete Netzansicht
 OBJ_NETZ_TITLE = "NetzTitle"        # fette Ueberschrift ueber dem Netz
 OBJ_NETZ_NOTE = "NetzNote"          # gedaempfter Zusatz rechts daneben
+OBJ_SWITCH_LEFT = "ViewSwitchLeft"    # linke Haelfte des Ansichts-Umschalters
+OBJ_SWITCH_RIGHT = "ViewSwitchRight"  # rechte Haelfte desselben
+OBJ_SLIDER_NAME = "SliderName"        # Beschriftung eines Projektions-Reglers
+OBJ_SLIDER_VALUE = "SliderValue"      # dessen Zahlenwert rechts
+OBJ_PROJ_HINT = "ProjektionHinweis"   # Meldung anstelle der Karte
 
 
 def stylesheet() -> str:
@@ -289,6 +301,79 @@ QLabel#{OBJ_NETZ_NOTE} {{
     background-color: transparent;
 }}
 
+/* --- Umschalter Wissensnetz / Projektion -------------------------------- */
+/* Zwei Schaltflaechen, die wie ein Stueck aussehen: aussen gerundet, in der
+   Mitte stossen sie ohne doppelte Linie aneinander. */
+QPushButton#{OBJ_SWITCH_LEFT}, QPushButton#{OBJ_SWITCH_RIGHT} {{
+    background-color: {SURFACE};
+    color: {TEXT};
+    border: {BORDER_WIDTH}px solid {BORDER};
+    padding: 5px 16px;
+    min-width: 0;
+    font-weight: 600;
+}}
+QPushButton#{OBJ_SWITCH_LEFT} {{
+    border-top-left-radius: {RADIUS}px;
+    border-bottom-left-radius: {RADIUS}px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+}}
+QPushButton#{OBJ_SWITCH_RIGHT} {{
+    border-top-right-radius: {RADIUS}px;
+    border-bottom-right-radius: {RADIUS}px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}}
+QPushButton#{OBJ_SWITCH_LEFT}:checked, QPushButton#{OBJ_SWITCH_RIGHT}:checked {{
+    background-color: {ACCENT};
+    border-color: {ACCENT};
+    color: {ON_ACCENT};
+}}
+QPushButton#{OBJ_SWITCH_LEFT}:hover:!checked, QPushButton#{OBJ_SWITCH_RIGHT}:hover:!checked {{
+    border-color: {ACCENT};
+}}
+
+/* --- Regler der Projektion ---------------------------------------------- */
+QLabel#{OBJ_SLIDER_NAME} {{
+    background-color: transparent;
+    color: {TEXT};
+}}
+QLabel#{OBJ_SLIDER_NAME}:disabled {{
+    color: {TEXT_MUTED};
+}}
+QLabel#{OBJ_SLIDER_VALUE} {{
+    background-color: transparent;
+    color: {TEXT_MUTED};
+}}
+QLabel#{OBJ_PROJ_HINT} {{
+    background-color: transparent;
+    color: {TEXT_MUTED};
+}}
+QSlider::groove:horizontal {{
+    height: 4px;
+    background: {BORDER};
+    border-radius: 2px;
+}}
+QSlider::sub-page:horizontal {{
+    background: {ACCENT};
+    border-radius: 2px;
+}}
+QSlider::handle:horizontal {{
+    background: {WINDOW_BG};
+    border: {BORDER_WIDTH}px solid {ACCENT};
+    width: 12px;
+    margin: -5px 0;
+    border-radius: 7px;
+}}
+QSlider::handle:horizontal:disabled {{
+    border-color: {BORDER};
+    background: {SURFACE};
+}}
+QSlider::sub-page:horizontal:disabled {{
+    background: {BORDER};
+}}
+
 /* --- Schaltflaechen ---------------------------------------------------- */
 QPushButton {{
     background-color: {WINDOW_BG};
@@ -400,6 +485,51 @@ def select_button_style(leer: bool) -> str:
     keinen Farbwert in ``searchable_select.py`` braucht.
     """
     return f"QPushButton#{OBJ_SELECT_BUTTON} {{ color: {TEXT_MUTED if leer else TEXT}; }}"
+
+
+def cohort_colors() -> dict[str, str]:
+    """Farbe je Krebsart, stabil ueber die Position in ``OVIEDO_COHORTS``.
+
+    matplotlibs ``nipy_spectral`` wie im Oviedo-Original und wie in MP-Lite,
+    damit dieselbe Kohorte dort und hier dieselbe Farbe hat. Fehlt matplotlib,
+    ein HSV-Faecher als Rueckfall — die Karte soll nicht an einer Colormap
+    scheitern.
+    """
+    from wissensnetz.cohorts import OVIEDO_COHORTS
+
+    codes = list(OVIEDO_COHORTS)
+    n = len(codes)
+    try:
+        from matplotlib import colormaps
+        from matplotlib.colors import to_hex
+
+        cmap = colormaps["nipy_spectral"]
+        return {c: to_hex(cmap((i + 0.5) / n)) for i, c in enumerate(codes)}
+    except Exception:      # noqa: BLE001 - kein matplotlib -> HSV-Faecher
+        import colorsys
+
+        farben = {}
+        for i, c in enumerate(codes):
+            r, g, b = colorsys.hsv_to_rgb(i / n, 0.65, 0.9)
+            farben[c] = "#{:02X}{:02X}{:02X}".format(int(r * 255), int(g * 255),
+                                                     int(b * 255))
+        return farben
+
+
+_COHORT_COLORS: dict[str, str] | None = None
+
+
+def cohort_color(code: str | None) -> QColor:
+    """Die Farbe einer Kohorte; unbekannt oder fehlend -> neutrales Grau.
+
+    Das ist **nicht** ``dot_color``: der farbige Punkt in den Auswahllisten ist
+    rein optisch und kodiert nichts, diese Palette hier kodiert die Kohorte und
+    ist dieselbe wie in MP-Lite.
+    """
+    global _COHORT_COLORS
+    if _COHORT_COLORS is None:
+        _COHORT_COLORS = cohort_colors()
+    return QColor(_COHORT_COLORS.get(code, NEUTRAL) if code else NEUTRAL)
 
 
 def palette() -> QPalette:
