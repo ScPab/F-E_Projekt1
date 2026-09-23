@@ -73,7 +73,8 @@ NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens
 SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte
 SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte
 MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens
-LEGEND_MAX_HEIGHT = 72       # darueber rollt die Kohorten-Legende
+LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte
+GRID_ALPHA = 0.25            # Deckkraft des Gitters in der Karte
 NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als

@@ -149,6 +149,7 @@ class ProjektionPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         layout.addWidget(self._baue_karte(), stretch=1)
+        layout.addWidget(self._baue_legende())
         layout.addWidget(self._baue_reglerspalte())
 
     # -- Aufbau ------------------------------------------------------------
@@ -173,13 +174,13 @@ class ProjektionPanel(QWidget):
         self._box.rechteck_gezogen.connect(self._rechteck)
         self._plot = pg.PlotWidget(background=theme.WINDOW_BG, viewBox=self._box)
         self._plot.setTitle("Cancer map", color=theme.TEXT, size="10pt")
-        # Die Koordinaten bedeuten nach dem Morphen nichts Absolutes — Achsen
-        # ohne Beschriftung, aber sichtbar als Rahmen.
+        # X- und Y-Achse mit Werten, dazu ein Gitter — wie in der Vorlage. Die
+        # Zahlen sind nach dem Morphen keine Messgroessen, sie machen aber
+        # Abstaende und Lage vergleichbar, wenn man die Karte verschiebt.
         for achse in ("left", "bottom"):
             self._plot.getAxis(achse).setPen(pg.mkPen(theme.BORDER))
-            # Keine Zahlen an den Achsen: nach dem Morphen ist eine Koordinate
-            # keine Groesse, die man ablesen koennte. Der Rahmen bleibt.
-            self._plot.getAxis(achse).setStyle(showValues=False)
+            self._plot.getAxis(achse).setTextPen(pg.mkPen(theme.TEXT_MUTED))
+        self._plot.showGrid(x=True, y=True, alpha=theme.GRID_ALPHA)
         # Sonst verzerren die Kreis-Encodings zu Ellipsen.
         self._plot.setAspectLocked(True)
         self._plot.setMenuEnabled(False)
@@ -207,21 +208,6 @@ class ProjektionPanel(QWidget):
         layout.addWidget(self._hinweis, stretch=1)
         self._plot.hide()
 
-        # Die Legende in einem flachen Rollbereich: 32 Kohorten waeren sonst
-        # sechs Zeilen hoch und wuerden die Karte auf einen Rest zusammendruecken.
-        self._legende = QLabel("")
-        self._legende.setObjectName(theme.OBJ_SLIDER_VALUE)
-        self._legende.setWordWrap(True)
-        self._legende.setTextFormat(Qt.TextFormat.RichText)
-        self._legendenbereich = QScrollArea()
-        self._legendenbereich.setWidgetResizable(True)
-        self._legendenbereich.setFrameShape(QFrame.Shape.NoFrame)
-        self._legendenbereich.setMaximumHeight(theme.LEGEND_MAX_HEIGHT)
-        self._legendenbereich.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._legendenbereich.setWidget(self._legende)
-        layout.addWidget(self._legendenbereich)
-
         # Anzahl der ausgewaehlten Proben unter der Karte — neben der
         # Schaltflaeche war sie in der schmalen Spalte abgeschnitten.
         self._auswahl_label = QLabel("")
@@ -234,6 +220,30 @@ class ProjektionPanel(QWidget):
         self._kontext.hide()
         layout.addWidget(self._kontext)
         return seite
+
+    def _baue_legende(self) -> QWidget:
+        """Die Kohorten-Legende rechts neben der Karte, wie in der Vorlage.
+
+        Eine Zeile je Kohorte statt einer umbrechenden Zeile unter der Karte:
+        so bleibt die Zuordnung Farbe -> Kuerzel lesbar, und die Karte behaelt
+        ihre Hoehe. Bei 32 Kohorten rollt die Spalte.
+        """
+        self._legende = QLabel("")
+        self._legende.setObjectName(theme.OBJ_SLIDER_VALUE)
+        self._legende.setTextFormat(Qt.TextFormat.RichText)
+        self._legende.setAlignment(Qt.AlignmentFlag.AlignTop
+                                   | Qt.AlignmentFlag.AlignLeft)
+
+        self._legendenbereich = QScrollArea()
+        self._legendenbereich.setWidgetResizable(True)
+        self._legendenbereich.setFrameShape(QFrame.Shape.NoFrame)
+        self._legendenbereich.setFixedWidth(theme.LEGEND_WIDTH)
+        self._legendenbereich.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._legendenbereich.setWidget(self._legende)
+        self._legendenbereich.setSizePolicy(QSizePolicy.Policy.Fixed,
+                                            QSizePolicy.Policy.Expanding)
+        return self._legendenbereich
 
     def _baue_reglerspalte(self) -> QWidget:
         # 15 Regler passen bei 600 Pixel Fensterhoehe nicht alle hinein.
@@ -325,7 +335,8 @@ class ProjektionPanel(QWidget):
         ]
         if any(k is None for k in modell.kohorten):
             teile.append(f'<span style="color:{theme.NEUTRAL}">■</span> ohne Kohorte')
-        return "  ".join(teile)
+        # Eine Zeile je Kohorte — die Spalte steht rechts neben der Karte.
+        return "<br>".join(teile)
 
     # -- Zeichnen ----------------------------------------------------------
     def _zeichne(self, erste: bool = False) -> None:

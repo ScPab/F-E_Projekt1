@@ -212,9 +212,14 @@ Die Projektion ist die **Morphing-Karte**: ein Scatter, dessen Punktpositionen d
 softmax-gewichtete Summe mehrerer Encodings sind — `pos = Σ aᵢ · E[i]` mit
 `a = softmax(10 · Regler)`, genau wie im Oviedo-Original. Rechts stehen dessen 15 Regler
 in fester Reihenfolge; `genes` startet auf 0,50, alle anderen auf 0. Zieht man `cancer`
-hoch, wandert die tSNE-Wolke auf die Kreispositionen der Kohorten. Die Punktfarbe kodiert
-die Kohorte (dieselbe `nipy_spectral`-Palette wie MP-Lite, über `OVIEDO_COHORTS`), die
-Legende nennt nur die im Datensatz vorkommenden.
+hoch, wandert die tSNE-Wolke auf die Kreispositionen der Kohorten.
+
+Die Karte hat **X- und Y-Achse mit Werten und ein Gitter** — wie die Oviedo-Vorlage. Die
+Zahlen sind nach dem Morphen keine Messgrößen; sie machen Abstände und Lage vergleichbar,
+wenn man die Karte verschiebt oder zoomt. Die Punktfarbe kodiert die Kohorte (dieselbe
+`nipy_spectral`-Palette wie MP-Lite, über `OVIEDO_COHORTS`); die **Legende steht rechts
+neben der Karte**, eine Zeile je Kohorte, und nennt nur die im Datensatz vorkommenden. Bei
+32 Kohorten rollt sie.
 
 **Die Mathematik kommt aus MP-Lite und wird nicht nachgebaut.** `encodings.py` und
 `h5ad_source.py` aus `wissensnetz/prototype/mp_lite/` sind Qt-frei und werden hier
