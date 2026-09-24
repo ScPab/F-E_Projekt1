@@ -31,7 +31,12 @@ DEFAULT_BASE_URL = "http://localhost:8000"
 # Vorschau ist billig (nur Metadaten), Generieren laedt Rohdaten herunter und
 # dauert Minuten — daher zwei sehr unterschiedliche Zeitlimits.
 PREVIEW_TIMEOUT = 60.0
-GENERATE_TIMEOUT = 900.0
+# 30 Minuten statt 15. Gemessen an einem Auftrag ueber 5 Kohorten x 50 Proben:
+# 245 Dateien, rund 1 GB, ~10 bis 16 Dateien je Minute ueber `gdc-client` —
+# also gut 20 Minuten, in denen die alte Grenze von 900 s zweimal zuschlug,
+# obwohl der Mediator ungestoert weiterlief. Ueber DATABRIDGE_GENERATE_TIMEOUT
+# anpassbar, damit dafuer niemand Code aendern muss.
+GENERATE_TIMEOUT = float(os.environ.get("DATABRIDGE_GENERATE_TIMEOUT", 1800.0))
 
 # Grenzen aus der OpenAPI (SelectionRequest.size).
 SIZE_MIN = 1
@@ -166,7 +171,14 @@ def _post(path: str, payload: dict[str, Any], *, base_url: str, timeout: float) 
     try:
         resp = requests.post(url, json=payload, timeout=timeout)
     except requests.Timeout:
-        return Result(ok=False, error=f"Zeitüberschreitung nach {timeout:.0f}s bei {path}.")
+        # Wichtig: der Mediator bricht dabei NICHT ab. Nachgemessen an einem
+        # Auftrag, der hier auflief — `gdc-client` lud im Container ungestört
+        # weiter, lange nachdem diese Seite aufgegeben hatte.
+        return Result(ok=False, error=(
+            f"Zeitüberschreitung nach {timeout:.0f}s bei {path}. "
+            "Der Mediator arbeitet weiter — der Abruf läuft dort zu Ende, "
+            "auch wenn diese Oberfläche nicht mehr darauf wartet."
+        ))
     except requests.ConnectionError:
         return Result(
             ok=False,

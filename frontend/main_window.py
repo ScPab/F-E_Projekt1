@@ -1020,10 +1020,19 @@ class MainWindow(QMainWindow):
         was = "Vorschau" if mode == "preview" else "Generieren"
         quellen = ", ".join(lvl["source"] for lvl in payload["levels"])
         kohorten = payload["levels"][0]["cohorts"]
+        hinweis = ""
+        if mode == "generate":
+            # Beim Generieren laedt der Mediator je Probe eine Datei ueber
+            # gdc-client. Gemessen an einem Lauf mit 245 Dateien: rund 10 bis 16
+            # Dateien je Minute. Wer 250 anstoesst, soll vorher wissen, dass das
+            # eine Viertelstunde und mehr dauert.
+            dateien = len(kohorten) * payload["size"] * len(payload["levels"])
+            hinweis = (f" Etwa {dateien} Dateien, erfahrungsgemaess rund "
+                       f"{max(1, round(dateien / 13)) } Minuten.")
         self.set_status(
             f"{was} laeuft … {', '.join(kohorten)}, "
-            f"{payload['size']} Proben je Kohorte, Quelle(n): {quellen}. "
-            f"Das Fenster bleibt bedienbar.",
+            f"{payload['size']} Proben je Kohorte, Quelle(n): {quellen}."
+            f"{hinweis} Das Fenster bleibt bedienbar.",
             "busy",
         )
         self._output.setPlainText(f"{was} laeuft, bitte warten …")
