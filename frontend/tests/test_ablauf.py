@@ -34,7 +34,7 @@ def _detail(a: ablauf.Ablauf, name: str) -> str:
 # --- Vor und waehrend dem Aufruf ---------------------------------------------
 def test_ruhend_haelt_alle_stationen_zurueck() -> None:
     a = ablauf.ruhend()
-    assert len(a.stationen) == 7
+    assert len(a.stationen) == 6
     assert all(s.zustand == ablauf.WARTET for s in a.stationen)
 
 
@@ -50,9 +50,11 @@ def test_laufend_setzt_nur_den_auftrag_auf_ok() -> None:
     assert _zustand(a, ablauf.WISSENSNETZ) == ablauf.WARTET
 
 
-def test_vorschau_ueberspringt_die_matrix_von_anfang_an() -> None:
-    a = ablauf.laufend(AUFTRAG, "preview")
-    assert _zustand(a, ablauf.MATRIX) == ablauf.UEBERSPRUNGEN
+def test_die_messmatrix_steht_nicht_in_der_kette() -> None:
+    """Sie ist ein Nebenprodukt des Generierens und bei jeder Vorschau grau —
+    also meistens Rauschen. Statuszeile und Textausgabe sagen, was aus ihr wurde."""
+    namen = [s.name for s in ablauf.ruhend().stationen]
+    assert not any("Messmatrix" in n for n in namen)
 
 
 def test_auftrag_nennt_kohorten_attribute_und_proben() -> None:
@@ -78,7 +80,6 @@ def test_fertig_belegt_jede_station_aus_der_antwort() -> None:
     assert _zustand(a, ablauf.FUSEKI) == ablauf.OK
     assert "+19 Faelle" in _detail(a, ablauf.WISSENSNETZ)
     assert "TCGA-LUAD" in _detail(a, ablauf.WISSENSNETZ)
-    assert "40 × 60660" in _detail(a, ablauf.MATRIX)
 
 
 def test_ohne_tripel_wird_fuseki_nicht_als_geladen_behauptet() -> None:
@@ -125,13 +126,9 @@ def test_ein_fehlgeschlagener_aufruf_erreicht_den_wrapper_nicht() -> None:
     assert _zustand(a, ablauf.AUFTRAG) == ablauf.OK
 
 
-def test_vorschau_behauptet_nie_eine_matrix() -> None:
-    a = ablauf.fertig(AUFTRAG, "preview", ok=True, levels=[_ebene(
-        anndata={"n_obs": 40, "n_vars": 10, "filename": "x.h5ad"})])
-    assert _zustand(a, ablauf.MATRIX) == ablauf.UEBERSPRUNGEN
-
-
-def test_generieren_ohne_matrix_in_der_antwort() -> None:
-    a = ablauf.fertig(AUFTRAG, "generate", ok=True, levels=[_ebene()])
-    assert _zustand(a, ablauf.MATRIX) == ablauf.UEBERSPRUNGEN
-    assert "keine Matrix" in _detail(a, ablauf.MATRIX)
+def test_generieren_zeigt_dieselbe_kette_wie_die_vorschau() -> None:
+    vorschau = [s.name for s in ablauf.fertig(AUFTRAG, "preview", ok=True,
+                                              levels=[_ebene()]).stationen]
+    generieren = [s.name for s in ablauf.fertig(AUFTRAG, "generate", ok=True,
+                                                levels=[_ebene()]).stationen]
+    assert vorschau == generieren

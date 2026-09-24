@@ -37,7 +37,9 @@ WRAPPER = "Wrapper → Datenquelle"
 MAPPING = "GDC-JSON → RDF"
 FUSEKI = "graph-db (Fuseki)"
 WISSENSNETZ = "Wissensnetz"
-MATRIX = "Messmatrix (.h5ad)"
+# Die Messmatrix (.h5ad) steht bewusst NICHT in der Kette: sie ist ein
+# Nebenprodukt des Generierens und bei jeder Vorschau grau - also meistens
+# Rauschen. Was aus ihr wurde, sagen Statuszeile und Textausgabe.
 
 
 @dataclass
@@ -74,7 +76,6 @@ def _leer() -> list[Station]:
         Station(MAPPING, "Kollege B · semantic/mapping"),
         Station(FUSEKI, "Jena Fuseki · Default-Graph"),
         Station(WISSENSNETZ, "Marcel · wissensnetz/SPARQL"),
-        Station(MATRIX, "Kollege B · expression.py"),
     ]
 
 
@@ -111,11 +112,6 @@ def laufend(payload: dict[str, Any], mode: str) -> Ablauf:
     stationen[1].detail = f"POST /selection/{was} laeuft"
     stationen[2].zustand = LAEUFT
     stationen[2].detail = ", ".join(_quellen(payload)) or "—"
-
-    # Die Matrix entsteht nur beim Generieren.
-    if mode != "generate":
-        stationen[6].zustand = UEBERSPRUNGEN
-        stationen[6].detail = "Vorschau erzeugt keine Matrix"
 
     return Ablauf(stationen=stationen,
                   ueberschrift="Der Aufruf laeuft. Die Zwischenschritte belegt "
@@ -206,19 +202,6 @@ def fertig(payload: dict[str, Any], mode: str, ok: bool,
     else:
         stationen[5].zustand = UEBERSPRUNGEN
         stationen[5].detail = "kein Abzug (Store nicht erreichbar?)"
-
-    # Messmatrix
-    if mode == "generate":
-        dateien = [lvl.get("anndata") for lvl in gelungen if lvl.get("anndata")]
-        if dateien:
-            erste = dateien[0]
-            stationen[6].zustand = OK
-            stationen[6].detail = (f"{erste.get('n_obs')} × {erste.get('n_vars')} · "
-                                   f"{erste.get('filename')}")
-            stationen[6].beleg = "anndata.n_obs / filename"
-        else:
-            stationen[6].zustand = UEBERSPRUNGEN
-            stationen[6].detail = "keine Matrix in der Antwort"
 
     if not gelungen:
         ablauf.ueberschrift = "Alle Ebenen sind gescheitert."

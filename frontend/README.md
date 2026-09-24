@@ -295,9 +295,9 @@ sind bewusst nicht Teil dieser Fassung.
 ## Architekturansicht
 
 Unter der Anzeigefläche stehen zwei Schaltflächen, **Architektur** und **Textausgabe**.
-Standard ist die Architektur: eine Kette aus sieben Stationen, die zeigt, was beim
+Standard ist die Architektur: eine Kette aus sechs Stationen, die zeigt, was beim
 Abschicken der Reihe nach passiert — Auswahl → JSON, Mediator, Wrapper und Datenquelle,
-GDC-JSON → RDF, graph-db (Fuseki), Wissensnetz, Messmatrix. Die Stationen folgen
+GDC-JSON → RDF, graph-db (Fuseki), Wissensnetz. Die Stationen folgen
 `docs/DataBridge_Architektur.drawio`; gerendert wird das Bild nicht, sondern dieselbe Kette
 neu gezeichnet — eine `.drawio` ist XML für einen Editor, kein Format, aus dem man Zustände
 lebendig machen kann. (Das Diagramm ist vom 31.08. und an zwei Stellen überholt: `anndata`
@@ -320,7 +320,10 @@ nicht wie weit sie sind. Alles Genauere ist **Beleg aus der Antwort**:
 | GDC-JSON → RDF | `triple_count` |
 | graph-db (Fuseki) | dass Tripel da sind, plus `load=true` (ADR-0003) |
 | Wissensnetz | **eigener Abzug** vor und nach dem Aufruf, nicht die Antwort |
-| Messmatrix | `anndata.n_obs` / `filename`, nur bei `Generieren` |
+
+Die Messmatrix (`.h5ad`) steht bewusst **nicht** in der Kette: sie ist ein Nebenprodukt des
+Generierens und bei jeder Vorschau grau, also meistens Rauschen. Was aus ihr wurde, sagen
+die Statuszeile und die Textausgabe.
 
 Ohne Beleg bleibt eine Station grau statt grün — eine erfundene Fortschrittsanzeige wäre
 genau die Sorte Behauptung, die man später glaubt. Die Zeile unter der Kette sagt das
