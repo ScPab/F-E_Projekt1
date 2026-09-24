@@ -81,6 +81,11 @@ AXIS = "#6b7280"             # Achsenlinie, Beschriftung und Gitter
 GRID_ALPHA = 0.6             # Deckkraft des Gitters in der Karte
 NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend
 
+# --- Architekturansicht (architektur_view.py) ------------------------------
+ARCH_BOX_WIDTH = 214         # Breite einer Station (Platz fuer Komponente und Beleg)
+ARCH_BOX_HEIGHT = 58         # deren Hoehe
+ARCH_GAP = 26                # Abstand zwischen zwei Stationen (Platz fuer den Pfeil)
+
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
 OBJ_HEADER = "Header"

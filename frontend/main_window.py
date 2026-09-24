@@ -39,10 +39,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import ablauf
 import mediator_client as mc
 import store_reader as sr
 import theme
 import worker
+from architektur_view import ArchitekturPanel
 from netz_view import NetzPanel
 from projektion_view import ProjektionPanel
 from searchable_select import KIND_HEADER, MultiSelect
@@ -133,6 +135,9 @@ class MainWindow(QMainWindow):
         # Zuletzt gespeicherte .h5ad — die Projektion laedt sie, sobald man auf
         # sie umschaltet (nicht vorher, siehe _wechsle_ansicht).
         self._offene_h5ad = ""
+        # Der Auftrag, der gerade unterwegs ist — die Architekturansicht zeigt
+        # ihn, und nach der Antwort wird er gegen das Ergebnis gehalten.
+        self._laufender_auftrag: dict[str, Any] | None = None
         # Ebenen des letzten erfolgreichen 'Generieren'-Laufs mit .h5ad —
         # Grundlage fuer das Download-Menue (siehe _update_download_menu).
         self._downloadable: list[dict[str, Any]] = []
@@ -364,12 +369,12 @@ class MainWindow(QMainWindow):
         self._anzeige = anzeige = QSplitter(Qt.Orientation.Vertical)
         anzeige.addWidget(self._baue_umschalter())
         anzeige.addWidget(self._ansichten)
-        anzeige.addWidget(self._output)
+        anzeige.addWidget(self._baue_unten())
         # Die Titelzeile ist kein Feld zum Ziehen: nur die beiden Flaechen
         # darunter teilen sich den Platz.
         anzeige.setStretchFactor(1, 3)
         anzeige.setStretchFactor(2, 2)
-        anzeige.setSizes([28, 360, 240])
+        anzeige.setSizes([28, 340, 260])
         anzeige.handle(1).setEnabled(False)
         layout.addWidget(anzeige, stretch=1)
 
@@ -435,6 +440,57 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._ansicht_hinweis)
         return zeile
 
+    def _baue_unten(self) -> QWidget:
+        """Die untere Haelfte: Umschalter und dahinter Architektur oder Text.
+
+        Standard ist die **Architektur** — sie zeigt, was beim Abschicken der
+        Reihe nach passiert. Der Antworttext bleibt einen Klick entfernt; er ist
+        das Rohmaterial, wenn man einer Station nicht glaubt.
+        """
+        self._unten_bereich = unten = QWidget()
+        layout = QVBoxLayout(unten)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        zeile = QHBoxLayout()
+        zeile.setContentsMargins(2, 0, 2, 0)
+        zeile.setSpacing(0)
+        self._knopf_architektur = QPushButton("Architektur")
+        self._knopf_architektur.setObjectName(theme.OBJ_SWITCH_LEFT)
+        self._knopf_text = QPushButton("Textausgabe")
+        self._knopf_text.setObjectName(theme.OBJ_SWITCH_RIGHT)
+        for knopf in (self._knopf_architektur, self._knopf_text):
+            knopf.setCheckable(True)
+        self._knopf_architektur.setChecked(True)
+
+        self._untengruppe = QButtonGroup(self)
+        self._untengruppe.setExclusive(True)
+        self._untengruppe.addButton(self._knopf_architektur, 0)
+        self._untengruppe.addButton(self._knopf_text, 1)
+        self._untengruppe.idClicked.connect(self._wechsle_unten)
+
+        zeile.addWidget(self._knopf_architektur)
+        zeile.addWidget(self._knopf_text)
+        zeile.addStretch(1)
+        self._unten_hinweis = QLabel("Was im Hintergrund passiert")
+        self._unten_hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
+        zeile.addWidget(self._unten_hinweis)
+        layout.addLayout(zeile)
+
+        self._architektur = ArchitekturPanel()
+        self._unten = QStackedWidget()
+        self._unten.addWidget(self._architektur)
+        self._unten.addWidget(self._output)
+        layout.addWidget(self._unten, stretch=1)
+        return unten
+
+    def _wechsle_unten(self, index: int) -> None:
+        """Umschalten ist rein optisch — der Antworttext bleibt stehen, auch
+        wenn man ihn gerade nicht sieht."""
+        self._unten.setCurrentIndex(index)
+        self._unten_hinweis.setText("Was im Hintergrund passiert" if index == 0
+                                    else "Die Antwort des Mediators, unveraendert")
+
     # -- Projektion ----------------------------------------------------------
     def _wechsle_ansicht(self, index: int) -> None:
         self._ansichten.setCurrentIndex(index)
@@ -464,11 +520,11 @@ class MainWindow(QMainWindow):
             self._breiten = self._splitter.sizes()
             self._hoehen = self._anzeige.sizes()
             panel.hide()
-            self._output.hide()
+            self._unten_bereich.hide()
             self._aktionen.hide()
             return
         panel.show()
-        self._output.show()
+        self._unten_bereich.show()
         self._aktionen.show()
         if getattr(self, "_breiten", None):
             self._splitter.setSizes(self._breiten)
@@ -971,6 +1027,9 @@ class MainWindow(QMainWindow):
             "busy",
         )
         self._output.setPlainText(f"{was} laeuft, bitte warten …")
+        # Die Architektur zeigt ab jetzt, was unterwegs ist.
+        self._architektur.zeige(ablauf.laufend(payload, mode))
+        self._laufender_auftrag = payload
         self._thread, self._worker = worker.start_call(
             payload, mode, self._on_finished,
             vorher=self._abzug_vorher, nachher=self._abzug_nachher,
@@ -989,6 +1048,11 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self._render(result, mode)
         self._netz_zeigen(self._letzter_abzug, unterschied)
+        self._architektur.zeige(ablauf.fertig(
+            self._laufender_auftrag or self.current_payload(), mode,
+            ok=result.ok, levels=result.levels() if result.ok else [],
+            fehler=result.error or "", unterschied=unterschied,
+        ))
 
     def _release_thread(self) -> None:
         """Referenzen freigeben, sobald der Thread wirklich gestoppt ist."""

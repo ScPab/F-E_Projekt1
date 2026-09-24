@@ -292,6 +292,40 @@ ausgewählte Punkte bekommen einen Rand in der Akzentfarbe, die Füllung bleibt 
 Kohortenfarbe. Klick daneben hebt die Auswahl auf. Lasso und Rückkanal (`write_feedback`)
 sind bewusst nicht Teil dieser Fassung.
 
+## Architekturansicht
+
+Unter der Anzeigefläche stehen zwei Schaltflächen, **Architektur** und **Textausgabe**.
+Standard ist die Architektur: eine Kette aus sieben Stationen, die zeigt, was beim
+Abschicken der Reihe nach passiert — Auswahl → JSON, Mediator, Wrapper und Datenquelle,
+GDC-JSON → RDF, graph-db (Fuseki), Wissensnetz, Messmatrix. Die Stationen folgen
+`docs/DataBridge_Architektur.drawio`; gerendert wird das Bild nicht, sondern dieselbe Kette
+neu gezeichnet — eine `.drawio` ist XML für einen Editor, kein Format, aus dem man Zustände
+lebendig machen kann. (Das Diagramm ist vom 31.08. und an zwei Stellen überholt: `anndata`
+und der Rückkanal stehen dort als „geplant", anndata läuft inzwischen.)
+
+Jede Station trägt ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. Die
+Textausgabe bleibt einen Klick entfernt und unverändert — sie ist das Rohmaterial, wenn man
+einer Station nicht glaubt.
+
+**Was die Ansicht ehrlich zeigen kann.** Die Oberfläche hört den Mediator **nicht** mit: es
+gibt keinen Fortschrittskanal, nur einen HTTP-Aufruf, der läuft, und eine Antwort, die
+kommt. Während des Aufrufs steht deshalb nur fest, *dass* Mediator und Wrapper arbeiten,
+nicht wie weit sie sind. Alles Genauere ist **Beleg aus der Antwort**:
+
+| Station | woraus belegt |
+| --- | --- |
+| Auswahl → JSON | der Auftrag selbst, im Fenster gebaut |
+| Mediator | `status`, `recipe_key` je Ebene |
+| Wrapper → Datenquelle | `selection.source`, `failed_cohorts` |
+| GDC-JSON → RDF | `triple_count` |
+| graph-db (Fuseki) | dass Tripel da sind, plus `load=true` (ADR-0003) |
+| Wissensnetz | **eigener Abzug** vor und nach dem Aufruf, nicht die Antwort |
+| Messmatrix | `anndata.n_obs` / `filename`, nur bei `Generieren` |
+
+Ohne Beleg bleibt eine Station grau statt grün — eine erfundene Fortschrittsanzeige wäre
+genau die Sorte Behauptung, die man später glaubt. Die Zeile unter der Kette sagt das
+ebenfalls.
+
 ## Aufbau
 
 | Datei | Zweck |
@@ -304,12 +338,15 @@ sind bewusst nicht Teil dieser Fassung.
 | `searchable_select.py` | aufklappende Auswahlmenüs: `MultiSelect` (Häkchen; Kohorte, `Obj`, `Datenquelle`) und `SearchableSelect` (einwertig, zurzeit ungenutzt) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
 | `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
 | `netz_view.py` | das gezeichnete Netz (`QGraphicsView`, kein Browser) |
+| `architektur_view.py` | die Stationenkette unter der Anzeige |
+| `ablauf.py` | welche Station was belegt — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `projektion_view.py` | die Morphing-Karte (`pyqtgraph`, Regler, Auswahl) |
 | `morph.py` | Encodings und Positionen — **ohne Qt-Import**, nutzt die mp_lite-Module per Dateipfad |
 | `store_reader.py` | die drei SPARQL-Abfragen gegen Fuseki — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `tests/test_mediator_client.py` | Tests ohne Qt und ohne Netz (`requests` gemockt) |
 | `tests/test_store_reader.py` | Tests der Auswertung, mit einem Doppel für `GraphStore` |
 | `tests/test_morph.py` | Tests der Morphing-Rechnung, mit einem kuenstlichen AnnData |
+| `tests/test_ablauf.py` | Tests der Stationenkette: keine Station ohne Beleg |
 
 ```powershell
 pytest frontend/tests -q
