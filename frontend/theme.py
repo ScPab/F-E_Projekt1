@@ -86,6 +86,14 @@ ARCH_BOX_WIDTH = 250         # Breite einer Station (Symbol, Komponente, Beleg)
 ARCH_BOX_HEIGHT = 62         # deren Hoehe
 ARCH_ICON = 30               # Kantenlaenge des Symbols links im Kasten
 ARCH_ICON_MARGIN = 12        # dessen Abstand zum Rand
+# Die Linie, die waehrend eines Aufrufs am Rand entlanglaeuft ("border line
+# overlay"): Laenge des leuchtenden Stuecks, Breite, Tempo und wie weit der
+# Schein darunter ausblutet.
+ARCH_PULS_LAENGE = 48        # Laenge des wandernden Stuecks in Szeneneinheiten
+ARCH_PULS_BREITE = 3         # Strichstaerke
+ARCH_PULS_TEMPO = 150.0      # Einheiten je Sekunde
+ARCH_PULS_SCHEIN = 3         # so viele Lagen Schein unter der Linie
+ARCH_TAKT_MS = 40            # Bildtakt der Animation (25 Bilder je Sekunde)
 ARCH_GAP = 26                # Abstand zwischen zwei Stationen (Platz fuer den Pfeil)
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
@@ -497,6 +505,17 @@ def select_button_style(leer: bool) -> str:
     keinen Farbwert in ``searchable_select.py`` braucht.
     """
     return f"QPushButton#{OBJ_SELECT_BUTTON} {{ color: {TEXT_MUTED if leer else TEXT}; }}"
+
+
+def mit_deckkraft(farbe: str, anteil: float) -> QColor:
+    """Eine Farbkonstante mit Deckkraft — fuer den Schein unter der Laufschrift.
+
+    Auch das gehoert hierher: ausserhalb dieser Datei soll niemand an Farben
+    rechnen muessen.
+    """
+    c = QColor(farbe)
+    c.setAlphaF(max(0.0, min(1.0, anteil)))
+    return c
 
 
 def cohort_colors() -> dict[str, str]:

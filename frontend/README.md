@@ -304,7 +304,12 @@ lebendig machen kann. (Das Diagramm ist vom 31.08. und an zwei Stellen überholt
 und der Rückkanal stehen dort als „geplant", anndata läuft inzwischen.)
 
 Jede Station trägt ein gezeichnetes Symbol — Dokument, Dienst, Wolke, RDF-Tripel,
-Zylinder, Netz — und ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. Die
+Zylinder, Netz — und ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. An
+einer laufenden Station wandert eine leuchtende Linie am Rand entlang. Das ist bewusst
+**kein Fortschrittsbalken**: die Oberfläche weiß nicht, wie weit der Mediator ist, und ein
+Balken würde genau das behaupten — die umlaufende Linie sagt „hier passiert etwas", ohne zu
+lügen. Der Takt läuft nur, solange wirklich etwas läuft; im Ruhezustand kostet die Ansicht
+nichts. Die
 Symbole sind selbst gemalt, keine Icon-Dateien: sie skalieren mit der Szene, tragen die
 Farbe des Zustands und kosten keine neue Abhängigkeit. Benannt werden **Komponenten, keine
 Personen** — wer welchen Teil betreut, gehört in die Projektdoku, nicht in eine Oberfläche,

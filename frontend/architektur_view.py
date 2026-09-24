@@ -14,7 +14,7 @@ Editor, kein Format, aus dem man Zustaende lebendig machen kann.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QElapsedTimer, QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QBrush, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -120,11 +120,18 @@ def _male_symbol(painter: QPainter, art: str, feld: QRectF, farbe: str) -> None:
 
 
 class _Kasten(QGraphicsItem):
-    """Eine Station: Titel fett, darunter Komponente, Detail und Beleg."""
+    """Eine Station: Symbol links, Titel fett, darunter Komponente und Detail.
+
+    Laeuft sie gerade, wandert eine leuchtende Linie am Rand entlang. Das ist
+    bewusst **kein Fortschrittsbalken**: die Oberflaeche weiss nicht, wie weit
+    der Mediator ist (siehe ``ablauf``), und ein Balken wuerde genau das
+    behaupten. Eine umlaufende Linie sagt "hier passiert etwas", ohne zu luegen.
+    """
 
     def __init__(self, station: ablauf.Station) -> None:
         super().__init__()
         self._station = station
+        self._phase = 0.0
         self.setToolTip(
             f"{station.name}\n{station.komponente}"
             + (f"\n{station.detail}" if station.detail else "")
@@ -132,7 +139,47 @@ class _Kasten(QGraphicsItem):
         )
 
     def boundingRect(self) -> QRectF:  # noqa: D102
-        return QRectF(0, 0, theme.ARCH_BOX_WIDTH, theme.ARCH_BOX_HEIGHT)
+        # Etwas groesser als der Kasten: der Schein der Laufschrift blutet nach
+        # aussen aus und wuerde sonst abgeschnitten.
+        rand = theme.ARCH_PULS_BREITE * theme.ARCH_PULS_SCHEIN
+        return QRectF(0, 0, theme.ARCH_BOX_WIDTH,
+                      theme.ARCH_BOX_HEIGHT).adjusted(-rand, -rand, rand, rand)
+
+    def setze_phase(self, phase: float) -> None:
+        """Die Animation weiterdrehen — nur laufende Kaesten zeichnen neu."""
+        if not self._station.laeuft:
+            return
+        self._phase = phase
+        self.update()
+
+    def _male_laufschrift(self, painter: QPainter) -> None:
+        """Ein leuchtendes Stueck, das am Rand entlangwandert.
+
+        Umgesetzt ueber ein Strichmuster mit wanderndem Versatz: ein kurzes
+        "an", eine sehr lange Luecke — sichtbar ist damit immer genau ein
+        Stueck. Darunter liegen ein paar breitere, blassere Lagen als Schein.
+        """
+        feld = QRectF(0, 0, theme.ARCH_BOX_WIDTH,
+                      theme.ARCH_BOX_HEIGHT).adjusted(1, 1, -1, -1)
+        pfad = QPainterPath()
+        pfad.addRoundedRect(feld, theme.RADIUS, theme.RADIUS)
+
+        umfang = 2 * (feld.width() + feld.height())
+        breite = theme.ARCH_PULS_BREITE
+        # Das Strichmuster rechnet in Vielfachen der Strichstaerke.
+        an = theme.ARCH_PULS_LAENGE / breite
+        aus = umfang / breite
+        versatz = (self._phase % 1.0) * (an + aus)
+
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for lage in range(theme.ARCH_PULS_SCHEIN, 0, -1):
+            stift = QPen(theme.mit_deckkraft(theme.ACCENT, 0.9 / (lage * lage)))
+            stift.setWidthF(breite * lage)
+            stift.setCapStyle(Qt.PenCapStyle.RoundCap)
+            stift.setDashPattern([an, aus])
+            stift.setDashOffset(versatz)
+            painter.setPen(stift)
+            painter.drawPath(pfad)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # noqa: D102
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -143,8 +190,12 @@ class _Kasten(QGraphicsItem):
                        else theme.BORDER_WIDTH)
         painter.setPen(stift)
         painter.setBrush(QBrush(theme.qcolor(flaeche)))
-        painter.drawRoundedRect(self.boundingRect().adjusted(1, 1, -1, -1),
-                                theme.RADIUS, theme.RADIUS)
+        painter.drawRoundedRect(
+            QRectF(0, 0, theme.ARCH_BOX_WIDTH, theme.ARCH_BOX_HEIGHT)
+            .adjusted(1, 1, -1, -1),
+            theme.RADIUS, theme.RADIUS)
+        if self._station.laeuft:
+            self._male_laufschrift(painter)
 
         # Symbol links, Text rechts daneben.
         rand = theme.ARCH_ICON_MARGIN
@@ -198,11 +249,29 @@ class ArchitekturView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self._ablauf = ablauf.ruhend()
+        self._kaesten: list[_Kasten] = []
+
+        # Ein Takt fuer die Animation. Er laeuft **nur**, solange eine Station
+        # laeuft — im Ruhezustand kostet die Ansicht nichts.
+        self._uhr = QElapsedTimer()
+        self._takt = QTimer(self)
+        self._takt.setInterval(theme.ARCH_TAKT_MS)
+        self._takt.timeout.connect(self._tick)
+
         self.zeichne()
 
     def zeige(self, neuer: ablauf.Ablauf) -> None:
         self._ablauf = neuer
         self.zeichne()
+
+    def _tick(self) -> None:
+        """Ein Bild weiter: die Phase haengt an der verstrichenen Zeit, nicht an
+        der Zahl der Bilder — so laeuft die Linie ueberall gleich schnell."""
+        strecke = self._uhr.elapsed() / 1000.0 * theme.ARCH_PULS_TEMPO
+        phase = strecke / (theme.ARCH_PULS_LAENGE + 2 * (theme.ARCH_BOX_WIDTH
+                                                         + theme.ARCH_BOX_HEIGHT))
+        for kasten in self._kaesten:
+            kasten.setze_phase(phase)
 
     # -- Zeichnen ----------------------------------------------------------
     def zeichne(self) -> None:
@@ -228,6 +297,15 @@ class ArchitekturView(QGraphicsView):
 
         szene.setSceneRect(szene.itemsBoundingRect().adjusted(-8, -8, 8, 8))
         self._einpassen()
+
+        # Takt nur laufen lassen, wenn es etwas zu animieren gibt.
+        self._kaesten = kaesten
+        if any(s.laeuft for s in self._ablauf.stationen):
+            if not self._takt.isActive():
+                self._uhr.restart()
+                self._takt.start()
+        else:
+            self._takt.stop()
 
     def _male_pfeil(self, links: _Kasten, rechts: _Kasten) -> None:
         """Waagerechter Pfeil von Kasten zu Kasten."""
