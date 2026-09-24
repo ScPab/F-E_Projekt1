@@ -303,7 +303,12 @@ neu gezeichnet — eine `.drawio` ist XML für einen Editor, kein Format, aus de
 lebendig machen kann. (Das Diagramm ist vom 31.08. und an zwei Stellen überholt: `anndata`
 und der Rückkanal stehen dort als „geplant", anndata läuft inzwischen.)
 
-Jede Station trägt ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. Die
+Jede Station trägt ein gezeichnetes Symbol — Dokument, Dienst, Wolke, RDF-Tripel,
+Zylinder, Netz — und ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. Die
+Symbole sind selbst gemalt, keine Icon-Dateien: sie skalieren mit der Szene, tragen die
+Farbe des Zustands und kosten keine neue Abhängigkeit. Benannt werden **Komponenten, keine
+Personen** — wer welchen Teil betreut, gehört in die Projektdoku, nicht in eine Oberfläche,
+die später jemand anders bedient. Die
 Textausgabe bleibt einen Klick entfernt und unverändert — sie ist das Rohmaterial, wenn man
 einer Station nicht glaubt.
 

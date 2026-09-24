@@ -82,8 +82,10 @@ GRID_ALPHA = 0.6             # Deckkraft des Gitters in der Karte
 NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend
 
 # --- Architekturansicht (architektur_view.py) ------------------------------
-ARCH_BOX_WIDTH = 214         # Breite einer Station (Platz fuer Komponente und Beleg)
-ARCH_BOX_HEIGHT = 58         # deren Hoehe
+ARCH_BOX_WIDTH = 250         # Breite einer Station (Symbol, Komponente, Beleg)
+ARCH_BOX_HEIGHT = 62         # deren Hoehe
+ARCH_ICON = 30               # Kantenlaenge des Symbols links im Kasten
+ARCH_ICON_MARGIN = 12        # dessen Abstand zum Rand
 ARCH_GAP = 26                # Abstand zwischen zwei Stationen (Platz fuer den Pfeil)
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als

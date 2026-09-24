@@ -11,8 +11,9 @@ Tripelzahl, fehlgeschlagene Kohorten, ``.h5ad`` — ist **Beleg aus der Antwort*
 nicht Mitschnitt. Die Ansicht sagt das auch dazu; eine erfundene
 Fortschrittsanzeige waere genau die Sorte Behauptung, die man spaeter glaubt.
 
-Die Stationen folgen ``docs/DataBridge_Architektur.drawio`` (Kollege A: Wrapper,
-Kollege B: Mediator und Konvertierung, Marcel: Wissensnetz und graph-db). Das
+Die Stationen folgen ``docs/DataBridge_Architektur.drawio``, benennen aber
+**Komponenten statt Personen**: wer gerade welchen Teil betreut, gehoert in die
+Projektdoku, nicht in eine Oberflaeche, die spaeter jemand anders bedient. Das
 Diagramm ist vom 31.08. und an zwei Stellen ueberholt — ``anndata`` und der
 Rueckkanal stehen dort als "geplant", anndata laeuft inzwischen. Hier steht der
 Stand von heute.
@@ -42,12 +43,22 @@ WISSENSNETZ = "Wissensnetz"
 # Rauschen. Was aus ihr wurde, sagen Statuszeile und Textausgabe.
 
 
+# Symbole, die die Ansicht je Station zeichnet (siehe architektur_view).
+SYM_JSON = "json"
+SYM_DIENST = "dienst"
+SYM_QUELLE = "quelle"
+SYM_TRIPEL = "tripel"
+SYM_SPEICHER = "speicher"
+SYM_NETZ = "netz"
+
+
 @dataclass
 class Station:
     """Eine Station des Ablaufs mit ihrem Zustand und dem, was sie belegt."""
 
     name: str
-    komponente: str           # wer das tut — aus dem Architekturbild
+    komponente: str           # welche Komponente das tut — keine Personen
+    symbol: str = SYM_DIENST  # welches Bild dafuer steht
     zustand: str = WARTET
     detail: str = ""          # was tatsaechlich passiert ist
     beleg: str = ""           # woher das bekannt ist (Antwortfeld, eigener Abzug)
@@ -70,12 +81,12 @@ class Ablauf:
 
 def _leer() -> list[Station]:
     return [
-        Station(AUFTRAG, "Oberflaeche · mediator_client"),
-        Station(MEDIATOR, "Kollege B · /selection/*"),
-        Station(WRAPPER, "Kollege A · wrappers/gdc"),
-        Station(MAPPING, "Kollege B · semantic/mapping"),
-        Station(FUSEKI, "Jena Fuseki · Default-Graph"),
-        Station(WISSENSNETZ, "Marcel · wissensnetz/SPARQL"),
+        Station(AUFTRAG, "frontend/mediator_client.py", SYM_JSON),
+        Station(MEDIATOR, "FastAPI · POST /selection/*", SYM_DIENST),
+        Station(WRAPPER, "wrappers/gdc · GDC-API", SYM_QUELLE),
+        Station(MAPPING, "app/semantic/mapping.py", SYM_TRIPEL),
+        Station(FUSEKI, "Apache Jena · Default-Graph", SYM_SPEICHER),
+        Station(WISSENSNETZ, "wissensnetz · SPARQL", SYM_NETZ),
     ]
 
 

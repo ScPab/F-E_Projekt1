@@ -41,6 +41,84 @@ def _farben(zustand: str) -> tuple[str, str, bool]:
     return theme.WINDOW_BG, theme.BORDER, True      # wartet
 
 
+def _male_symbol(painter: QPainter, art: str, feld: QRectF, farbe: str) -> None:
+    """Das Bild einer Station — selbst gezeichnet, keine Icon-Datei.
+
+    Aus demselben Grund wie im Netz: gezeichnete Formen skalieren mit der Szene,
+    tragen die Farbe des Zustands und kosten keine neue Abhaengigkeit.
+    """
+    stift = QPen(theme.qcolor(farbe))
+    stift.setWidth(2)
+    stift.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(stift)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    x, y, b, h = feld.x(), feld.y(), feld.width(), feld.height()
+
+    if art == ablauf.SYM_JSON:
+        # Blatt mit geknickter Ecke und drei Zeilen: der Auftrag als Dokument.
+        knick = b * 0.3
+        pfad = QPainterPath(QPointF(x, y))
+        pfad.lineTo(x + b - knick, y)
+        pfad.lineTo(x + b, y + knick)
+        pfad.lineTo(x + b, y + h)
+        pfad.lineTo(x, y + h)
+        pfad.closeSubpath()
+        painter.drawPath(pfad)
+        for i in range(3):
+            zeile = y + h * (0.42 + i * 0.18)
+            painter.drawLine(QPointF(x + b * 0.2, zeile), QPointF(x + b * 0.8, zeile))
+
+    elif art == ablauf.SYM_DIENST:
+        # Zwei Einschuebe uebereinander: ein Dienst, der Anfragen annimmt.
+        for i in range(2):
+            oben = y + h * (0.08 + i * 0.5)
+            kasten = QRectF(x, oben, b, h * 0.36)
+            painter.drawRoundedRect(kasten, 3, 3)
+            painter.drawEllipse(QPointF(x + b * 0.2, oben + h * 0.18), 1.6, 1.6)
+
+    elif art == ablauf.SYM_QUELLE:
+        # Wolke: die Datenquelle liegt ausserhalb.
+        painter.drawEllipse(QPointF(x + b * 0.32, y + h * 0.52), b * 0.26, h * 0.26)
+        painter.drawEllipse(QPointF(x + b * 0.62, y + h * 0.46), b * 0.3, h * 0.3)
+        painter.drawLine(QPointF(x + b * 0.12, y + h * 0.74),
+                         QPointF(x + b * 0.88, y + h * 0.74))
+
+    elif art == ablauf.SYM_TRIPEL:
+        # Subjekt - Praedikat - Objekt: drei Knoten, zwei Kanten.
+        punkte = [QPointF(x + b * 0.15, y + h * 0.3),
+                  QPointF(x + b * 0.5, y + h * 0.75),
+                  QPointF(x + b * 0.85, y + h * 0.3)]
+        painter.drawLine(punkte[0], punkte[1])
+        painter.drawLine(punkte[1], punkte[2])
+        painter.setBrush(QBrush(theme.qcolor(farbe)))
+        for punkt in punkte:
+            painter.drawEllipse(punkt, 2.6, 2.6)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    elif art == ablauf.SYM_SPEICHER:
+        # Zylinder: der Store.
+        deckel = QRectF(x, y, b, h * 0.26)
+        painter.drawEllipse(deckel)
+        painter.drawLine(QPointF(x, y + h * 0.13), QPointF(x, y + h * 0.87))
+        painter.drawLine(QPointF(x + b, y + h * 0.13), QPointF(x + b, y + h * 0.87))
+        boden = QRectF(x, y + h * 0.74, b, h * 0.26)
+        painter.drawArc(boden, 0, -180 * 16)
+        painter.drawArc(QRectF(x, y + h * 0.37, b, h * 0.26), 0, -180 * 16)
+
+    elif art == ablauf.SYM_NETZ:
+        # Ein Knoten oben, zwei darunter — das Wissensnetz im Kleinen.
+        oben = QPointF(x + b * 0.5, y + h * 0.18)
+        links = QPointF(x + b * 0.16, y + h * 0.82)
+        rechts = QPointF(x + b * 0.84, y + h * 0.82)
+        painter.drawLine(oben, links)
+        painter.drawLine(oben, rechts)
+        painter.setBrush(QBrush(theme.qcolor(farbe)))
+        for punkt in (oben, links, rechts):
+            painter.drawEllipse(punkt, 3.0, 3.0)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+
 class _Kasten(QGraphicsItem):
     """Eine Station: Titel fett, darunter Komponente, Detail und Beleg."""
 
@@ -58,9 +136,9 @@ class _Kasten(QGraphicsItem):
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # noqa: D102
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        flaeche, rand, gedaempft = _farben(self._station.zustand)
+        flaeche, rand_farbe, gedaempft = _farben(self._station.zustand)
 
-        stift = QPen(theme.qcolor(rand))
+        stift = QPen(theme.qcolor(rand_farbe))
         stift.setWidth(theme.NETZ_BORDER_OPEN if self._station.laeuft
                        else theme.BORDER_WIDTH)
         painter.setPen(stift)
@@ -68,14 +146,23 @@ class _Kasten(QGraphicsItem):
         painter.drawRoundedRect(self.boundingRect().adjusted(1, 1, -1, -1),
                                 theme.RADIUS, theme.RADIUS)
 
-        innen = theme.ARCH_BOX_WIDTH - 20
+        # Symbol links, Text rechts daneben.
+        rand = theme.ARCH_ICON_MARGIN
+        groesse = theme.ARCH_ICON
+        _male_symbol(painter, self._station.symbol,
+                     QRectF(rand, (theme.ARCH_BOX_HEIGHT - groesse) / 2,
+                            groesse, groesse),
+                     theme.TEXT_MUTED if gedaempft else rand_farbe)
+
+        links = rand + groesse + 10
+        innen = theme.ARCH_BOX_WIDTH - links - 10
         schrift = QFont(painter.font())
         schrift.setBold(True)
         painter.setFont(schrift)
         painter.setPen(theme.qcolor(theme.TEXT_MUTED if gedaempft else theme.TEXT))
         metrik = painter.fontMetrics()
         painter.drawText(
-            QRectF(10, 6, innen, 18),
+            QRectF(links, 8, innen, 18),
             int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
             metrik.elidedText(self._station.name, Qt.TextElideMode.ElideRight, innen),
         )
@@ -92,7 +179,7 @@ class _Kasten(QGraphicsItem):
                 continue
             painter.setPen(theme.qcolor(farbe))
             painter.drawText(
-                QRectF(10, 24 + i * 15, innen, 15),
+                QRectF(links, 26 + i * 15, innen, 15),
                 int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
                 metrik.elidedText(text, Qt.TextElideMode.ElideRight, innen),
             )
