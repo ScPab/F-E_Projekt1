@@ -21,14 +21,18 @@ Wachstum zeigt die Farbe.**
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QFont, QPainter, QPainterPath, QPen, QTextOption
 from PySide6.QtWidgets import (
+    QFileDialog,
     QGraphicsItem,
     QGraphicsScene,
     QGraphicsView,
+    QHBoxLayout,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -174,6 +178,7 @@ class NetzView(QGraphicsView):
         """Welche Kohorte gerade aufgeklappt ist — das Fenster laesst sie beim
         Neuzeichnen offen, statt immer auf die erste zu springen."""
         return self._offene_kohorte
+
     def zeige_abzug(self, abzug: dict[str, Any],
                     unterschied: dict[str, Any] | None = None,
                     offen: str | None = None) -> None:
@@ -476,21 +481,45 @@ class NetzView(QGraphicsView):
 
 
 class NetzPanel(QWidget):
-    """Die Netzflaeche als Seite der Anzeige.
+    """Die Netzflaeche als Seite der Anzeige, mit einer Schaltflaeche darueber.
 
     Die Titelzeile hat dieses Panel frueher selbst gebaut. Seit es eine zweite
     Ansicht gibt (Projektion), steht sie im Fenster und ueberschreibt beide —
-    hier bleibt die reine Ansicht.
+    hier bleiben die Ansicht und der Weg, eine fertige ``.h5ad`` zu oeffnen.
     """
+
+    # Aus dieser Datei soll der Auftrag gelesen werden (Pfad).
+    datei_gewuenscht = Signal(str)
 
     def __init__(self, panel_namen: list[str] | None = None, parent=None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setSpacing(6)
+
+        kopf = QHBoxLayout()
+        kopf.setContentsMargins(2, 2, 2, 0)
+        self._oeffnen = QPushButton("Auftrag aus .h5ad …")
+        self._oeffnen.setToolTip(
+            "Eine fertige .h5ad oeffnen und die Auswahl daraus wiederherstellen"
+        )
+        self._oeffnen.clicked.connect(self._waehle_datei)
+        kopf.addWidget(self._oeffnen)
+        kopf.addStretch(1)
+        layout.addLayout(kopf)
 
         self.view = NetzView(panel_namen)
         layout.addWidget(self.view, stretch=1)
+
+    def _waehle_datei(self) -> None:
+        """Dateidialog; Startordner wie beim Speichern eines ``.h5ad``."""
+        start = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
+        pfad, _ = QFileDialog.getOpenFileName(
+            self, "Auftrag aus AnnData lesen", str(start),
+            "AnnData (*.h5ad);;Alle Dateien (*)"
+        )
+        if pfad:
+            self.datei_gewuenscht.emit(pfad)
 
     # Durchreichen, damit das Fenster nur das Panel kennt.
     def zeige_abzug(self, abzug: dict[str, Any],

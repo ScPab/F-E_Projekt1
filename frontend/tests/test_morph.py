@@ -198,3 +198,54 @@ def test_hover_text_faellt_auf_die_sample_id_zurueck() -> None:
 
 def test_hover_text_behandelt_leere_zeichenketten_wie_fehlend() -> None:
     assert "race: --" in morph.hover_text({"tumor": "x", "race": "  "})
+
+
+# --- Auftrag aus einer fertigen Datei ----------------------------------------
+PANEL_ATTRIBUTE = [
+    "sex_at_birth", "race", "ethnicity", "vital_status", "primary_diagnosis",
+    "age_at_diagnosis", "morphology", "site_of_resection_or_biopsy",
+    "tumor_stage", "has_metastasis", "sample_type",
+]
+
+
+def _modell(punkte, spalten):
+    return morph.Morphmodell(punkte=punkte, obs_spalten=spalten,
+                             dateiname="test.h5ad")
+
+
+def test_auftrag_liest_kohorten_und_proben_je_kohorte() -> None:
+    punkte = ([{"project_id": "TCGA-BRCA"}] * 20
+              + [{"project_id": "TCGA-LUAD"}] * 12)
+    auftrag = morph.auftrag_aus_modell(_modell(punkte, ["race"]), PANEL_ATTRIBUTE)
+    assert auftrag["cohorts"] == ["TCGA-BRCA", "TCGA-LUAD"]
+    # size ist die groesste Fallzahl je Kohorte - der Mediator holt size je Kohorte.
+    assert auftrag["size"] == 20
+    assert auftrag["proben"] == 32
+
+
+def test_auftrag_nimmt_nur_belegte_spalten_als_attribute() -> None:
+    """Der Mediator legt immer alle Spalten an; nur die angefragten sind gefuellt."""
+    modell = _modell([{"project_id": "TCGA-BRCA"}],
+                     ["submitter_id", "project_id", "race", "tumor_stage"])
+    auftrag = morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)
+    assert auftrag["attributes"] == ["race", "tumor_stage"]
+
+
+def test_auftrag_haelt_die_panel_reihenfolge() -> None:
+    modell = _modell([{"project_id": "TCGA-BRCA"}], ["tumor_stage", "race"])
+    assert morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)["attributes"] == [
+        "race", "tumor_stage",
+    ]
+
+
+def test_auftrag_uebersetzt_das_alte_feld_gender() -> None:
+    """Aeltere Dateien tragen noch Oviedos/GDCs alten Spaltennamen."""
+    modell = _modell([{"project_id": "TCGA-BRCA"}], ["gender"])
+    assert morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)["attributes"] == [
+        "sex_at_birth",
+    ]
+
+
+def test_auftrag_aus_leerem_modell_ist_leer() -> None:
+    auftrag = morph.auftrag_aus_modell(_modell([], []), PANEL_ATTRIBUTE)
+    assert auftrag == {"cohorts": [], "attributes": [], "size": 0, "proben": 0}

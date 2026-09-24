@@ -350,6 +350,7 @@ class MainWindow(QMainWindow):
         # Splitter im Splitter — gewollt und der kleinstmoegliche Eingriff.
         # Die Stellung wird bewusst nicht gespeichert.
         self._netz = NetzPanel(self._attribut_namen())
+        self._netz.datei_gewuenscht.connect(self._lade_auftrag)
         self._projektion = ProjektionPanel()
         self._projektion.datei_gewuenscht.connect(self._lade_h5ad)
         self._projektion.probe_geklickt.connect(self._hole_kontext)
@@ -476,6 +477,59 @@ class MainWindow(QMainWindow):
     def _projektion_hinweis(self) -> str:
         name = self._projektion.dateiname()
         return f"Messdaten aus {name}" if name else "Keine Datei geladen"
+
+    def _lade_auftrag(self, pfad: str) -> None:
+        """Eine fertige ``.h5ad`` oeffnen und die Auswahl daraus wiederherstellen.
+
+        Geladen wird im selben Worker wie fuer die Projektion — es ist dieselbe
+        Datei und derselbe Grund: 44 MB duerfen das Fenster nicht einfrieren.
+        """
+        if self._h5_thread is not None:
+            self.set_status("Es wird bereits eine Datei geladen — bitte warten.",
+                            "warning")
+            return
+        name = Path(pfad).name
+        self.set_status(f"Lese Auftrag aus {name} … Das Fenster bleibt bedienbar.",
+                        "busy")
+        self._h5_thread, self._h5_worker = worker.start_h5ad(
+            pfad, self._auftrag_fertig)
+        self._h5_thread.finished.connect(self._release_h5_thread)
+
+    def _auftrag_fertig(self, modell, fehler: str) -> None:
+        """Die rekonstruierte Auswahl ins Panel uebernehmen.
+
+        **Rekonstruktion, keine Aufzeichnung**: die Datei fuehrt den Auftrag
+        nicht mit (``uns`` ist leer), er wird aus den Daten abgeleitet (siehe
+        ``morph.auftrag_aus_modell``). Die Datenquelle steht nicht in der Datei
+        und bleibt deshalb unangetastet.
+        """
+        if modell is None:
+            self.set_status(fehler, "error")
+            return
+
+        import morph
+
+        auftrag = morph.auftrag_aus_modell(modell, self._attribut_namen())
+        bekannt = [k for k in auftrag["cohorts"] if k in self._cohorts]
+        fremd = [k for k in auftrag["cohorts"] if k not in self._cohorts]
+
+        self._cohort_select.set_checked(bekannt)
+        self._attribute_select.set_checked(auftrag["attributes"])
+        if auftrag["size"]:
+            self._size_spin.setValue(
+                max(mc.SIZE_MIN, min(mc.SIZE_MAX, auftrag["size"])))
+
+        teile = [
+            f"Auftrag aus {modell.dateiname} gelesen: {len(bekannt)} "
+            f"{'Kohorte' if len(bekannt) == 1 else 'Kohorten'}, "
+            f"{len(auftrag['attributes'])} Attribute, {auftrag['proben']} Proben."
+        ]
+        if fremd:
+            teile.append(f"Nicht im Panel: {', '.join(fremd)}.")
+        # Ehrlich bleiben: was die Datei nicht hergibt, wurde auch nicht gesetzt.
+        teile.append("Datenquelle bleibt unveraendert; leer gebliebene Attribute "
+                     "sind nicht rekonstruierbar.")
+        self.set_status("  ".join(teile), "success" if bekannt else "warning")
 
     def _lade_h5ad(self, pfad: str) -> None:
         """Eine ``.h5ad`` im Worker-Thread laden (siehe ``worker.H5adWorker``)."""

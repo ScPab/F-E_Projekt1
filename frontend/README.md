@@ -176,6 +176,22 @@ Zwei leere Zustände, die Verschiedenes bedeuten und deshalb verschieden aussehe
   blockiert nichts — `Vorschau` und `Generieren` sprechen mit dem Mediator, nicht mit
   Fuseki.
 
+**Eine fertige `.h5ad` bringt ihren Auftrag zurück.** Über `Auftrag aus .h5ad …` links
+über dem Netz lässt sich eine früher erzeugte Datei öffnen; die Oberfläche stellt daraus
+die Auswahl wieder her und zeichnet das Netz dazu. Das ist eine **Rekonstruktion, keine
+Aufzeichnung**: die Datei führt den Auftrag nicht mit (`uns` ist leer), er wird aus den
+Daten abgeleitet —
+
+| woraus | wie verlässlich |
+| --- | --- |
+| Kohorten aus `obs["project_id"]` | verlässlich |
+| Attribute aus den belegten `obs`-Spalten | ein angefragtes Attribut, das für **jede** Probe leer blieb, ist von einem nie angefragten nicht zu unterscheiden und fehlt |
+| `Proben` aus der größten Fallzahl je Kohorte | verlässlich, solange nicht nachträglich gefiltert wurde |
+| Datenquelle | steht nicht in der Datei und bleibt unangetastet |
+
+Ältere Dateien tragen noch die Spalte `gender`; sie wird auf `sex_at_birth` gezogen. Die
+Statuszeile nennt nach dem Lesen, was gesetzt wurde und was nicht.
+
 Aktualisiert wird beim Start, nach jedem Aufruf und über **`Ansicht > Netz aktualisieren`
 (F5)** — nötig, weil der Store sich auch ohne diese Oberfläche ändert, etwa durch
 `scripts/run_selection.py` oder `start_all.ps1 -FullLoad`. Rechts in der Statusleiste steht

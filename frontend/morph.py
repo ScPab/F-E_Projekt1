@@ -160,6 +160,9 @@ class Morphmodell:
     eintraege: list[Eintrag] = field(default_factory=list)
     punkte: list[dict] = field(default_factory=list)      # eine Zeile je Probe
     kohorten: list[str | None] = field(default_factory=list)
+    # obs-Spalten, die mindestens einen Wert tragen — Grundlage dafuer, aus einer
+    # fertigen Datei wieder den Auftrag zu lesen (siehe auftrag_aus_modell).
+    obs_spalten: list[str] = field(default_factory=list)
     dateiname: str = ""
     hat_basis: bool = False
 
@@ -307,6 +310,7 @@ def baue_encodings(adata: Any, dateiname: str = "") -> Morphmodell:
     # nichts.
     hat_basis = any(e.nutzbar for e in eintraege[:2])
     return Morphmodell(eintraege=eintraege, punkte=punkte, kohorten=kohorten,
+                       obs_spalten=belegte_spalten(adata),
                        dateiname=dateiname, hat_basis=hat_basis)
 
 
@@ -357,3 +361,74 @@ def hover_text(zeile: dict[str, Any]) -> str:
     zeilen = [f"Sample: {probe}"]
     zeilen += [f"{feld}: {wert(feld)}" for feld in HOVER_FELDER]
     return "\n".join(zeilen)
+
+
+# --- Aus einer fertigen Datei wieder den Auftrag lesen -----------------------
+# Der alte Name des Feldes: GDC hat ``gender`` in ``sex_at_birth`` umbenannt,
+# aeltere .h5ad tragen noch die alte Spalte.
+LEGACY_SPALTEN = {"gender": "sex_at_birth"}
+
+
+def belegte_spalten(adata: Any) -> list[str]:
+    """Die ``obs``-Spalten, die mindestens einen Wert tragen.
+
+    Der Mediator legt **immer** dieselben Spalten an; nur die angefragten sind
+    gefuellt. Eine belegte Spalte ist damit der einzige Hinweis darauf, welche
+    Attribute im Auftrag standen — die Datei selbst fuehrt ihn nicht mit
+    (``uns`` ist leer).
+    """
+    if adata is None:
+        return []
+    spalten = []
+    for name in getattr(adata.obs, "columns", []):
+        werte = adata.obs[name]
+        try:
+            gefuellt = any(
+                v is not None and str(v).strip() not in ("", "nan", "None", FEHLT)
+                for v in werte
+            )
+        except TypeError:      # pragma: no cover - exotische Spaltentypen
+            gefuellt = False
+        if gefuellt:
+            spalten.append(str(name))
+    return spalten
+
+
+def auftrag_aus_modell(modell: Morphmodell,
+                       panel_namen: list[str]) -> dict[str, Any]:
+    """Aus einer geladenen ``.h5ad`` die Auswahl rekonstruieren, die zu ihr fuehrte.
+
+    **Das ist eine Rekonstruktion, keine Aufzeichnung.** Die Datei fuehrt den
+    Auftrag nicht mit (``uns`` ist leer), also wird er aus den Daten abgeleitet:
+
+    - **Kohorten** aus ``obs["project_id"]`` — verlaesslich.
+    - **Attribute** aus den belegten ``obs``-Spalten. Ein Attribut, das
+      angefragt wurde, aber fuer *jede* Probe leer blieb, ist dabei nicht von
+      einem nie angefragten zu unterscheiden; solche Faelle fehlen in der
+      Rekonstruktion.
+    - **Proben** aus der groessten Fallzahl je Kohorte — der Mediator holt
+      ``size`` Proben je Kohorte.
+
+    Die **Datenquelle** steht nicht in der Datei und bleibt unangetastet.
+    """
+    kohorten: list[str] = []
+    je_kohorte: dict[str, int] = {}
+    for punkt in modell.punkte:
+        projekt = punkt.get("project_id")
+        if not projekt:
+            continue
+        projekt = str(projekt)
+        if projekt not in je_kohorte:
+            kohorten.append(projekt)
+        je_kohorte[projekt] = je_kohorte.get(projekt, 0) + 1
+
+    belegt = set(modell.obs_spalten)
+    belegt |= {neu for alt, neu in LEGACY_SPALTEN.items() if alt in belegt}
+    attribute = [name for name in panel_namen if name in belegt]
+
+    return {
+        "cohorts": sorted(kohorten),
+        "attributes": attribute,
+        "size": max(je_kohorte.values(), default=0),
+        "proben": len(modell.punkte),
+    }
