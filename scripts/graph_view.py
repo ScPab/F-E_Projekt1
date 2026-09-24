@@ -19,6 +19,28 @@ letzten Laufs, nicht den aktuellen.
 
 Projekt-Skript (nutzt nur wissensnetz.GraphStore ueber SPARQL; keine Kopplung an
 mediator/wrappers). Zusatz-Abhaengigkeit: pyvis.
+
+English: Interactive visualization of the knowledge graph (pyvis) from
+the running Fuseki.
+
+    python scripts/graph_view.py                 # generate and open graph_view.html
+    python scripts/graph_view.py --limit 800 --no-open
+
+Pulls triples from both the default AND named graphs via SPARQL, builds
+an interactive HTML network from them and colors the nodes by area:
+  * Schema (TBox/vocabulary)       - blue
+  * TCGA instances (cases etc.)    - green
+  * Feedback channel (annotations) - red
+  * External concepts (NCIt ...)   - purple
+Purpose: a feel for how the network grows. Simply run again to refresh.
+
+Diagnostic tool, not part of startup: since Task 16, `start_all.ps1`
+only generates the view with `-WithGraphView`. The versioned
+`graph_view.html` in the project root may therefore be stale — it shows
+the store state of the last run, not the current one.
+
+Project script (only uses wissensnetz.GraphStore via SPARQL; no coupling
+to mediator/wrappers). Extra dependency: pyvis.
 """
 
 from __future__ import annotations
@@ -37,10 +59,10 @@ ANNO = "http://databridge.hka/instance/annotation/"
 USERGRAPH = "http://databridge.hka/graph/user/"
 
 COLORS = {
-    "schema":   "#2E74B5",   # TBox / Vokabular
-    "instanz":  "#2E7D32",   # TCGA-Instanzen
-    "feedback": "#C0504D",   # Rueckkanal / Annotationen
-    "extern":   "#7B4FA3",   # NCIt & andere externe Konzepte
+    "schema":   "#2E74B5",   # TBox / Vokabular / EN: TBox / vocabulary
+    "instanz":  "#2E7D32",   # TCGA-Instanzen / EN: TCGA instances
+    "feedback": "#C0504D",   # Rueckkanal / Annotationen / EN: feedback channel / annotations
+    "extern":   "#7B4FA3",   # NCIt & andere externe Konzepte / EN: NCIt & other external concepts
     "other":    "#999999",
 }
 
@@ -86,12 +108,14 @@ def build(store: GraphStore, limit: int, output: str) -> tuple[int, int]:
     lits = _q_iri_literal(store, limit)
 
     # rdf:type je Knoten (fuer Faerbung)
+    # EN: rdf:type per node (for coloring)
     node_type: dict[str, str] = {}
     for r in edges:
         if r.get("p") == RDF_TYPE and r.get("s") and r.get("o"):
             node_type[r["s"]] = localname(r["o"])
 
     # Literale als Tooltip-Text je Knoten sammeln
+    # EN: Collect literals as tooltip text per node
     tips: dict[str, list[str]] = {}
     for r in lits:
         s, p, o = r.get("s"), r.get("p"), r.get("o")
@@ -99,6 +123,7 @@ def build(store: GraphStore, limit: int, output: str) -> tuple[int, int]:
             tips.setdefault(s, []).append(f"{localname(p)}: {o}")
 
     # Knoten einsammeln
+    # EN: Collect nodes
     node_ids: set[str] = set()
     for r in edges:
         if r.get("s"):
@@ -106,7 +131,7 @@ def build(store: GraphStore, limit: int, output: str) -> tuple[int, int]:
         if r.get("o"):
             node_ids.add(r["o"])
 
-    from pyvis.network import Network  # lazy: nur wenn wirklich gerendert wird
+    from pyvis.network import Network  # lazy: nur wenn wirklich gerendert wird / EN: lazy: only when actually rendered
 
     net = Network(height="820px", width="100%", directed=True, bgcolor="#ffffff",
                   font_color="#222222", cdn_resources="remote")
@@ -135,10 +160,11 @@ def build(store: GraphStore, limit: int, output: str) -> tuple[int, int]:
         edge_count += 1
 
     # Standalone-HTML schreiben (ohne Auto-Open durch pyvis)
+    # EN: Write standalone HTML (without pyvis auto-open)
     try:
         net.write_html(output, open_browser=False, notebook=False)
     except TypeError:
-        net.save_graph(output)  # aeltere pyvis-Versionen
+        net.save_graph(output)  # aeltere pyvis-Versionen / EN: older pyvis versions
 
     return len(node_ids), edge_count
 

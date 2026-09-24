@@ -4,6 +4,15 @@ Das Event wird in einen **isolierten Named Graph** geschrieben (im ``finally``
 per ``DROP GRAPH`` verworfen) und per SPARQL wieder ausgelesen: Annotation
 vorhanden, alle Proben als ``oa:hasTarget``, Hypothese from→to korrekt, und die
 **RDF-star-Kern-Aussage** abfragbar. Skip ohne Fuseki (Fixtures übernehmen das).
+
+English: Task 4 — acceptance: write and read back a feedback-channel
+event.
+
+The event is written into an **isolated named graph** (discarded via
+``DROP GRAPH`` in ``finally``) and read back via SPARQL: annotation
+present, all samples as ``oa:hasTarget``, hypothesis from→to correct, and
+the **RDF-star core statement** queryable. Skipped without Fuseki (the
+fixtures handle that).
 """
 
 from __future__ import annotations
@@ -15,7 +24,7 @@ from wissensnetz.config import PREFIXES
 from wissensnetz.graphstore import GraphStore
 
 TEST_USER = "pytest-nvaldes"
-TARGET = "http://purl.obolibrary.org/obo/NCIT_PanNET"  # ncit:PanNET
+TARGET = "http://purl.obolibrary.org/obo/NCIT_PanNET"  # ncit:PanNET / EN: ncit:PanNET
 
 
 def _event() -> fb.SelectionEvent:
@@ -35,7 +44,10 @@ def _event() -> fb.SelectionEvent:
 
 @pytest.fixture()
 def feedback_graph(store: GraphStore):
-    """Schreibt ein Event und räumt den Nutzer-Graph danach wieder ab."""
+    """Schreibt ein Event und räumt den Nutzer-Graph danach wieder ab.
+
+    English: Writes an event and cleans up the user graph afterward.
+    """
     event = _event()
     graph = fb.write_feedback(store, event)
     try:
@@ -80,6 +92,7 @@ def test_hypothesis_from_to(feedback_graph) -> None:
 
 def test_rdf_star_core_assertion(feedback_graph) -> None:
     # SPARQL-star: Provenienz/Konfidenz direkt an << sample db:reclassifiedAs to >>.
+    # EN: SPARQL-star: provenance/confidence directly on << sample db:reclassifiedAs to >>.
     store, graph, event = feedback_graph
     rows = store.query(
         PREFIXES
@@ -109,6 +122,7 @@ def test_list_findings_and_reclassifications(feedback_graph) -> None:
 
 def test_sample_selection_event_json_roundtrip(store: GraphStore) -> None:
     # Das mitgelieferte Beispiel-Event laden, schreiben, zählen, aufräumen.
+    # EN: Load the bundled sample event, write it, count, clean up.
     from pathlib import Path
 
     path = Path(__file__).resolve().parents[1] / "data" / "sample" / "selection_event.json"
@@ -117,6 +131,6 @@ def test_sample_selection_event_json_roundtrip(store: GraphStore) -> None:
     graph = fb.write_feedback(store, event)
     try:
         recls = fb.reclassifications(store, user=event.user)
-        assert len(recls) == 6  # sechs PAAD-Proben aus Fallstudie 1
+        assert len(recls) == 6  # sechs PAAD-Proben aus Fallstudie 1 / EN: six PAAD samples from case study 1
     finally:
         store.update(f"DROP GRAPH <{graph}>")

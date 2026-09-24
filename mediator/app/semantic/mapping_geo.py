@@ -13,6 +13,22 @@ wiederverwendet werden kann.
 
 Global-as-View, wie bei GDC (siehe mapping.py-Modul-Docstring): quellen-
 spezifische Übersetzungslogik direkt in diesem Modul.
+
+English: Rule-based GEO series JSON -> RDF/OWL mapping (ABox).
+
+Analogous to `mapping.py` (GDC): the same construct-by-construct logic, here
+for the response of `GEOWrapper.search(entry_type="gse")` (esummary
+DocumentSummary per GEO series). Ontology/TBox: see
+wissensnetz/ontology/databridge-core.ttl (`db:Series`/`db:Run`).
+
+No enum alignment for this first slice (unlike
+`diagnoses.primary_diagnosis` in mapping.py) — hence always an empty list of
+RDF-star annotations; the return shape is nonetheless identical to
+`mapping.cases_to_graph`, so `serialize_with_provenance` can be reused
+unchanged.
+
+Global-as-view, as with GDC (see mapping.py module docstring):
+source-specific translation logic directly in this module.
 """
 
 from __future__ import annotations
@@ -30,7 +46,10 @@ StarAnnotation = tuple[URIRef, URIRef, URIRef, str, float]
 
 
 def _slug(value: str) -> str:
-    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (siehe mapping.py)."""
+    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (siehe mapping.py).
+
+    English: Instance-IRI-suitable fragment from an arbitrary identifier (see mapping.py).
+    """
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-") or "unbekannt"
 
 
@@ -45,6 +64,14 @@ def series_to_graph(series_list: list[dict[str, Any]]) -> tuple[Graph, list[Star
     Felder wie `accession`, `title`, `summary`, `taxon`, `gdstype`, `pdat`,
     `n_samples`, `ftplink` sowie das verschachtelte `samples` (Liste von
     `{accession, title}` je GSM innerhalb der Series).
+
+    English: Translates GEO series hits (esummary DocumentSummaries) into
+    RDF triples.
+
+    Expects the raw shape of `GEOWrapper.search(entry_type="gse")`, i.e.
+    fields such as `accession`, `title`, `summary`, `taxon`, `gdstype`,
+    `pdat`, `n_samples`, `ftplink` as well as the nested `samples` (list of
+    `{accession, title}` per GSM within the series).
     """
     graph = Graph()
     _bind_prefixes(graph)

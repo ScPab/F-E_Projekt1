@@ -9,6 +9,19 @@ Statusleiste.
 selbst zurueckgibt. Einzige Ausnahme beim Import: die Kohorten-Konstante
 ``wissensnetz.cohorts.COHORT_PROJECT_IDS``, damit Ladeskript, MP-Lite und
 Oberflaeche dieselbe Wahrheit nutzen (Aufgabe 17, Deliverable 11).
+
+English: Window, selection panel, signals and slots.
+
+Layout follows the hand sketch (ADR-0004, item 2): the display area on the
+left, the selection panel on the right, the two buttons below the display
+area, and the status bar at the bottom.
+
+**This version does NOT read from the Wissensnetz (knowledge net).** No
+``GraphStore``, no ``cases_for_selection`` — the display area shows exactly
+what the mediator itself returns. The only exception on import is the
+cohort constant ``wissensnetz.cohorts.COHORT_PROJECT_IDS``, so that the
+loading script, MP-Lite, and the UI all use the same source of truth
+(task 17, deliverable 11).
 """
 
 from __future__ import annotations
@@ -50,18 +63,26 @@ from searchable_select import KIND_HEADER, MultiSelect
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "panel.json"
 
 # Wie viele Turtle-Zeilen als Ausschnitt angehaengt werden.
+# EN: How many Turtle lines are appended as an excerpt.
 TURTLE_PREVIEW_LINES = 40
 
 # Wie hoch die aufgeklappte Attributkarte hoechstens wird. Elf Attribute und
 # drei Gruppenueberschriften passen damit ohne Scrollen hinein und bleiben auch
 # auf einem 768 Pixel hohen Bildschirm unter der Schaltflaeche sichtbar.
+# EN: The maximum height of the expanded attribute card. Eleven attributes
+# and three group headings fit in without scrolling and stay visible below
+# the button even on a 768-pixel-tall screen.
 _ATTRIBUTE_CARD_HEIGHT = 520
 
 
 
 def load_panel_config() -> dict[str, Any]:
     """``config/panel.json`` lesen. Fehlt sie, bleibt die Oberflaeche leer,
-    statt beim Start abzustuerzen."""
+    statt beim Start abzustuerzen.
+
+    English: Read ``config/panel.json``. If it is missing, the UI stays
+    empty instead of crashing on startup.
+    """
     try:
         return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
@@ -75,6 +96,14 @@ def load_cohorts(config: dict[str, Any]) -> tuple[list[str], str | None]:
     aus einem installierten Paket, **kein** Zugriff auf den Store. Schlaegt der
     Import fehl, greift die Liste aus ``panel.json``, und der Hinweis wandert in
     die Statusleiste.
+
+    English: Obtain the cohort list. Returns ``(kohorten, hinweis)``
+    (cohorts, note).
+
+    Authoritative is ``wissensnetz.cohorts.COHORT_PROJECT_IDS`` — just a
+    constant from an installed package, **no** access to the store. If the
+    import fails, the list from ``panel.json`` is used instead, and the note
+    is shown in the status bar.
     """
     try:
         from wissensnetz.cohorts import COHORT_PROJECT_IDS
@@ -94,6 +123,13 @@ def _kontext_aus_store(barcode: str) -> dict[str, Any] | None:
     Der Schluessel ist ``obs["submitter_id"]`` gegen ``db:submitterId``;
     ``case_context`` nimmt beides, Case-IRI oder ``submitterId``. Der Store kommt
     aus ``store_reader``, es wird keine zweite Instanz angelegt.
+
+    English: Context of a sample from the Wissensnetz (knowledge net) — runs
+    in the worker thread.
+
+    The key is ``obs["submitter_id"]`` against ``db:submitterId``;
+    ``case_context`` accepts either one, case IRI or ``submitterId``. The
+    store comes from ``store_reader``; no second instance is created.
     """
     from wissensnetz.enrichment import case_context
 
@@ -107,7 +143,11 @@ def _kontext_aus_store(barcode: str) -> dict[str, Any] | None:
 
 
 class MainWindow(QMainWindow):
-    """Das Hauptfenster: Auswahl zusammenstellen, abschicken, Antwort zeigen."""
+    """Das Hauptfenster: Auswahl zusammenstellen, abschicken, Antwort zeigen.
+
+    English: The main window: assemble the selection, submit it, show the
+    response.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -120,21 +160,33 @@ class MainWindow(QMainWindow):
         # Thread und Worker festhalten, solange der Aufruf laeuft. Faellt die
         # letzte Python-Referenz, waehrend der QThread noch laeuft, beendet Qt
         # den Prozess hart ("Destroyed while thread is still running").
+        # EN: Keep the thread and worker alive as long as the call is
+        # running. If the last Python reference is dropped while the
+        # QThread is still running, Qt hard-kills the process ("Destroyed
+        # while thread is still running").
         self._thread = None
         self._worker = None
         # Dieselbe Regel fuer den separaten Download-Thread (siehe worker.py).
+        # EN: Same rule for the separate download thread (see worker.py).
         self._dl_thread = None
         self._dl_worker = None
         # Ebenso fuer das Laden einer .h5ad und die Kontextabfrage der Projektion.
+        # EN: Likewise for loading a .h5ad and the context query of the
+        # projection.
         self._h5_thread = None
         self._h5_worker = None
         self._kontext_thread = None
         self._kontext_worker = None
         # Zuletzt gespeicherte .h5ad — die Projektion laedt sie, sobald man auf
         # sie umschaltet (nicht vorher, siehe _wechsle_ansicht).
+        # EN: Last saved .h5ad — the projection loads it as soon as you
+        # switch to it (not before, see _wechsle_ansicht).
         self._offene_h5ad = ""
         # Ebenen des letzten erfolgreichen 'Generieren'-Laufs mit .h5ad —
         # Grundlage fuer das Download-Menue (siehe _update_download_menu).
+        # EN: Levels of the last successful 'Generieren' (generate) run with
+        # .h5ad — the basis for the download menu (see
+        # _update_download_menu).
         self._downloadable: list[dict[str, Any]] = []
 
         self._build_menu()
@@ -153,16 +205,22 @@ class MainWindow(QMainWindow):
         # Abzug A des laufenden Aufrufs und der zuletzt gezeichnete Stand.
         # Beide werden im Worker-Thread gesetzt und erst danach im GUI-Thread
         # gelesen (siehe _abzug_vorher/_abzug_nachher und _on_finished).
+        # EN: Snapshot A of the running call and the state last drawn. Both
+        # are set in the worker thread and only read afterwards in the GUI
+        # thread (see _abzug_vorher/_abzug_nachher and _on_finished).
         self._abzug_a: dict[str, Any] | None = None
         self._letzter_abzug: dict[str, Any] | None = None
         self._netz_aktualisieren()
 
         # Das Netz zieht mit der Auswahl mit, ohne den Store erneut zu fragen:
         # gezeichnet wird aus dem zuletzt gelesenen Abzug.
+        # EN: The net follows the selection without querying the store
+        # again: it is drawn from the most recently read snapshot.
         self._cohort_select.selection_changed.connect(self._auswahl_geaendert)
         self._attribute_select.selection_changed.connect(self._auswahl_geaendert)
 
     # -- Menue ---------------------------------------------------------------
+    # EN: Menu (translated)
     def _build_menu(self) -> None:
         """Menueleiste mit dem Download-Eintrag.
 
@@ -175,6 +233,18 @@ class MainWindow(QMainWindow):
         7.2) — mit nur einer Ebene steht dort eben genau ein Eintrag.
         Deaktiviert, bis ein 'Generieren'-Lauf etwas Herunterladbares
         liefert (siehe ``_update_download_menu``).
+
+        English: Menu bar with the download entry.
+
+        The ``.h5ad`` is created inside the mediator container and is not
+        visible from there as a host path (see ``mediator_client.download``)
+        — this menu is the way to get it onto your own disk without a
+        Docker command line. A submenu instead of a single action, because
+        several checked data sources can yield several levels and therefore
+        several ``.h5ad`` files (ADR-0003, decision 7.2) — with just one
+        level there is simply exactly one entry. Disabled until a
+        'Generieren' (generate) run produces something downloadable (see
+        ``_update_download_menu``).
         """
         file_menu = self.menuBar().addMenu("&Datei")
         self._download_menu = QMenu("Als .h5ad speichern", self)
@@ -184,6 +254,9 @@ class MainWindow(QMainWindow):
         # Der Store aendert sich auch ohne diese Oberflaeche, etwa durch
         # scripts/run_selection.py oder start_all.ps1 -FullLoad. Ohne diesen
         # Eintrag altert das Bild still.
+        # EN: The store also changes without this UI, e.g. through
+        # scripts/run_selection.py or start_all.ps1 -FullLoad. Without this
+        # entry the picture would silently go stale.
         view_menu = self.menuBar().addMenu("&Ansicht")
         refresh = QAction("Netz aktualisieren", self)
         refresh.setShortcut("F5")
@@ -196,6 +269,13 @@ class MainWindow(QMainWindow):
         Nur ``status="ok"`` UND vorhandene ``anndata.download_url`` zaehlen —
         eine fehlgeschlagene Ebene oder eine Vorschau hat keine Datei zum
         Holen (siehe ``SelectionLevelResult`` im Mediator).
+
+        English: Levels with a successfully generated ``.h5ad`` from a
+        mediator response.
+
+        Only ``status="ok"`` AND a present ``anndata.download_url`` count —
+        a failed level or a preview has no file to fetch (see
+        ``SelectionLevelResult`` in the mediator).
         """
         entries: list[dict[str, Any]] = []
         for level in levels:
@@ -215,7 +295,12 @@ class MainWindow(QMainWindow):
     def _update_download_menu(self, entries: list[dict[str, Any]]) -> None:
         """Download-Untermenue UND den Download-Button neu einrichten (nach
         jedem 'Generieren') — beide teilen sich dieselbe Liste, damit sie nie
-        auseinanderlaufen."""
+        auseinanderlaufen.
+
+        English: Rebuild the download submenu AND the download button
+        (after every 'Generieren' (generate)) — both share the same list so
+        they never drift apart.
+        """
         self._downloadable = entries
         self._download_menu.clear()
         self._download_menu.setEnabled(bool(entries))
@@ -228,7 +313,12 @@ class MainWindow(QMainWindow):
     def _on_download_button_clicked(self) -> None:
         """Bei genau einer Ebene direkt den Speichern-Dialog oeffnen, bei
         mehreren (mehrere angehakte Datenquellen) dieselbe Auswahl wie im
-        Menue als Popup unter dem Button zeigen."""
+        Menue als Popup unter dem Button zeigen.
+
+        English: With exactly one level, open the save dialog directly;
+        with several (several checked data sources), show the same choice
+        as in the menu as a popup below the button.
+        """
         if not self._downloadable:
             return
         if len(self._downloadable) == 1:
@@ -245,6 +335,14 @@ class MainWindow(QMainWindow):
         Konvention wie ``start_all.ps1 -DemoGenerate``/``run_selection.py --out``,
         damit MP-Lite/Explorer dieselben Ablagen kennen. Der Nutzer kann das
         im Dialog jederzeit aendern.
+
+        English: Show the save dialog and download the file in the
+        background.
+
+        Suggested folder/name: ``wissensnetz/data/<filename>`` — the same
+        convention as ``start_all.ps1 -DemoGenerate``/``run_selection.py
+        --out``, so that MP-Lite/Explorer know the same storage locations.
+        The user can change this in the dialog at any time.
         """
         if self._dl_thread is not None:
             self.set_status("Es laeuft bereits ein Download — bitte warten.", "warning")
@@ -268,17 +366,24 @@ class MainWindow(QMainWindow):
         if result.ok:
             # Die gerade erzeugte Datei ist der erste der drei Wege zur
             # Projektion (geladen wird sie erst beim Umschalten).
+            # EN: The file just created is the first of three ways to reach
+            # the projection (it is only loaded when switching views).
             self._offene_h5ad = str(result.data.get("path") or "")
             self.set_status(f"Gespeichert: {result.data.get('path')}", "success")
         else:
             self.set_status(result.error or "Download fehlgeschlagen.", "error")
 
     def _release_download_thread(self) -> None:
-        """Wie ``_release_thread``, aber fuer den Download-Thread (siehe dort)."""
+        """Wie ``_release_thread``, aber fuer den Download-Thread (siehe dort).
+
+        English: Like ``_release_thread``, but for the download thread (see
+        there).
+        """
         self._dl_thread = None
         self._dl_worker = None
 
     # -- Aufbau ------------------------------------------------------------
+    # EN: Setup (translated)
     def _build_ui(self) -> None:
         root = QWidget()
         root_layout = QVBoxLayout(root)
@@ -305,6 +410,9 @@ class MainWindow(QMainWindow):
         self._status = QStatusBar()
         # Zusaetzlich rechts ein dauerhaftes Feld mit dem Stand des Stores:
         # set_status() schreibt weiterhin links, die beiden kollidieren nicht.
+        # EN: Additionally, a permanent field on the right with the store's
+        # status: set_status() continues to write on the left, the two do
+        # not collide.
         self._store_label = QLabel("Store: —")
         self._status.addPermanentWidget(self._store_label)
         self.setStatusBar(self._status)
@@ -329,7 +437,10 @@ class MainWindow(QMainWindow):
         return header
 
     def _build_display_side(self) -> QWidget:
-        """Anzeigeflaeche plus die beiden Schaltflaechen darunter."""
+        """Anzeigeflaeche plus die beiden Schaltflaechen darunter.
+
+        English: Display area plus the two buttons below it.
+        """
         side = QWidget()
         layout = QVBoxLayout(side)
         layout.setContentsMargins(0, 0, 12, 0)
@@ -349,6 +460,10 @@ class MainWindow(QMainWindow):
         # unveraendert self._output (dasselbe Widget, nicht neu gebaut). Ein
         # Splitter im Splitter — gewollt und der kleinstmoegliche Eingriff.
         # Die Stellung wird bewusst nicht gespeichert.
+        # EN: A vertical splitter instead of the one row: the views on top,
+        # self._output unchanged at the bottom (the same widget, not
+        # rebuilt). A splitter inside a splitter — intentional and the
+        # smallest possible change. Its position is deliberately not saved.
         self._netz = NetzPanel(self._attribut_namen())
         self._projektion = ProjektionPanel()
         self._projektion.datei_gewuenscht.connect(self._lade_h5ad)
@@ -366,6 +481,8 @@ class MainWindow(QMainWindow):
         anzeige.addWidget(self._output)
         # Die Titelzeile ist kein Feld zum Ziehen: nur die beiden Flaechen
         # darunter teilen sich den Platz.
+        # EN: The title row is not a draggable field: only the two areas
+        # below it share the space.
         anzeige.setStretchFactor(1, 3)
         anzeige.setStretchFactor(2, 2)
         anzeige.setSizes([28, 360, 240])
@@ -388,6 +505,12 @@ class MainWindow(QMainWindow):
         # direkt neben den anderen beiden Aktionen und ist daher nicht zu
         # uebersehen. Deaktiviert, bis 'Generieren' etwas Herunterladbares
         # liefert (siehe _update_download_menu).
+        # EN: A visible button instead of just the "File" menu: a menu
+        # entry alone was not found during testing ("there's just a
+        # download_url there, but nowhere to actually download it") — the
+        # button sits directly next to the other two actions and is
+        # therefore hard to miss. Disabled until a 'Generieren' (generate)
+        # run produces something downloadable (see _update_download_menu).
         self._download_button = QPushButton("Als .h5ad speichern")
         self._download_button.setEnabled(False)
         self._download_button.clicked.connect(self._on_download_button_clicked)
@@ -405,6 +528,13 @@ class MainWindow(QMainWindow):
 
         Umschalten ist rein optisch und hat **keine Nebenwirkung**: es stoesst
         keinen Abruf an, laedt keine Datei und verwirft keinen Zustand.
+
+        English: The title row above the display: the toggle on the left,
+        a hint matching the current view on the right.
+
+        Switching is purely visual and has **no side effect**: it does not
+        trigger a request, does not load a file, and does not discard any
+        state.
         """
         zeile = QWidget()
         layout = QHBoxLayout(zeile)
@@ -435,6 +565,7 @@ class MainWindow(QMainWindow):
         return zeile
 
     # -- Projektion ----------------------------------------------------------
+    # EN: Projection (translated)
     def _wechsle_ansicht(self, index: int) -> None:
         self._ansichten.setCurrentIndex(index)
         self._raum_fuer_projektion(index == 1)
@@ -444,6 +575,8 @@ class MainWindow(QMainWindow):
         self._ansicht_hinweis.setText(self._projektion_hinweis())
         # Erst beim Umschalten laden, nicht vorher: 44 MB sollen nicht ungefragt
         # von der Platte kommen, nur weil ein Auftrag fertig wurde.
+        # EN: Only load when switching, not before: 44 MB should not be
+        # pulled from disk unasked just because a job finished.
         if not self._projektion.hat_modell() and self._offene_h5ad:
             self._lade_h5ad(self._offene_h5ad)
 
@@ -457,6 +590,17 @@ class MainWindow(QMainWindow):
 
         Zurueckgeschaltet wird nichts verworfen: die Splitterstellungen werden
         gemerkt und unveraendert wiederhergestellt.
+
+        English: Free up the whole window for the projection.
+
+        The map needs area: at 900 x 600, only a thin strip remained next
+        to the selection panel and the response text, in which the circle
+        of cohorts was barely recognizable. The selection and the response
+        also belong to the job, not to the map — they reappear in the
+        Wissensnetz (knowledge net) exactly where they were.
+
+        Nothing is discarded when switching back: the splitter positions
+        are remembered and restored unchanged.
         """
         panel = self._splitter.widget(1)
         if ganz:
@@ -478,7 +622,11 @@ class MainWindow(QMainWindow):
         return f"Messdaten aus {name}" if name else "Keine Datei geladen"
 
     def _lade_h5ad(self, pfad: str) -> None:
-        """Eine ``.h5ad`` im Worker-Thread laden (siehe ``worker.H5adWorker``)."""
+        """Eine ``.h5ad`` im Worker-Thread laden (siehe ``worker.H5adWorker``).
+
+        English: Load a ``.h5ad`` in the worker thread (see
+        ``worker.H5adWorker``).
+        """
         if self._h5_thread is not None:
             self.set_status("Es wird bereits eine Datei geladen — bitte warten.",
                             "warning")
@@ -500,6 +648,7 @@ class MainWindow(QMainWindow):
                 f"{modell.anzahl} Proben aus {modell.dateiname} geladen.", "success")
         else:
             # Kein 2D-Layout: kein Absturz, aber auch kein Erfolg.
+            # EN: No 2D layout: no crash, but no success either.
             self._projektion.zeige_modell(modell)
             self.set_status(
                 f"{modell.dateiname} enthaelt kein 2D-Layout — keine Karte.",
@@ -507,7 +656,11 @@ class MainWindow(QMainWindow):
         self._ansicht_hinweis.setText(self._projektion_hinweis())
 
     def _release_h5_thread(self) -> None:
-        """Wie ``_release_thread``, aber fuer den .h5ad-Thread (siehe dort)."""
+        """Wie ``_release_thread``, aber fuer den .h5ad-Thread (siehe dort).
+
+        English: Like ``_release_thread``, but for the .h5ad thread (see
+        there).
+        """
         self._h5_thread = None
         self._h5_worker = None
 
@@ -517,6 +670,13 @@ class MainWindow(QMainWindow):
         Im Worker, damit ein Klick nicht haengt, wenn Fuseki langsam antwortet.
         Der Store kommt aus ``store_reader``; eine zweite Instanz wird nicht
         angelegt.
+
+        English: Fetch the context of a clicked sample from the
+        Wissensnetz (knowledge net).
+
+        In the worker, so a click does not hang if Fuseki answers slowly.
+        The store comes from ``store_reader``; no second instance is
+        created.
         """
         if not schluessel or self._kontext_thread is not None:
             return
@@ -531,12 +691,18 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _kontext_text(schluessel: str, kontext, fehler: str) -> str:
-        """Der Kontextblock unter der Karte — beide leeren Faelle ehrlich benannt."""
+        """Der Kontextblock unter der Karte — beide leeren Faelle ehrlich benannt.
+
+        English: The context block below the map — both empty cases named
+        honestly.
+        """
         if fehler:
             return fehler
         if not kontext:
             # Die .h5ad kann aelter sein als der Storeinhalt oder aus einer
             # anderen Auswahl stammen. Das ist normal, kein Fehler.
+            # EN: The .h5ad can be older than the store content or come
+            # from a different selection. That is normal, not an error.
             return (f"{schluessel}: Dieser Fall liegt nicht im Store. "
                     "Eine Vorschau mit dieser Kohorte laedt ihn nachtraeglich.")
         teile = [str(schluessel)]
@@ -556,7 +722,11 @@ class MainWindow(QMainWindow):
         return "  ·  ".join(teile)
 
     def _release_kontext_thread(self) -> None:
-        """Wie ``_release_thread``, aber fuer den Kontext-Thread (siehe dort)."""
+        """Wie ``_release_thread``, aber fuer den Kontext-Thread (siehe dort).
+
+        English: Like ``_release_thread``, but for the context thread (see
+        there).
+        """
         self._kontext_thread = None
         self._kontext_worker = None
 
@@ -576,6 +746,13 @@ class MainWindow(QMainWindow):
         # und holt je Kohorte ``size`` Proben. 32 Eintraege sind zum
         # Durchscrollen zu viele, und gesucht wird ueber das Studienkuerzel —
         # deshalb steht der Klarname vorn und das Kuerzel rechts.
+        # EN: Cohort: an expandable checklist with a search field. Multiple
+        # cohorts are the normal case as soon as you compare — the mediator
+        # accepts them in the SAME level (``SingleSelection.cohorts`` is a
+        # list) and fetches ``size`` samples per cohort. 32 entries are too
+        # many to scroll through, and searching is done by the study
+        # abbreviation — hence the full name comes first and the
+        # abbreviation on the right.
         self._cohort_select = MultiSelect(
             self._cohort_entries(),
             mit_suche=True,
@@ -591,6 +768,12 @@ class MainWindow(QMainWindow):
         # obwohl vier der fuenf Zeilen selten angefasst werden — und die
         # Attributliste war in ihren 240 Pixeln immer abgeschnitten.
         # Ein Suchfeld nur bei den Attributen; drei Datenquellen brauchen keines.
+        # EN: "Obj" and "Datenquelle" (data source) expand just like the
+        # cohort field, but are checklists: shown permanently they
+        # cluttered the panel, even though four of the five rows are
+        # rarely touched — and the attribute list was always cut off
+        # within its 240 pixels. A search field only for the attributes;
+        # three data sources don't need one.
         self._attribute_select = MultiSelect(
             self._attribute_entries(),
             mit_suche=True,
@@ -607,6 +790,10 @@ class MainWindow(QMainWindow):
         # Alle fuenf Zeilen sind einzeilig. Was das an Platz freimacht, bekommt
         # die Anzeigeflaeche links ueber den Splitter — nicht ein wachsendes
         # Panel; deshalb steht unten ein Dehnfeld und keine Zeile dehnt sich.
+        # EN: All five rows are single-line. Whatever space that frees up
+        # goes to the display area on the left via the splitter — not a
+        # growing panel; that's why there is a stretch field at the bottom
+        # and no row stretches itself.
         for label, widgets, stretch in (
             ("Krebs", (self._cohort_select,), 0),
             ("Var", (self._modality_box,), 0),
@@ -620,6 +807,9 @@ class MainWindow(QMainWindow):
             for i, widget in enumerate(widgets):
                 # Nur das letzte Widget einer Zeile darf wachsen (bei "Krebs"
                 # also die Liste, nicht das Suchfeld darueber).
+                # EN: Only the last widget in a row may grow (for "Krebs"
+                # (cancer) that means the list, not the search field above
+                # it).
                 layout.addWidget(widget, stretch=stretch if i == len(widgets) - 1 else 0)
             layout.addSpacing(10)
 
@@ -627,12 +817,18 @@ class MainWindow(QMainWindow):
         return panel
 
     # -- Panel befuellen ----------------------------------------------------
+    # EN: Filling the panel (translated)
     def _fill_panel(self) -> None:
         # Keine Vorauswahl — weder Kohorte noch Attribute noch Quelle. Die
         # Oberflaeche waehlt nicht fuer den Forscher; was im Auftrag landet,
         # hat er selbst angehakt. (Die Listen 'default_attributes' und
         # 'default_sources' in config/panel.json stehen als Schalter weiter
         # bereit, sind aber leer.)
+        # EN: No preselection — neither cohort, attributes, nor source.
+        # The UI does not choose for the researcher; whatever ends up in
+        # the job was checked by them. (The 'default_attributes' and
+        # 'default_sources' lists in config/panel.json remain available as
+        # switches, but are empty.)
         self._fill_choice_box(self._modality_box, self._config.get("modalities") or [])
 
     @staticmethod
@@ -642,6 +838,13 @@ class MainWindow(QMainWindow):
         Ehrliche Luecke statt unsichtbarer Grenze — dasselbe Prinzip wie bei den
         MP-Lite-Slidern. Der Hinweistext aus ``panel.json`` steht im Eintrag und
         im Tooltip.
+
+        English: Set the entries; ones not yet connected stay visible but
+        disabled.
+
+        An honest gap instead of an invisible boundary — the same
+        principle as with the MP-Lite sliders. The hint text from
+        ``panel.json`` appears in the entry and in the tooltip.
         """
         first_enabled = -1
         for entry in entries:
@@ -670,6 +873,14 @@ class MainWindow(QMainWindow):
         ``config/panel.json`` (einmalig von GDC geholt), rechts das Kuerzel.
         Fehlt ein Name, steht dort die ``project_id`` — dann ist die Liste
         karger, aber nichts kaputt.
+
+        English: The cohorts as entries for :class:`MultiSelect`.
+
+        The ``project_id`` is what gets sent; the full name from
+        ``config/panel.json`` (fetched once from GDC) is displayed, with
+        the abbreviation on the right. If a name is missing, the
+        ``project_id`` is shown instead — the list is then sparser, but
+        nothing is broken.
         """
         labels = self._config.get("cohort_labels") or {}
         entries = []
@@ -683,12 +894,20 @@ class MainWindow(QMainWindow):
                 # gesucht wird mit der offiziellen Studienabkuerzung (BRCA,
                 # LUAD, KIRC). Der Klarname steht weiter in der Zeile, damit man
                 # sieht, was sich hinter dem Kuerzel verbirgt.
+                # EN: Deliberately ONLY the abbreviation and project_id, not
+                # the full name: searching uses the official study
+                # abbreviation (BRCA, LUAD, KIRC). The full name still shows
+                # in the row, so you can see what's behind the
+                # abbreviation.
                 "search": f"{code} {project_id}",
             })
         return entries
 
     def current_cohorts(self) -> list[str]:
-        """Die angehakten ``project_id`` in Panel-Reihenfolge."""
+        """Die angehakten ``project_id`` in Panel-Reihenfolge.
+
+        English: The checked ``project_id`` values in panel order.
+        """
         return self._cohort_select.checked_values()
 
     def _source_entries(self) -> list[dict[str, Any]]:
@@ -700,6 +919,16 @@ class MainWindow(QMainWindow):
         kennt inzwischen ``gdc``, ``cbioportal`` und ``geo`` (Back-Mediator M9,
         siehe ``mediator/app/main.py::_fetch_selection_level``); ``ena`` bleibt
         bewusst deaktiviert (siehe ``config/panel.json``).
+
+        English: The data sources as entries for :class:`MultiSelect`.
+
+        Sources not yet connected are shown visibly, but are not
+        checkable, and carry the reason as a hint on the right of the row
+        and as a tooltip — an honest gap instead of an invisible boundary.
+        ``POST /selection/*`` now knows ``gdc``, ``cbioportal`` and ``geo``
+        (back-mediator M9, see
+        ``mediator/app/main.py::_fetch_selection_level``); ``ena`` remains
+        deliberately disabled (see ``config/panel.json``).
         """
         preselected = set(self._config.get("default_sources") or [])
         entries: list[dict[str, Any]] = []
@@ -711,6 +940,9 @@ class MainWindow(QMainWindow):
                 "label": entry.get("label") or value,
                 # Der kurze Hinweis steht rechts in der Zeile, der ausfuehrliche
                 # Grund im Tooltip - das Panel ist nur rund 360 Pixel breit.
+                # EN: The short hint is shown on the right of the row, the
+                # detailed reason in the tooltip — the panel is only about
+                # 360 pixels wide.
                 "code": "" if enabled else (entry.get("note") or ""),
                 "enabled": enabled,
                 "checked": enabled and value in preselected,
@@ -726,6 +958,14 @@ class MainWindow(QMainWindow):
         Die Gruppenueberschriften tragen keinen Attributnamen und landen deshalb
         nie im Auftrag. Gesucht wird ueber Attributname **und** Knoten: ``diag``
         findet die Diagnose-Gruppe, ``stage`` findet ``tumor_stage``.
+
+        English: The attributes as entries for :class:`MultiSelect`,
+        grouped by node.
+
+        The group headings carry no attribute name and therefore never end
+        up in the job. Searching covers the attribute name **and** the
+        node: ``diag`` finds the diagnosis group, ``stage`` finds
+        ``tumor_stage``.
         """
         preselected = set(self._config.get("default_attributes") or [])
         entries: list[dict[str, Any]] = []
@@ -736,6 +976,10 @@ class MainWindow(QMainWindow):
                 # Ein Eintrag ist entweder ein blosser Name oder {value, label}.
                 # Die zweite Form braucht es, wenn der an den Mediator gesendete
                 # Wert und der angezeigte Name auseinanderfallen — siehe
+                # "_sex_at_birth_hinweis" in panel.json.
+                # EN: An entry is either a bare name or {value, label}. The
+                # second form is needed when the value sent to the mediator
+                # and the displayed name differ — see
                 # "_sex_at_birth_hinweis" in panel.json.
                 if isinstance(eintrag, dict):
                     attribute = eintrag.get("value") or ""
@@ -748,6 +992,7 @@ class MainWindow(QMainWindow):
                     "value": attribute,
                     "label": beschriftung,
                     # Nur fuer die Netzansicht; auf den Auftrag ohne Einfluss.
+                    # EN: Only for the net view; has no effect on the job.
                     "store_property": (eintrag.get("store_property")
                                        if isinstance(eintrag, dict) else None),
                     "checked": attribute in preselected,
@@ -757,16 +1002,25 @@ class MainWindow(QMainWindow):
         return entries
 
     # -- Auswahl auslesen ---------------------------------------------------
+    # EN: Reading the selection (translated)
     def checked_attributes(self) -> list[str]:
         """Die angehakten Attributnamen in Panel-Reihenfolge.
 
         Reihenfolge, nicht Klick-Reihenfolge: der Client reicht sie unveraendert
         an den Mediator durch (siehe ``MultiSelect.checked_values``).
+
+        English: The checked attribute names in panel order.
+
+        Panel order, not click order: the client passes them through to
+        the mediator unchanged (see ``MultiSelect.checked_values``).
         """
         return self._attribute_select.checked_values()
 
     def checked_sources(self) -> list[str]:
-        """Die angehakten Datenquellen in Panel-Reihenfolge."""
+        """Die angehakten Datenquellen in Panel-Reihenfolge.
+
+        English: The checked data sources in panel order.
+        """
         return self._source_select.checked_values()
 
     def current_payload(self) -> dict[str, Any]:
@@ -779,9 +1033,14 @@ class MainWindow(QMainWindow):
         )
 
     # -- Netzansicht ---------------------------------------------------------
+    # EN: Net view (translated)
     def _attribut_namen(self) -> list[str]:
         """Die Panel-Namen der Attribute — Grundlage der Namensregel im Netz
-        (siehe ``store_reader.panel_name``)."""
+        (siehe ``store_reader.panel_name``).
+
+        English: The panel names of the attributes — the basis of the
+        naming rule in the net (see ``store_reader.panel_name``).
+        """
         return [e["value"] for e in self._attribute_entries() if e.get("value")]
 
     def _store_zuordnung(self) -> dict[str, str]:
@@ -790,6 +1049,13 @@ class MainWindow(QMainWindow):
         Nur ``primary_diagnosis`` und ``has_metastasis`` stehen dafuer in
         ``config/panel.json``; die uebrigen neun ergeben sich aus dem camelCase
         (siehe ``store_reader.store_property``).
+
+        English: Panel name -> store property, insofar as it does not
+        follow mechanically.
+
+        Only ``primary_diagnosis`` and ``has_metastasis`` are listed for
+        this in ``config/panel.json``; the remaining nine follow from the
+        camelCase form (see ``store_reader.store_property``).
         """
         return {e["value"]: e["store_property"]
                 for e in self._attribute_entries()
@@ -797,7 +1063,11 @@ class MainWindow(QMainWindow):
 
     def _abzug_vorher(self) -> dict[str, Any]:
         """Abzug A, **bevor** die Anfrage abgeschickt wird. Laeuft im
-        Worker-Thread (siehe ``worker.SelectionWorker``)."""
+        Worker-Thread (siehe ``worker.SelectionWorker``).
+
+        English: Snapshot A, **before** the request is sent. Runs in the
+        worker thread (see ``worker.SelectionWorker``).
+        """
         self._abzug_a = None
         self._abzug_a = sr.snapshot(sr.default_store())
         return self._abzug_a
@@ -808,6 +1078,14 @@ class MainWindow(QMainWindow):
         Verglichen wird hier und nicht im Worker: der kennt den Store nicht.
         Ohne Abzug A gibt es keinen Vergleich — sonst saehe nach einem
         zwischenzeitlich gestarteten Fuseki alles neu aus, was laengst da war.
+
+        English: Snapshot B, after the response has arrived, and the
+        comparison.
+
+        The comparison happens here and not in the worker: it does not
+        know the store. Without snapshot A there is no comparison —
+        otherwise, after a Fuseki started in the meantime, everything that
+        had long been there would look new.
         """
         abzug = sr.snapshot(sr.default_store())
         self._letzter_abzug = abzug
@@ -820,6 +1098,12 @@ class MainWindow(QMainWindow):
 
         Ohne Markierung: die Wachstumsfarben gehoeren zum letzten **Aufruf**,
         nicht zum letzten Klick im Panel.
+
+        English: Selection in the panel changed — redraw the net without a
+        new query.
+
+        Without highlighting: the growth colors belong to the last
+        **call**, not the last click in the panel.
         """
         if self._letzter_abzug is not None:
             self._netz_zeigen(self._letzter_abzug)
@@ -831,6 +1115,14 @@ class MainWindow(QMainWindow):
         Bewusst geradeaus im GUI-Thread: hier laeuft kein Mediator-Aufruf
         daneben, auf den gewartet werden muesste. Der teure Weg — Abzug vor und
         nach einem Aufruf — liegt im Worker (Deliverable 4).
+
+        English: Read the net fresh — at startup and via ``Ansicht > Netz
+        aktualisieren`` (View > Refresh net) (F5).
+
+        Deliberately straightforward in the GUI thread: no mediator call
+        runs alongside here that would need waiting for. The expensive
+        path — a snapshot before and after a call — lives in the worker
+        (deliverable 4).
         """
         store = sr.default_store()
         url = sr.store_url(store)
@@ -838,6 +1130,8 @@ class MainWindow(QMainWindow):
             self._netz_zeigen(None)
             # Nicht erreichbar heisst NICHT blockiert: Vorschau und Generieren
             # sprechen mit dem Mediator, nicht mit Fuseki.
+            # EN: Not reachable does NOT mean blocked: preview and generate
+            # talk to the mediator, not to Fuseki.
             self.set_status(
                 f"Fuseki unter {url} nicht erreichbar. Laeuft `docker compose up`?",
                 "error",
@@ -845,7 +1139,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self._letzter_abzug = sr.snapshot(store)
-        except Exception as fehler:          # noqa: BLE001 - jede Stoerung gleich
+        except Exception as fehler:          # noqa: BLE001 - jede Stoerung gleich / EN: every disturbance treated alike
             self._netz_zeigen(None)
             self.set_status(f"Netz konnte nicht gelesen werden: {fehler}", "error")
             return
@@ -853,7 +1147,11 @@ class MainWindow(QMainWindow):
 
     def _netz_zeigen(self, abzug: dict[str, Any] | None,
                      unterschied: dict[str, Any] | None = None) -> None:
-        """Netzflaeche und Statusfeld rechts auf denselben Stand bringen."""
+        """Netzflaeche und Statusfeld rechts auf denselben Stand bringen.
+
+        English: Bring the net area and the status field on the right to
+        the same state.
+        """
         if abzug is None:
             self._netz.zeige_nicht_erreichbar(sr.store_url(sr.default_store()))
             self._store_label.setText("Store: nicht erreichbar")
@@ -861,6 +1159,9 @@ class MainWindow(QMainWindow):
         if not self.current_cohorts():
             # Ohne Auswahl hat das Netz nichts zu zeigen — und "leer" hiesse
             # hier faelschlich, im Store liege nichts.
+            # EN: Without a selection the net has nothing to show — and
+            # "empty" would falsely imply here that the store holds
+            # nothing.
             self._netz.zeige_hinweis(
                 "Noch nichts ausgewaehlt.\n"
                 "Rechts Kohorten anhaken und Attribute waehlen."
@@ -869,6 +1170,9 @@ class MainWindow(QMainWindow):
             return
         # Das Netz zeigt die Auswahl aus dem Panel, nicht den ganzen Store —
         # der Gesamtstand steht rechts in der Statusleiste.
+        # EN: The net shows the selection from the panel, not the whole
+        # store — the overall state is shown on the right in the status
+        # bar.
         kohorten = self.current_cohorts()
         self._netz.zeige_abzug(
             sr.auswahl_abzug(abzug, kohorten, self.checked_attributes(),
@@ -878,6 +1182,10 @@ class MainWindow(QMainWindow):
             # Attribute gelten der ganzen Auswahl, und eine willkuerlich
             # aufgeklappte erste Kohorte liess sie aussehen, als gaelten sie nur
             # fuer diese.
+            # EN: Whatever was expanded stays expanded. Otherwise NONE: the
+            # attributes apply to the whole selection, and an arbitrarily
+            # expanded first cohort made it look as if they applied only to
+            # that one.
             offen=(self._netz.offene_kohorte()
                    if self._netz.offene_kohorte() in kohorten else ""),
         )
@@ -891,6 +1199,7 @@ class MainWindow(QMainWindow):
                 f"{kohorten} {'Kohorte' if kohorten == 1 else 'Kohorten'}")
 
     # -- Aufruf -------------------------------------------------------------
+    # EN: Call (translated)
     def _start(self, mode: str) -> None:
         if not self.current_cohorts():
             self.set_status("Keine Kohorte angehakt.", "warning")
@@ -931,13 +1240,25 @@ class MainWindow(QMainWindow):
         stehen, faellt die letzte Python-Referenz auf einen noch laufenden
         QThread und Qt beendet den Prozess (0xC0000409). Das Aufraeumen
         uebernimmt :meth:`_release_thread` am ``finished``-Signal des Threads.
+
+        English: Show the result. Does **not** release the thread
+        reference.
+
+        ``worker.finished`` reaches this slot before the QThread has left
+        its event loop. If ``self._thread = None`` were set here, the last
+        Python reference to a still-running QThread would be dropped and
+        Qt would kill the process (0xC0000409). The cleanup is handled by
+        :meth:`_release_thread` on the thread's ``finished`` signal.
         """
         self._set_busy(False)
         self._render(result, mode)
         self._netz_zeigen(self._letzter_abzug, unterschied)
 
     def _release_thread(self) -> None:
-        """Referenzen freigeben, sobald der Thread wirklich gestoppt ist."""
+        """Referenzen freigeben, sobald der Thread wirklich gestoppt ist.
+
+        English: Release references once the thread has actually stopped.
+        """
         self._thread = None
         self._worker = None
 
@@ -946,12 +1267,17 @@ class MainWindow(QMainWindow):
         self._generate_button.setEnabled(not busy)
 
     # -- Anzeige ------------------------------------------------------------
+    # EN: Display (translated)
     def set_status(self, message: str, state: str = "info") -> None:
         self._status.setStyleSheet(theme.status_style(state))
         self._status.showMessage(message)
 
     def _render(self, result: mc.Result, mode: str) -> None:
-        """Antwort des Mediators anzeigen — Fehler sichtbar, nie stille Leere."""
+        """Antwort des Mediators anzeigen — Fehler sichtbar, nie stille Leere.
+
+        English: Show the mediator's response — errors visible, never a
+        silent void.
+        """
         if not result.ok:
             self._output.setPlainText(f"FEHLER\n\n{result.error}")
             self.set_status((result.error or "Fehler").splitlines()[0], "error")
@@ -969,11 +1295,17 @@ class MainWindow(QMainWindow):
         # Download-Menue nur nach 'Generieren' aktualisieren: eine Vorschau
         # liefert kein .h5ad und soll ein zuvor erzeugtes nicht aus dem Menue
         # werfen (die Datei bleibt ja abrufbar).
+        # EN: Only update the download menu after 'Generieren' (generate):
+        # a preview produces no .h5ad and should not drop a previously
+        # generated one from the menu (the file is still retrievable).
         if mode == "generate":
             self._update_download_menu(self._collect_downloadable(levels))
 
         # Eine Ebene je gewaehlter Datenquelle: alle anzeigen, nicht nur die
         # erste — eine Ebene kann scheitern, ohne die anderen zu beeintraechtigen.
+        # EN: One level per selected data source: show all of them, not
+        # just the first — one level can fail without affecting the
+        # others.
         blocks: list[str] = []
         for index, level in enumerate(levels):
             if len(levels) > 1:
@@ -992,6 +1324,12 @@ class MainWindow(QMainWindow):
         Mehrere Ebenen koennen unabhaengig voneinander gelingen oder scheitern
         (ADR-0003, Entscheidung 7.2) — die Zeile muss das unterscheiden, sonst
         sieht ein Teilausfall wie ein voller Erfolg aus.
+
+        English: One line for the status bar plus its state.
+
+        Several levels can succeed or fail independently of each other
+        (ADR-0003, decision 7.2) — the line must distinguish that,
+        otherwise a partial failure looks like a full success.
         """
         was = "Vorschau" if mode == "preview" else "Generieren"
         ok = [lvl for lvl in levels if lvl.get("status") == "ok"]

@@ -29,6 +29,41 @@ Bewusst ein PROJEKT-Skript (nicht im wissensnetz-Paket): es orchestriert nur den
 Mediator per HTTP. ``mediator/``/``wrappers/`` werden NICHT angefasst; das `.h5ad`
 wird nur heruntergeladen/gelesen. Konfiguration: --mediator-url oder ENV MEDIATOR_URL
 (Default http://localhost:8000).
+
+English: Fetches the pancancer expression `.h5ad` live via the mediator
+and stores it for MP-Lite (Task 10).
+
+    python scripts/fetch_pancancer_h5ad.py --size 160
+    python scripts/fetch_pancancer_h5ad.py --balanced --per-cohort-size 5
+
+Flow (Phase 1, default — ONE call):
+    1. POST <mediator>/export/anndata  with project_id = list of all
+       TCGA cohorts, size, compute_tsne=true  (Pablo's endpoint builds
+       X/obs/var + global tSNE).
+    2. GET  <mediator><download_url>   -> write the file to --out
+       (default wissensnetz/data/pancancer.h5ad).
+MP-Lite (Task 9/10) automatically prefers an existing ``pancancer.h5ad``
+— after fetching, simply reload with ``bokeh serve``.
+
+Phase 2 (``--balanced``, optional — evenly distributed cohorts, faithful
+to Oviedo):
+    one call per project with ``compute_tsne=false`` and fixed
+    ``gene_ids`` (from the first cohort's result), download each partial
+    `.h5ad`, merge with ``anndata.concat(join="inner")``, then compute
+    ONE global 2D tSNE (scikit-learn, here in the script) and store it
+    as ``obsm["X_tsne_genes"]``. Costs more downloads but distributes
+    samples evenly across cohorts.
+
+OLD PATH (as of before ADR-0003): produces a **global**
+``pancancer.h5ad`` across all 32 cohorts. Since ADR-0003 the `.h5ad` is
+produced per selection; the regular path is
+``scripts/run_selection.py --generate --out <path>``. This script is
+kept for comparison measurements and the report.
+
+Deliberately a PROJECT script (not in the wissensnetz package): it only
+orchestrates the mediator via HTTP. ``mediator/``/``wrappers/`` are NOT
+touched; the `.h5ad` is only downloaded/read. Configuration:
+--mediator-url or ENV MEDIATOR_URL (default http://localhost:8000).
 """
 
 from __future__ import annotations
@@ -43,15 +78,21 @@ import requests
 from wissensnetz.cohorts import COHORT_PROJECT_IDS
 
 DEFAULT_OUT = "wissensnetz/data/pancancer.h5ad"
-SIZE_MAX = 200  # harte Obergrenze des Endpoints (AnndataExportRequest.size)
+SIZE_MAX = 200  # harte Obergrenze des Endpoints (AnndataExportRequest.size) / EN: hard upper limit of the endpoint (AnndataExportRequest.size)
 
 # Default-Ablageort, den MP-Lite automatisch bevorzugt (h5ad_source.pancancer_*).
+# EN: Default storage location that MP-Lite automatically prefers
+# (h5ad_source.pancancer_*).
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PANCANCER_DEFAULT = (_REPO_ROOT / "wissensnetz" / "data" / "pancancer.h5ad").resolve()
 
 
 class ExportError(RuntimeError):
-    """Fehler beim Export/Download — trägt eine benutzerlesbare Meldung."""
+    """Fehler beim Export/Download — trägt eine benutzerlesbare Meldung.
+
+    English: Error during export/download — carries a user-readable
+    message.
+    """
 
 
 def _err(*args: object) -> None:
@@ -59,7 +100,11 @@ def _err(*args: object) -> None:
 
 
 def _http_detail(resp: requests.Response) -> str:
-    """``detail`` aus einer FastAPI-Fehlerantwort ziehen (JSON-Dict/-String oder Text)."""
+    """``detail`` aus einer FastAPI-Fehlerantwort ziehen (JSON-Dict/-String oder Text).
+
+    English: Extracts ``detail`` from a FastAPI error response (JSON
+    dict/string or plain text).
+    """
     try:
         data = resp.json()
     except ValueError:
@@ -75,7 +120,15 @@ def _post_export(base: str, *, project_id, size: int, strategy: str, data_type: 
     """``POST /export/anndata`` und Antwort-Metadaten (Dict) zurückgeben.
 
     Bei non-2xx eine ``ExportError`` mit Statuscode + ``detail`` (bei 503 mit
-    explizitem Hinweis auf ``gdc-client``/Fuseki, wie im Endpoint-Detail)."""
+    explizitem Hinweis auf ``gdc-client``/Fuseki, wie im Endpoint-Detail).
+
+    English: Calls ``POST /export/anndata`` and returns the response
+    metadata (dict).
+
+    On non-2xx, raises an ``ExportError`` with status code + ``detail``
+    (on 503 with an explicit pointer to ``gdc-client``/Fuseki, as in the
+    endpoint detail).
+    """
     body: dict = {
         "project_id": project_id,
         "experimental_strategy": strategy,
@@ -105,7 +158,15 @@ def _download(base: str, download_url: str, out_path: Path, *, timeout: int = 90
     """Datei über ``GET {base}{download_url}`` streamen und nach ``out_path`` schreiben.
 
     Bewusst über den Download-Endpoint (nicht ``path`` aus der Antwort direkt lesen)
-    — der vereinbarte Übergabeweg (HANDOFF_anndata.md, Offener Punkt 4)."""
+    — der vereinbarte Übergabeweg (HANDOFF_anndata.md, Offener Punkt 4).
+
+    English: Streams the file via ``GET {base}{download_url}`` and
+    writes it to ``out_path``.
+
+    Deliberately via the download endpoint (not reading ``path`` from
+    the response directly) — the agreed handover path
+    (HANDOFF_anndata.md, open point 4).
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with requests.get(f"{base}{download_url}", stream=True, timeout=timeout) as r:
@@ -121,7 +182,11 @@ def _download(base: str, download_url: str, out_path: Path, *, timeout: int = 90
 
 
 def _resolve_projects(projects_arg: str | None) -> list[str]:
-    """Zielprojekte: ``--projects`` (Komma-Liste) oder alle Oviedo-Kohorten."""
+    """Zielprojekte: ``--projects`` (Komma-Liste) oder alle Oviedo-Kohorten.
+
+    English: Target projects: ``--projects`` (comma list) or all Oviedo
+    cohorts.
+    """
     if projects_arg:
         return [p.strip() for p in projects_arg.split(",") if p.strip()]
     return list(COHORT_PROJECT_IDS)
@@ -129,6 +194,7 @@ def _resolve_projects(projects_arg: str | None) -> list[str]:
 
 # --------------------------------------------------------------------------
 # Phase 2: balancierter Pancancer-Merge (pro Kohorte ein Abruf, globale tSNE)
+# EN: Phase 2: balanced pancancer merge (one call per cohort, global tSNE)
 # --------------------------------------------------------------------------
 def _run_balanced(base: str, projects: list[str], *, per_cohort_size: int,
                   strategy: str, data_type: str, out_path: Path) -> dict:
@@ -146,7 +212,7 @@ def _run_balanced(base: str, projects: list[str], *, per_cohort_size: int,
 
     tmpdir = Path(tempfile.mkdtemp(prefix="pancancer_"))
     parts: list = []
-    gene_ids: list[str] | None = None  # nach der ersten Kohorte fixiert -> gleiche var-Achse
+    gene_ids: list[str] | None = None  # nach der ersten Kohorte fixiert -> gleiche var-Achse / EN: fixed after the first cohort -> same var axis
     skipped: list[tuple[str, str]] = []
 
     print(f"Balancierter Modus: {len(projects)} Kohorte(n) × size={per_cohort_size} "
@@ -165,7 +231,7 @@ def _run_balanced(base: str, projects: list[str], *, per_cohort_size: int,
             continue
         a = ad.read_h5ad(f)
         if gene_ids is None and a.n_vars:
-            gene_ids = [str(x) for x in a.var.index]  # var-Achse für die restlichen Kohorten fixieren
+            gene_ids = [str(x) for x in a.var.index]  # var-Achse für die restlichen Kohorten fixieren / EN: fix the var axis for the remaining cohorts
         parts.append(a)
         print(f"OK ({a.n_obs} Proben, {a.n_vars} Gene)")
 
@@ -198,6 +264,7 @@ def _run_balanced(base: str, projects: list[str], *, per_cohort_size: int,
 
 # --------------------------------------------------------------------------
 # Report
+# EN: Report
 # --------------------------------------------------------------------------
 def _report(out_path: Path, meta: dict) -> None:
     print("\n=== Pancancer-`.h5ad` erstellt ===")
@@ -206,6 +273,7 @@ def _report(out_path: Path, meta: dict) -> None:
     print(f"obsm_keys:  {meta.get('obsm_keys')}")
 
     # Kohorten-Aufschlüsselung aus der Datei (braucht anndata; sonst überspringen).
+    # EN: Cohort breakdown from the file (needs anndata; otherwise skip).
     try:
         import anndata as ad
 
@@ -220,6 +288,7 @@ def _report(out_path: Path, meta: dict) -> None:
         print(f"(Kohorten-Aufschlüsselung übersprungen: {exc})")
 
     # Hinweis, wie MP-Lite die Datei findet.
+    # EN: Note on how MP-Lite finds the file.
     if out_path.resolve() == _PANCANCER_DEFAULT:
         print("\nMP-Lite erkennt diese Datei automatisch (Default-Pfad) — kein ENV nötig.")
         print("Nur `bokeh serve --show wissensnetz/prototype/mp_lite/app.py` neu laden.")
@@ -230,6 +299,7 @@ def _report(out_path: Path, meta: dict) -> None:
 
 # --------------------------------------------------------------------------
 # main
+# EN: main
 # --------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
@@ -264,12 +334,14 @@ def main(argv: list[str] | None = None) -> int:
          "Der reguläre Weg ist scripts/run_selection.py --generate --out <pfad>.")
 
     # size-Grenzen prüfen (Endpoint erzwingt 1..200; hier vorab klar melden).
+    # EN: Check size limits (endpoint enforces 1..200; report it clearly up front here).
     size_to_check = args.per_cohort_size if args.balanced else args.size
     if not (1 <= size_to_check <= SIZE_MAX):
         _err(f"Fehler: size muss zwischen 1 und {SIZE_MAX} liegen (war {size_to_check}).")
         return 2
 
     # Mediator erreichbar?
+    # EN: Mediator reachable?
     try:
         requests.get(f"{base}/health", timeout=10).raise_for_status()
     except requests.RequestException:

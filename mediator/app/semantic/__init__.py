@@ -1,4 +1,8 @@
-"""Semantische Schicht des Mediators: GDC-JSON -> RDF/OWL (siehe wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL)."""
+"""Semantische Schicht des Mediators: GDC-JSON -> RDF/OWL (siehe wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL).
+
+English: Semantic layer of the mediator: GDC JSON -> RDF/OWL (see
+wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL).
+"""
 
 from .mapping import cases_to_graph, load_alignment_table, serialize_with_provenance
 

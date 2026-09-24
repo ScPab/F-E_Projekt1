@@ -5,6 +5,15 @@ Wer das Aussehen aendert, aendert es hier — nicht verstreut in ``main_window``
 
 Das Stylesheet wird in ``app.py`` einmal auf die ``QApplication`` gesetzt und
 gilt damit fuer alle Fenster.
+
+English: Colors and stylesheet in exactly **one** place.
+
+No color value appears anywhere else in the code outside this file (task 17,
+deliverable 5). Whoever changes the appearance changes it here — not scattered
+across ``main_window``.
+
+The stylesheet is set once on the ``QApplication`` in ``app.py`` and thereby
+applies to all windows.
 """
 
 from __future__ import annotations
@@ -12,19 +21,20 @@ from __future__ import annotations
 from PySide6.QtGui import QColor, QPalette
 
 # --- Farben ----------------------------------------------------------------
+# EN: Colors
 HEADER_BG = "#101827"
 HEADER_TEXT = "#ffffff"
 HEADER_TEXT_MUTED = "#8b95a6"
 
 WINDOW_BG = "#ffffff"
-SURFACE = "#f6f7f9"          # Panel- und Kartenflaeche
+SURFACE = "#f6f7f9"          # Panel- und Kartenflaeche / EN: panel and card surface
 BORDER = "#dfe3e9"
 TEXT = "#1b2230"
 TEXT_MUTED = "#6b7280"
 
-ACCENT = "#2563eb"           # Auswahl, aktiver Rand, Schaltflaeche "Generieren"
+ACCENT = "#2563eb"           # Auswahl, aktiver Rand, Schaltflaeche "Generieren" / EN: selection, active border, "Generate" button
 ACCENT_BG = "#e6eefc"
-ON_ACCENT = "#ffffff"        # was auf der Akzentflaeche liegt (Haekchen, Text)
+ON_ACCENT = "#ffffff"        # was auf der Akzentflaeche liegt (Haekchen, Text) / EN: what sits on the accent surface (checkmark, text)
 
 SUCCESS = "#0d8a5f"
 SUCCESS_BG = "#dff5ec"
@@ -34,7 +44,8 @@ ERROR = "#b42318"
 ERROR_BG = "#fde8e6"
 
 # --- Masse und Schriften ---------------------------------------------------
-RADIUS = 8                   # Eckenradius in Pixel
+# EN: Sizes and fonts
+RADIUS = 8                   # Eckenradius in Pixel / EN: corner radius in pixels
 BORDER_WIDTH = 1
 FONT_FAMILY = '"Segoe UI", "Noto Sans", sans-serif'
 FONT_SIZE_PT = 10
@@ -42,46 +53,58 @@ MONO_FAMILY = '"Consolas", "Cascadia Mono", monospace'
 
 HEADER_HEIGHT = 56
 PANEL_WIDTH = 360
-ROW_HEIGHT = 38              # Zeilenhoehe in den Auswahllisten
-GROUP_ROW_HEIGHT = 26        # Gruppenueberschrift in einer Auswahlliste
-DOT_SIZE = 12                # runder Anker links in einer Zeile
+ROW_HEIGHT = 38              # Zeilenhoehe in den Auswahllisten / EN: row height in the selection lists
+GROUP_ROW_HEIGHT = 26        # Gruppenueberschrift in einer Auswahlliste / EN: group heading in a selection list
+DOT_SIZE = 12                # runder Anker links in einer Zeile / EN: round marker on the left of a row
 
 # Haekchen-Kaestchen in den Mehrfachauswahl-Zeilen. Es wird gezeichnet, nicht
 # per Stylesheet gesetzt (QListWidget::indicator greift in der aufklappenden
 # Karte nicht, siehe PopupCard) — Groesse und Abstand gehoeren deshalb hierher
 # und nicht in den Delegate.
-CHECK_SIZE = 16              # Kantenlaenge des Kaestchens
-CHECK_RADIUS = 4             # dessen Eckenradius
-CHECK_GAP = 12               # Abstand zwischen Kaestchen und Text
-CHECK_MARK_WIDTH = 2         # Strichstaerke des Hakens
+# EN: Checkbox in the multi-select rows. It is painted, not set via the
+# stylesheet (QListWidget::indicator has no effect in the popup card, see
+# PopupCard) — size and spacing therefore belong here and not in the delegate.
+CHECK_SIZE = 16              # Kantenlaenge des Kaestchens / EN: edge length of the checkbox
+CHECK_RADIUS = 4             # dessen Eckenradius / EN: its corner radius
+CHECK_GAP = 12               # Abstand zwischen Kaestchen und Text / EN: gap between checkbox and text
+CHECK_MARK_WIDTH = 2         # Strichstaerke des Hakens / EN: stroke width of the checkmark
 
 # --- Netzansicht (netz_view.py) --------------------------------------------
+# EN: Net view (netz_view.py)
 # Masse des gezeichneten Netzes. Sie stehen hier aus demselben Grund wie die
 # Kaestchenmasse: was gezeichnet statt per Stylesheet gesetzt wird, gehoert
 # trotzdem an die eine Stelle.
-NETZ_NODE_WIDTH = 132        # Breite eines Knotens
-NETZ_ROOT_WIDTH = 190        # die Wurzel traegt zwei Zahlen und ist breiter
-NETZ_NODE_WIDTH_3 = 162      # Attributknoten: Faelle, Werte und der Zuwachs
-NETZ_NODE_HEIGHT = 46        # Hoehe eines Knotens (Wurzel, Kohorte)
-NETZ_NODE_HEIGHT_3 = 62      # Attributknoten: eine Zeile mehr (Panel-Name)
-NETZ_NODE_GAP = 12           # Abstand zwischen zwei Knoten einer Reihe
-NETZ_ROW_GAP = 58            # senkrechter Abstand zwischen zwei Reihen
-NETZ_MAX_NODES = 7           # mehr Knoten je Reihe werden zu "… N weitere"
-NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens
+# EN: Dimensions of the drawn net. They live here for the same reason as the
+# checkbox dimensions: what is painted instead of set via the stylesheet
+# still belongs in the one place.
+NETZ_NODE_WIDTH = 132        # Breite eines Knotens / EN: width of a node
+NETZ_ROOT_WIDTH = 190        # die Wurzel traegt zwei Zahlen und ist breiter / EN: the root carries two numbers and is wider
+NETZ_NODE_WIDTH_3 = 162      # Attributknoten: Faelle, Werte und der Zuwachs / EN: attribute node: cases, values and the growth
+NETZ_NODE_HEIGHT = 46        # Hoehe eines Knotens (Wurzel, Kohorte) / EN: height of a node (root, cohort)
+NETZ_NODE_HEIGHT_3 = 62      # Attributknoten: eine Zeile mehr (Panel-Name) / EN: attribute node: one line more (panel name)
+NETZ_NODE_GAP = 12           # Abstand zwischen zwei Knoten einer Reihe / EN: gap between two nodes in a row
+NETZ_ROW_GAP = 58            # senkrechter Abstand zwischen zwei Reihen / EN: vertical gap between two rows
+NETZ_MAX_NODES = 7           # mehr Knoten je Reihe werden zu "… N weitere" / EN: more nodes per row collapse into "… N more"
+NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens / EN: thicker border of the expanded node
 
 # --- Projektion (projektion_view.py) ---------------------------------------
-SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte
-SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte
-MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens
-LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte
+# EN: Projection (projektion_view.py)
+SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte / EN: width of the slider column to the right of the map
+SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte / EN: diameter of a point on the map
+MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens / EN: the map never gets smaller than this
+LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte / EN: width of the cohort legend to the right of the map
 # Achsen und Gitter der Karte bewusst dunkler als BORDER: der Rahmen einer
 # Eingabe darf zurueckhaltend sein, eine Achse muss man ablesen koennen.
-AXIS = "#6b7280"             # Achsenlinie, Beschriftung und Gitter
-GRID_ALPHA = 0.6             # Deckkraft des Gitters in der Karte
-NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend
+# EN: Axes and grid of the map deliberately darker than BORDER: an input's
+# border may be understated, but an axis must be readable.
+AXIS = "#6b7280"             # Achsenlinie, Beschriftung und Gitter / EN: axis line, labels and grid
+GRID_ALPHA = 0.6             # Deckkraft des Gitters in der Karte / EN: opacity of the grid on the map
+NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend / EN: cohort unknown or missing
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
+# EN: Object names by which the stylesheet addresses individual widgets. Kept
+# as constants so a typo does not cause a silent loss of styling.
 OBJ_HEADER = "Header"
 OBJ_HEADER_TITLE = "HeaderTitle"
 OBJ_HEADER_SUBTITLE = "HeaderSubtitle"
@@ -90,24 +113,27 @@ OBJ_PANEL_LABEL = "PanelLabel"
 OBJ_OUTPUT = "Output"
 OBJ_PRIMARY_BUTTON = "PrimaryButton"
 OBJ_SEARCH = "SearchField"
-OBJ_PICKER = "PickerList"          # Liste mit Suchfeld darueber (Kohorten)
-OBJ_ROW_LABEL = "RowLabel"         # Hauptbeschriftung einer Listenzeile
-OBJ_ROW_CODE = "RowCode"           # gedaempftes Kuerzel rechts
-OBJ_ROW_DOT = "RowDot"             # runder Anker links
-OBJ_SELECT_BUTTON = "SelectButton"  # Schaltflaeche, die die Auswahl aufklappt
-OBJ_POPUP = "SelectPopup"           # die aufklappende Karte selbst
-OBJ_NETZ = "NetzView"               # die gezeichnete Netzansicht
-OBJ_NETZ_TITLE = "NetzTitle"        # fette Ueberschrift ueber dem Netz
-OBJ_NETZ_NOTE = "NetzNote"          # gedaempfter Zusatz rechts daneben
-OBJ_SWITCH_LEFT = "ViewSwitchLeft"    # linke Haelfte des Ansichts-Umschalters
-OBJ_SWITCH_RIGHT = "ViewSwitchRight"  # rechte Haelfte desselben
-OBJ_SLIDER_NAME = "SliderName"        # Beschriftung eines Projektions-Reglers
-OBJ_SLIDER_VALUE = "SliderValue"      # dessen Zahlenwert rechts
-OBJ_PROJ_HINT = "ProjektionHinweis"   # Meldung anstelle der Karte
+OBJ_PICKER = "PickerList"          # Liste mit Suchfeld darueber (Kohorten) / EN: list with a search field above it (cohorts)
+OBJ_ROW_LABEL = "RowLabel"         # Hauptbeschriftung einer Listenzeile / EN: main label of a list row
+OBJ_ROW_CODE = "RowCode"           # gedaempftes Kuerzel rechts / EN: muted code on the right
+OBJ_ROW_DOT = "RowDot"             # runder Anker links / EN: round marker on the left
+OBJ_SELECT_BUTTON = "SelectButton"  # Schaltflaeche, die die Auswahl aufklappt / EN: button that expands the selection
+OBJ_POPUP = "SelectPopup"           # die aufklappende Karte selbst / EN: the popup card itself
+OBJ_NETZ = "NetzView"               # die gezeichnete Netzansicht / EN: the drawn net view
+OBJ_NETZ_TITLE = "NetzTitle"        # fette Ueberschrift ueber dem Netz / EN: bold heading above the net
+OBJ_NETZ_NOTE = "NetzNote"          # gedaempfter Zusatz rechts daneben / EN: muted note next to it
+OBJ_SWITCH_LEFT = "ViewSwitchLeft"    # linke Haelfte des Ansichts-Umschalters / EN: left half of the view switch
+OBJ_SWITCH_RIGHT = "ViewSwitchRight"  # rechte Haelfte desselben / EN: right half of the same
+OBJ_SLIDER_NAME = "SliderName"        # Beschriftung eines Projektions-Reglers / EN: label of a projection slider
+OBJ_SLIDER_VALUE = "SliderValue"      # dessen Zahlenwert rechts / EN: its numeric value on the right
+OBJ_PROJ_HINT = "ProjektionHinweis"   # Meldung anstelle der Karte / EN: message shown in place of the map
 
 
 def stylesheet() -> str:
-    """Das vollstaendige Qt-Stylesheet der Anwendung."""
+    """Das vollstaendige Qt-Stylesheet der Anwendung.
+
+    English: The application's complete Qt stylesheet.
+    """
     return f"""
 QWidget {{
     background-color: {WINDOW_BG};
@@ -448,8 +474,11 @@ QSplitter::handle:horizontal {{ width: 1px; }}
 
 
 # --- Zustandsfarben fuer die Statusleiste ----------------------------------
+# EN: State colors for the status bar
 # Die Statusleiste wird je Meldung eingefaerbt; auch diese Zuordnung gehoert
 # hierher und nicht ins Fenster.
+# EN: The status bar is colored per message; this mapping also belongs here,
+# not in the window.
 _STATE_COLORS = {
     "info": (TEXT_MUTED, SURFACE),
     "busy": (ACCENT, ACCENT_BG),
@@ -461,7 +490,11 @@ _STATE_COLORS = {
 
 def qcolor(value: str) -> QColor:
     """Eine der Farbkonstanten oben als ``QColor`` — fuer alles, was gezeichnet
-    statt per Stylesheet gesetzt wird (z. B. der Zeilen-Delegate)."""
+    statt per Stylesheet gesetzt wird (z. B. der Zeilen-Delegate).
+
+    English: One of the color constants above as a ``QColor`` — for everything
+    that is painted instead of set via the stylesheet (e.g. the row delegate).
+    """
     return QColor(value)
 
 
@@ -475,6 +508,16 @@ def dot_color(key: str) -> QColor:
 
     Deterministisch aus dem Schluessel, damit dieselbe Kohorte immer dieselbe
     Farbe hat; Sattheit und Helligkeit fest, damit nichts grell wird.
+
+    English: Color of the round marker on the left of a cohort row.
+
+    **Purely visual**: it makes the list scannable, like the flag in the
+    template, and encodes nothing. In particular it is NOT the MP-Lite
+    palette — if the colors here and there are meant to match, the palette
+    must come from the prototype, not be reinvented.
+
+    Deterministic from the key, so the same cohort always has the same color;
+    saturation and lightness are fixed so nothing gets garish.
     """
     farbton = (sum(ord(c) * (i + 1) for i, c in enumerate(key)) * 47) % 360
     return QColor.fromHsl(farbton, 150, 150)
@@ -487,6 +530,14 @@ def select_button_style(leer: bool) -> str:
     ``Keine Auswahl``, in gedaempfter — sonst liest sich der Platzhalter wie ein
     gewaehlter Wert. Als Funktion hier, damit auch diese Fallunterscheidung
     keinen Farbwert in ``searchable_select.py`` braucht.
+
+    English: Stylesheet fragment for the button of a popup selection.
+
+    If it shows a selection, it is in normal text color; if it shows
+    ``Keine Auswahl`` (no selection), in a muted one — otherwise the
+    placeholder would read like a chosen value. Kept as a function here so
+    that this distinction, too, needs no color value in
+    ``searchable_select.py``.
     """
     return f"QPushButton#{OBJ_SELECT_BUTTON} {{ color: {TEXT_MUTED if leer else TEXT}; }}"
 
@@ -498,6 +549,14 @@ def cohort_colors() -> dict[str, str]:
     damit dieselbe Kohorte dort und hier dieselbe Farbe hat. Fehlt matplotlib,
     ein HSV-Faecher als Rueckfall — die Karte soll nicht an einer Colormap
     scheitern.
+
+    English: Color per cancer type, stable via the position in
+    ``OVIEDO_COHORTS``.
+
+    matplotlib's ``nipy_spectral``, as in the Oviedo original and in MP-Lite,
+    so the same cohort has the same color there and here. If matplotlib is
+    missing, an HSV fan as a fallback — the map should not fail just because
+    of a colormap.
     """
     from wissensnetz.cohorts import OVIEDO_COHORTS
 
@@ -509,7 +568,7 @@ def cohort_colors() -> dict[str, str]:
 
         cmap = colormaps["nipy_spectral"]
         return {c: to_hex(cmap((i + 0.5) / n)) for i, c in enumerate(codes)}
-    except Exception:      # noqa: BLE001 - kein matplotlib -> HSV-Faecher
+    except Exception:      # noqa: BLE001 - kein matplotlib -> HSV-Faecher / EN: no matplotlib -> HSV fan
         import colorsys
 
         farben = {}
@@ -529,6 +588,12 @@ def cohort_color(code: str | None) -> QColor:
     Das ist **nicht** ``dot_color``: der farbige Punkt in den Auswahllisten ist
     rein optisch und kodiert nichts, diese Palette hier kodiert die Kohorte und
     ist dieselbe wie in MP-Lite.
+
+    English: The color of a cohort; unknown or missing -> neutral gray.
+
+    This is **not** ``dot_color``: the colored dot in the selection lists is
+    purely visual and encodes nothing, whereas this palette here encodes the
+    cohort and is the same as in MP-Lite.
     """
     global _COHORT_COLORS
     if _COHORT_COLORS is None:
@@ -543,6 +608,13 @@ def palette() -> QPalette:
     bekommen unter Windows 11 eigene Fenster und erben dort die dunkle
     Systempalette. Zusammen mit ``setStyle("Fusion")`` in ``app.py`` ist die
     Darstellung damit auf jedem Rechner dieselbe.
+
+    English: Light palette, independent of the Windows light/dark mode.
+
+    The stylesheet alone is not enough: dropdown lists and other popups get
+    their own windows under Windows 11 and inherit the dark system palette
+    there. Together with ``setStyle("Fusion")`` in ``app.py``, the appearance
+    is thereby the same on every machine.
     """
     pal = QPalette()
     text, muted = QColor(TEXT), QColor(TEXT_MUTED)
@@ -574,7 +646,10 @@ def palette() -> QPalette:
 
 
 def status_style(state: str) -> str:
-    """Stylesheet-Fragment fuer die Statusleiste im gegebenen Zustand."""
+    """Stylesheet-Fragment fuer die Statusleiste im gegebenen Zustand.
+
+    English: Stylesheet fragment for the status bar in the given state.
+    """
     fg, bg = _STATE_COLORS.get(state, _STATE_COLORS["info"])
     return (
         f"QStatusBar {{ background-color: {bg}; color: {fg}; "

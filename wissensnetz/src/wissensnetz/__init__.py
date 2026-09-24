@@ -13,6 +13,24 @@ ersetzt dort ``store.load_turtle(turtle)`` und macht daraus ein Upsert je
 Property — gelöscht wird nur, was die aktuelle Nutzlast auch schreibt.
 
     from wissensnetz import load_knowledge
+
+English: Wissensnetz — RDF store, SPARQL and feedback channel of the
+DataBridge project.
+
+Public API (task 1 + 2):
+
+    from wissensnetz import GraphStore, Settings, initialize
+
+Seam to the mediator (task 13, HANDOFF_pablo_store_waechst.md):
+
+    from wissensnetz import write_selection, cases_for_selection
+
+Seam to the mediator (task 14, HANDOFF_pablo_P4_ersetzen.md):
+``load_knowledge`` replaces ``store.load_turtle(turtle)`` there and turns it
+into an upsert per property — only what the current payload also writes is
+deleted.
+
+    from wissensnetz import load_knowledge
 """
 
 from __future__ import annotations

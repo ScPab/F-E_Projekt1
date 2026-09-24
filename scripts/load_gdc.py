@@ -17,6 +17,28 @@ Bewusst ein PROJEKT-Skript (nicht im wissensnetz-Paket): das Paket bleibt
 „nur graph-db", dieses Skript orchestriert Mediator (HTTP) + Wissensnetz.
 Konfiguration: --mediator-url oder ENV MEDIATOR_URL (Default http://localhost:8000);
 Fuseki-Verbindung wie im Paket (ENV GRAPH_DB_URL/GRAPH_DB_DATASET, siehe .env.example).
+
+English: Helper script: fetch real GDC/TCGA cases via the mediator and
+load them into the knowledge graph (Fuseki) — one command instead of
+PowerShell one-liners.
+
+    python scripts/load_gdc.py --project TCGA-BRCA --size 50
+
+Flow:
+    1. POST <mediator>/transform  (GDC JSON -> RDF/Turtle; colleague B)
+    2. graphstore.load_turtle()   (Turtle -> Fuseki; wissensnetz)
+
+OLD PATH (as of before ADR-0003): ``--pancancer`` fills the store
+**globally** with all 32 cohorts. Since ADR-0003 the store grows with
+each call; the regular path is ``scripts/run_selection.py`` (POST
+/selection/preview). This script is kept for comparison measurements
+and the report.
+
+Deliberately a PROJECT script (not inside the wissensnetz package): the
+package stays "graph-db only", this script orchestrates mediator (HTTP)
++ wissensnetz. Configuration: --mediator-url or ENV MEDIATOR_URL
+(default http://localhost:8000); Fuseki connection as in the package
+(ENV GRAPH_DB_URL/GRAPH_DB_DATASET, see .env.example).
 """
 
 from __future__ import annotations
@@ -39,6 +61,13 @@ def _load_one(base: str, store: GraphStore, project: str, *, size: int,
 
     Rückgabe ``(ok, triple_count, message)``. Wirft **nicht** — Fehler werden als
     ``(False, 0, grund)`` zurückgegeben, damit der Pancancer-Loop weiterlaufen kann.
+
+    English: Fetches one project via ``<mediator>/transform`` and loads
+    it into Fuseki.
+
+    Returns ``(ok, triple_count, message)``. **Does not raise** — errors
+    are returned as ``(False, 0, reason)`` so the pancancer loop can keep
+    going.
     """
     body = {"source": "gdc", "project_id": project, "access": access, "size": size}
     try:
@@ -64,7 +93,11 @@ def _load_one(base: str, store: GraphStore, project: str, *, size: int,
 
 
 def _resolve_projects(args: argparse.Namespace) -> list[str]:
-    """Zielprojekte aus den (sich ausschließenden) CLI-Optionen bestimmen."""
+    """Zielprojekte aus den (sich ausschließenden) CLI-Optionen bestimmen.
+
+    English: Determines target projects from the (mutually exclusive)
+    CLI options.
+    """
     if args.pancancer:
         return list(COHORT_PROJECT_IDS)
     if args.projects:
@@ -100,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
 
     # 1) Mediator erreichbar?
+    # EN: 1) Mediator reachable?
     try:
         requests.get(f"{base}/health", timeout=10).raise_for_status()
     except requests.RequestException:
@@ -108,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # 2) Fuseki erreichbar?
+    # EN: 2) Fuseki reachable?
     store = GraphStore()
     if not store.is_reachable():
         print(f"Fuseki nicht erreichbar unter {store.settings.base_url}.", file=sys.stderr)
@@ -119,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
           f"über {base}/transform …")
 
     # 3) Projekt für Projekt laden — robust: Fehler eines Projekts stoppen NICHT.
+    # EN: 3) Load project by project — robust: one project's failure does NOT stop it.
     loaded: list[tuple[str, int]] = []
     skipped: list[tuple[str, str]] = []
     for project in projects:
@@ -133,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"übersprungen — {msg}", file=sys.stderr)
 
     # 4) Zusammenfassung
+    # EN: 4) Summary
     print("\n=== Zusammenfassung ===")
     print(f"Geladen:      {len(loaded)}/{len(projects)}"
           + (f"  ({sum(t for _, t in loaded)} Tripel gesamt)" if loaded else ""))
@@ -146,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Cases im Store gesamt: {rows[0].get('n')}")
 
     # Erfolg, sobald mindestens ein Projekt geladen wurde.
+    # EN: Success as soon as at least one project has been loaded.
     return 0 if loaded else 1
 
 

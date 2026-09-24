@@ -29,6 +29,38 @@ Kein Enum-Alignment für diesen ersten Ausschnitt, daher immer eine leere
 Liste von RDF-star-Annotationen — Rückgabeform identisch zu
 `mapping.cases_to_graph`, damit `serialize_with_provenance` unverändert
 wiederverwendet werden kann.
+
+English: Rule-based cBioPortal clinical-data JSON -> RDF/OWL mapping (ABox).
+
+Unlike GDC/GEO/ENA, `CBioPortalWrapper.get_clinical_data()` delivers the
+data in **long format** (one row per attribute/value pair, columns
+`patientId`/`sampleId`/`clinicalAttributeId`/`value`, see
+`wrappers/cbioportal/client.py`) instead of one record per case/sample.
+This module therefore pivots by `patientId`/`sampleId` first, before
+applying the construction rules.
+
+Reuse instead of duplication (see
+wissensnetz/ontology/databridge-core.ttl, section "Extension: GEO, ENA,
+cBioPortal"): cBioPortal frequently curates the same TCGA/GDC origin data,
+so this module deliberately uses the existing classes/properties
+`db:Project`/`db:Case`/`db:Demographic`/`db:Diagnosis`/`db:Sample` (instead
+of its own cBioPortal-specific duplicates). The PATIENT attributes are
+accordingly distributed — as with GDC (`mapping.py`) — onto `db:Demographic`
+(`sexAtBirth`/`race`/`ethnicity`/`vitalStatus`, rdfs:domain in the ontology)
+or `db:Diagnosis` (`tumorStage`) instead of being written directly onto
+`db:Case`; only `db:age` is deliberately its own, case-direct property (see
+the ontology comment on `db:age`: unlike `db:ageAtDiagnosis`, not tied to a
+diagnosis event).
+
+Per the wrapper docstring, `clinicalAttributeId`s are study-specific, not
+globally standardized — the attribute tables below therefore deliberately
+cover only the IDs common across TCGA-derived studies (analogous to the
+case/project/demographic/diagnosis core slice for GDC). Unknown attributes
+are ignored instead of being guess-mapped.
+
+No enum alignment for this first slice, hence always an empty list of
+RDF-star annotations — return shape identical to `mapping.cases_to_graph`,
+so `serialize_with_provenance` can be reused unchanged.
 """
 
 from __future__ import annotations
@@ -49,6 +81,9 @@ AttributeMap = dict[str, tuple[str, Callable[[str], Any]]]
 # clinicalAttributeId (PATIENT) -> (db:-Property, Cast-Funktion), je Ziel-Node.
 # Mehrere IDs je Property, weil Studien dasselbe Konzept unterschiedlich
 # benennen (z. B. "SEX" vs. "GENDER").
+# EN: clinicalAttributeId (PATIENT) -> (db: property, cast function), per
+# target node. Multiple IDs per property because studies name the same
+# concept differently (e.g. "SEX" vs. "GENDER").
 DEMOGRAPHIC_ATTRIBUTE_MAP: AttributeMap = {
     "SEX": ("sexAtBirth", str),
     "GENDER": ("sexAtBirth", str),
@@ -65,6 +100,7 @@ CASE_ATTRIBUTE_MAP: AttributeMap = {
 }
 
 # clinicalAttributeId (SAMPLE) -> (db:-Property, Cast-Funktion).
+# EN: clinicalAttributeId (SAMPLE) -> (db: property, cast function).
 SAMPLE_ATTRIBUTE_MAP: AttributeMap = {
     "SAMPLE_TYPE": ("sampleType", str),
     "ONCOTREE_CODE": ("oncotreeCode", str),
@@ -74,7 +110,10 @@ _XSD_BY_CAST = {str: XSD.string, int: XSD.integer}
 
 
 def _slug(value: str) -> str:
-    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (siehe mapping.py)."""
+    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (siehe mapping.py).
+
+    English: Instance-IRI-suitable fragment from an arbitrary identifier (see mapping.py).
+    """
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-") or "unbekannt"
 
 
@@ -83,7 +122,10 @@ def _bind_prefixes(graph: Graph) -> None:
 
 
 def _pivot(rows: list[dict[str, Any]], id_key: str) -> dict[str, dict[str, str]]:
-    """Long-Format (eine Zeile je Attribut) -> Wide-Format ({id: {attribut: wert}})."""
+    """Long-Format (eine Zeile je Attribut) -> Wide-Format ({id: {attribut: wert}}).
+
+    English: Long format (one row per attribute) -> wide format ({id: {attribute: value}}).
+    """
     pivoted: dict[str, dict[str, str]] = {}
     for row in rows:
         entity_id = row.get(id_key)
@@ -96,7 +138,10 @@ def _pivot(rows: list[dict[str, Any]], id_key: str) -> dict[str, dict[str, str]]
 
 
 def _apply_attributes(graph: Graph, subject: URIRef, attributes: dict[str, str], attribute_map: AttributeMap) -> bool:
-    """Schreibt bekannte Attribute auf `subject`; gibt zurück, ob mindestens eines geschrieben wurde."""
+    """Schreibt bekannte Attribute auf `subject`; gibt zurück, ob mindestens eines geschrieben wurde.
+
+    English: Writes known attributes onto `subject`; returns whether at least one was written.
+    """
     wrote_any = False
     for attribute_id, value in attributes.items():
         mapping = attribute_map.get(attribute_id)
@@ -128,6 +173,18 @@ def clinical_data_to_graph(
     `db:Demographic`/`db:Diagnosis`, siehe Modul-Docstring) sowie einen
     `db:Sample` pro Probe, verknüpft über `db:hasSample`/`db:isSampleOf`
     (dieselben Properties wie bei GDC).
+
+    English: Translates cBioPortal clinical data (PATIENT + SAMPLE level) of
+    a study into RDF triples.
+
+    `patient_rows`/`sample_rows`: raw `results` lists from
+    `CBioPortalWrapper.get_clinical_data(study_id,
+    clinical_data_type="PATIENT"|"SAMPLE")`. Generates a `db:Project` (from
+    `study_id`, without name/description enrichment — analogous to GDC's
+    `db:Project`, which also carries only the ID), one `db:Case` per patient
+    (plus a linked `db:Demographic`/`db:Diagnosis` as needed, see module
+    docstring), and a `db:Sample` per sample, linked via
+    `db:hasSample`/`db:isSampleOf` (the same properties as with GDC).
     """
     graph = Graph()
     _bind_prefixes(graph)

@@ -1,4 +1,7 @@
-"""Aufgabe 1 — Abnahme: Dataset existiert und TBox-Klassen sind abfragbar."""
+"""Aufgabe 1 — Abnahme: Dataset existiert und TBox-Klassen sind abfragbar.
+
+English: Task 1 — acceptance: the dataset exists and TBox classes are queryable.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ def test_dataset_exists_after_init(store: GraphStore) -> None:
 
 def test_initialize_is_idempotent(store: GraphStore) -> None:
     # Zweiter Lauf darf nicht scheitern und meldet die TBox als vorhanden.
+    # EN: A second run must not fail and reports the TBox as present.
     report = initialize(store)
     assert report["dataset"] == store.settings.dataset
     assert report["tbox"].startswith("skipped")

@@ -7,6 +7,16 @@ Bausteine ab, die Teil 1a des Hand-offs
 (`wissensnetz/prototype/mp_lite/HANDOFF.md`) betreffen: `build_filters`
 sowie `query`/`search`/`get_schema` müssen beliebige GDC-Feldnamen
 unverändert durchreichen.
+
+English: Unit tests for the GDC wrapper (`gdc.client`).
+
+No network access — `GDCWrapper.session` is replaced by a fake (unlike
+`wrappers/gdc/scripts/check_connection.py`, which deliberately tests live
+against the real GDC API, see the module docstring there). Covers the
+building blocks relevant to part 1a of the handoff
+(`wissensnetz/prototype/mp_lite/HANDOFF.md`): `build_filters` as well as
+`query`/`search`/`get_schema` must pass through arbitrary GDC field names
+unchanged.
 """
 
 from __future__ import annotations
@@ -19,7 +29,10 @@ from gdc.cache import WrapperCache
 
 
 class FakeResponse:
-    """Minimales Double für `requests.Response` (nur die genutzten Methoden)."""
+    """Minimales Double für `requests.Response` (nur die genutzten Methoden).
+
+    English: Minimal double for `requests.Response` (only the methods used).
+    """
 
     def __init__(self, payload: dict | None = None, status_code: int = 200, text: str = ""):
         self._payload = payload
@@ -42,6 +55,14 @@ class FakeSession:
     HTTP 414, live gegen die echte GDC-API reproduziert; der JSON-Body landet
     hier im `json`-Kwarg, nicht mehr in `params`) als auch `.get()` (weiterhin
     genutzt von `get_schema()`, das keine Filter mitschickt).
+
+    English: Records the last call and returns a prepared response.
+
+    Offers both `.post()` (used by `query()`/`build_manifest()` — see
+    client.py: extensive filters would otherwise blow the GET query-string
+    length, HTTP 414, reproduced live against the real GDC API; the JSON
+    body lands in the `json` kwarg here, no longer in `params`) and `.get()`
+    (still used by `get_schema()`, which sends no filters).
     """
 
     def __init__(self, response: FakeResponse):
@@ -114,7 +135,10 @@ def test_query_unknown_endpoint_raises_valueerror(wrapper):
 
 
 def test_query_passes_fields_through_unchanged(wrapper):
-    """Kernaussage für HANDOFF Teil 1a: beliebige GDC-Feldnamen werden 1:1 durchgereicht."""
+    """Kernaussage für HANDOFF Teil 1a: beliebige GDC-Feldnamen werden 1:1 durchgereicht.
+
+    English: Core assertion for HANDOFF part 1a: arbitrary GDC field names are passed through 1:1.
+    """
     fields = [
         "demographic.race",
         "demographic.ethnicity",
@@ -179,6 +203,7 @@ def test_query_propagates_http_error(wrapper):
 
 # ---------------------------------------------------------------------
 # GDCWrapper.search (Komfort-Wrapper um query)
+# EN: GDCWrapper.search (convenience wrapper around query)
 # ---------------------------------------------------------------------
 
 def test_search_builds_filters_and_delegates_to_query(wrapper):
@@ -203,6 +228,7 @@ def test_search_builds_filters_and_delegates_to_query(wrapper):
 
 # ---------------------------------------------------------------------
 # Expressionsdaten (HANDOFF Teil 3/3a, wissensnetz/HANDOFF_anndata.md)
+# EN: Expression data (HANDOFF part 3/3a, wissensnetz/HANDOFF_anndata.md)
 # ---------------------------------------------------------------------
 
 def test_build_expression_filters_rna_seq():
@@ -258,7 +284,12 @@ def test_extract_sample_case_rows_flattens_cases_and_samples():
 
 def test_extract_sample_case_rows_missing_project_yields_none():
     """Kein `project`-Objekt im Treffer (z. B. abweichende Feldliste) -> `project_id`
-    ist `None` statt eines KeyError (W2: robust gegen fehlendes Feld)."""
+    ist `None` statt eines KeyError (W2: robust gegen fehlendes Feld).
+
+    English: No `project` object in the hit (e.g. a differing field list) ->
+    `project_id` is `None` instead of a KeyError (W2: robust against a
+    missing field).
+    """
     hits = [
         {
             "file_id": "file-1",
@@ -310,7 +341,10 @@ def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path
     manifest_response = FakeResponse(text="id\tfilename\nfile-1\ts-0001-01.rna_seq.gene_counts.tsv\n")
 
     class RoutingSession:
-        """Liefert je nach Endpunkt eine andere vorbereitete Antwort."""
+        """Liefert je nach Endpunkt eine andere vorbereitete Antwort.
+
+        English: Returns a different prepared response depending on the endpoint.
+        """
 
         def post(self, url, json=None, timeout=None):
             return manifest_response if (json or {}).get("return_type") == "manifest" else query_response
@@ -321,6 +355,7 @@ def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path
 
     def fake_run(command, capture_output, text, check):
         # Simuliert das gdc-client-Ablagemuster <output_dir>/<file_id>/<file_name>.
+        # EN: Simulates the gdc-client storage pattern <output_dir>/<file_id>/<file_name>.
         file_dir = output_dir / "file-1"
         file_dir.mkdir(parents=True, exist_ok=True)
         (file_dir / "s-0001-01.rna_seq.gene_counts.tsv").write_text("gene_id\tvalue\n", encoding="utf-8")
@@ -351,7 +386,10 @@ def test_download_expression_files_maps_samples_to_local_paths(wrapper, tmp_path
 
 
 def test_download_expression_files_gdc_client_not_installed(wrapper, tmp_path, monkeypatch):
-    """`gdc-client` fehlt -> `sample_files` bleibt leer statt eines Absturzes."""
+    """`gdc-client` fehlt -> `sample_files` bleibt leer statt eines Absturzes.
+
+    English: `gdc-client` is missing -> `sample_files` stays empty instead of crashing.
+    """
     hits = [
         {
             "file_id": "file-1",
@@ -379,7 +417,7 @@ def test_download_expression_files_gdc_client_not_installed(wrapper, tmp_path, m
 
     assert result["download"]["status"] == "not_run"
     assert result["sample_case_map"] == {"s-0001-01": "TCGA-XX-0001"}
-    assert result["sample_project_map"] == {}  # kein "project" im Treffer -> project_id None, nicht aufgenommen
+    assert result["sample_project_map"] == {}  # kein "project" im Treffer -> project_id None, nicht aufgenommen / EN: no "project" in the hit -> project_id None, not included
     assert result["sample_files"] == {}
 
 

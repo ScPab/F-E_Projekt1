@@ -3,6 +3,13 @@
 Der Store wird durch ein Doppel ersetzt: die drei Abfragen werden nicht wirklich
 gestellt, sondern anhand ihres Textes wiedererkannt und mit vorbereiteten Zeilen
 beantwortet. Damit prueft der Test die Auswertung, nicht Fuseki.
+
+English: Tests for ``store_reader`` — without Qt, without network, without
+Fuseki.
+
+The store is replaced by a double: the three queries are not actually
+issued, but recognized by their text and answered with prepared rows. This
+way the test checks the evaluation, not Fuseki.
 """
 
 from __future__ import annotations
@@ -18,7 +25,10 @@ import store_reader as sr  # noqa: E402
 
 
 class StoreDoppel:
-    """Antwortet auf die drei Abfragen aus ``store_reader`` mit festen Zeilen."""
+    """Antwortet auf die drei Abfragen aus ``store_reader`` mit festen Zeilen.
+
+    English: Answers the three queries from ``store_reader`` with fixed rows.
+    """
 
     def __init__(self, wurzel=None, kohorten=None, attribute=None) -> None:
         self._wurzel = wurzel or []
@@ -46,8 +56,12 @@ def _kohorte(cases: int, **attribute) -> dict:
 
 
 # --- Abzug -------------------------------------------------------------------
+# EN: Snapshot
 def test_snapshot_auf_leerem_store_ist_wohlgeformt() -> None:
-    """Leerer Store heisst leerer Abzug, nicht KeyError."""
+    """Leerer Store heisst leerer Abzug, nicht KeyError.
+
+    English: An empty store means an empty snapshot, not a KeyError.
+    """
     abzug = sr.snapshot(StoreDoppel())
     assert abzug == {"cases": 0, "projects": 0, "cohorts": {}}
 
@@ -72,6 +86,7 @@ def test_snapshot_fuehrt_kohorten_und_attribute_zusammen() -> None:
     assert abzug["cases"] == 20
     assert abzug["cohorts"]["TCGA-BRCA"]["cases"] == 20
     # Der lokale Name, nicht die volle IRI.
+    # EN: The local name, not the full IRI.
     assert abzug["cohorts"]["TCGA-BRCA"]["attributes"] == {
         "sexAtBirth": {"cases": 20, "values": 2}
     }
@@ -85,6 +100,7 @@ def test_snapshot_vertraegt_fehlende_zaehlwerte() -> None:
 
 
 # --- Vergleich ---------------------------------------------------------------
+# EN: Comparison
 def test_diff_erkennt_neu_gewachsen_und_unveraendert() -> None:
     vorher = _abzug(30, {"TCGA-BRCA": _kohorte(20), "TCGA-KIRC": _kohorte(10)})
     nachher = _abzug(70, {"TCGA-BRCA": _kohorte(50),
@@ -98,7 +114,11 @@ def test_diff_erkennt_neu_gewachsen_und_unveraendert() -> None:
 
 
 def test_diff_erkennt_neues_attribut_unter_bekannter_kohorte() -> None:
-    """Gleiche Kohorte, neue Frage — genau das bildet das Trigger-Modell ab."""
+    """Gleiche Kohorte, neue Frage — genau das bildet das Trigger-Modell ab.
+
+    English: Same cohort, new question — that is exactly what the trigger
+    model captures.
+    """
     vorher = _abzug(20, {"TCGA-BRCA": _kohorte(20, sexAtBirth=(20, 2))})
     nachher = _abzug(20, {"TCGA-BRCA": _kohorte(20, sexAtBirth=(20, 2),
                                                 vitalStatus=(20, 2))})
@@ -121,12 +141,16 @@ def test_diff_ohne_faelle_markiert_die_wurzel_nicht() -> None:
 
 
 # --- Reihenfolge -------------------------------------------------------------
+# EN: Ordering
 def test_sortierung_neu_vor_gewachsen_vor_fallzahl() -> None:
-    """Eine neue Kohorte darf nie hinter '… N weitere' verschwinden."""
+    """Eine neue Kohorte darf nie hinter '… N weitere' verschwinden.
+
+    English: A new cohort must never disappear behind '… N more'.
+    """
     vorher = _abzug(1100, {"TCGA-BRCA": _kohorte(1000), "TCGA-KIRC": _kohorte(100)})
-    nachher = _abzug(1160, {"TCGA-BRCA": _kohorte(1000),   # unveraendert, aber gross
-                            "TCGA-KIRC": _kohorte(150),    # gewachsen
-                            "TCGA-LUAD": _kohorte(10)})    # neu, aber klein
+    nachher = _abzug(1160, {"TCGA-BRCA": _kohorte(1000),   # unveraendert, aber gross / EN: unchanged but large
+                            "TCGA-KIRC": _kohorte(150),    # gewachsen / EN: grown
+                            "TCGA-LUAD": _kohorte(10)})    # neu, aber klein / EN: new but small
     unterschied = sr.diff(vorher, nachher)
 
     assert sr.sortierte_kohorten(nachher, unterschied) == [
@@ -150,6 +174,7 @@ def test_attribute_werden_ebenso_sortiert() -> None:
 
 
 # --- Namensregel -------------------------------------------------------------
+# EN: Naming rule
 PANEL_NAMEN = [
     "sex_at_birth", "race", "ethnicity", "vital_status",
     "primary_diagnosis", "age_at_diagnosis", "morphology",
@@ -175,11 +200,17 @@ def test_panel_name_bei_genauer_deckung(local: str, erwartet: str) -> None:
 def test_panel_name_raet_nicht(local: str) -> None:
     """Zwei der elf bleiben ohne Zweitzeile — eine halb stimmende
     Rueckuebersetzung waere genau die Sorte stiller Fehlzuordnung, die uns schon
-    das tote GDC-Feld 'gender' eingebrockt hat."""
+    das tote GDC-Feld 'gender' eingebrockt hat.
+
+    English: Two of the eleven remain without a second line — a half-correct
+    back-translation would be exactly the kind of silent misattribution that
+    already got us the dead GDC field 'gender'.
+    """
     assert sr.panel_name(local, PANEL_NAMEN) is None
 
 
 # --- Einschraenkung auf die Auswahl im Panel ---------------------------------
+# EN: Restriction to the selection in the panel
 ZUORDNUNG = {"primary_diagnosis": "primaryDiagnosisLabel",
              "has_metastasis": "metastasisAtDiagnosis"}
 
@@ -191,7 +222,11 @@ def test_store_property_folgt_dem_camelcase() -> None:
 
 
 def test_store_property_nimmt_die_ausdrueckliche_zuordnung() -> None:
-    """Die zwei, die nicht mechanisch folgen, stehen in config/panel.json."""
+    """Die zwei, die nicht mechanisch folgen, stehen in config/panel.json.
+
+    English: The two that do not follow mechanically are listed in
+    config/panel.json.
+    """
     assert sr.store_property("primary_diagnosis", ZUORDNUNG) == "primaryDiagnosisLabel"
     assert sr.store_property("has_metastasis", ZUORDNUNG) == "metastasisAtDiagnosis"
 
@@ -217,7 +252,11 @@ def test_auswahl_abzug_zeigt_nur_angehakte_attribute() -> None:
 
 def test_auswahl_abzug_zeigt_noch_nicht_abgerufenes_mit_null() -> None:
     """Vor dem Klick sichtbar machen, was die Auswahl bewegen wird — fehlende
-    Knoten waeren dafuer nutzlos."""
+    Knoten waeren dafuer nutzlos.
+
+    English: Make visible, before the click, what the selection will move —
+    missing nodes would be useless for that.
+    """
     abzug = _abzug(50, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2))})
     gefiltert = sr.auswahl_abzug(abzug, "TCGA-BRCA",
                                  ["sex_at_birth", "tumor_stage"], ZUORDNUNG)
@@ -239,7 +278,10 @@ def test_auswahl_abzug_ohne_kohorte_ist_leer() -> None:
 
 
 def test_auswahl_abzug_behaelt_die_store_namen_als_schluessel() -> None:
-    """Sonst faende diff() seine Eintraege nicht wieder."""
+    """Sonst faende diff() seine Eintraege nicht wieder.
+
+    English: Otherwise diff() would not find its entries again.
+    """
     vorher = _abzug(20, {"TCGA-BRCA": _kohorte(20, sexAtBirth=(20, 2))})
     nachher = _abzug(50, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2))})
     unterschied = sr.diff(vorher, nachher)
@@ -251,14 +293,18 @@ def test_auswahl_abzug_behaelt_die_store_namen_als_schluessel() -> None:
 
 def test_auswahl_abzug_nimmt_mehrere_kohorten() -> None:
     """Vergleichen heisst mehrere Kohorten nebeneinander — alle gewaehlten
-    stehen im Netz, die uebrigen aus dem Store nicht."""
+    stehen im Netz, die uebrigen aus dem Store nicht.
+
+    English: Comparing means several cohorts side by side — all chosen ones
+    appear in the network, the rest from the store do not.
+    """
     abzug = _abzug(90, {"TCGA-BRCA": _kohorte(50, sexAtBirth=(50, 2)),
                         "TCGA-LUAD": _kohorte(30, sexAtBirth=(30, 2)),
                         "TCGA-KIRC": _kohorte(10, sexAtBirth=(10, 2))})
     gefiltert = sr.auswahl_abzug(abzug, ["TCGA-BRCA", "TCGA-LUAD"],
                                  ["sex_at_birth"], ZUORDNUNG)
     assert set(gefiltert["cohorts"]) == {"TCGA-BRCA", "TCGA-LUAD"}
-    assert gefiltert["cases"] == 80          # Summe der gewaehlten, nicht 90
+    assert gefiltert["cases"] == 80          # Summe der gewaehlten, nicht 90 / EN: sum of the chosen ones, not 90
     assert gefiltert["projects"] == 2
 
 
@@ -276,20 +322,29 @@ def test_auswahl_abzug_leere_liste_ist_leer() -> None:
 
 
 # --- Attribute ueber alle gewaehlten Kohorten --------------------------------
+# EN: Attributes across all chosen cohorts
 def test_gesamt_attribute_summiert_die_faelle() -> None:
     """Die Attribute gelten der ganzen Auswahl — im Auftrag stehen sie neben den
-    Kohorten, nicht unter einer davon."""
+    Kohorten, nicht unter einer davon.
+
+    English: The attributes apply to the whole selection — in the order they
+    stand next to the cohorts, not under one of them.
+    """
     abzug = _abzug(70, {"TCGA-ACC": _kohorte(50, race=(50, 4), sexAtBirth=(50, 2)),
                         "TCGA-BLCA": _kohorte(20, race=(20, 3), sexAtBirth=(0, 0))})
     gesamt = sr.gesamt_attribute(abzug)
     assert gesamt["race"]["cases"] == 70
-    assert gesamt["sexAtBirth"]["cases"] == 50      # eine Kohorte hat dazu nichts
+    assert gesamt["sexAtBirth"]["cases"] == 50      # eine Kohorte hat dazu nichts / EN: one cohort has nothing for it
     assert gesamt["race"]["kohorten"] == 2
 
 
 def test_gesamt_attribute_summiert_die_werte_nicht() -> None:
     """Distinkte Werte je Kohorte lassen sich nicht addieren — 'female' in zwei
-    Kohorten waere sonst zweimal gezaehlt."""
+    Kohorten waere sonst zweimal gezaehlt.
+
+    English: Distinct values per cohort cannot be added — 'female' in two
+    cohorts would otherwise be counted twice.
+    """
     abzug = _abzug(70, {"TCGA-ACC": _kohorte(50, sexAtBirth=(50, 2)),
                         "TCGA-BLCA": _kohorte(20, sexAtBirth=(20, 2))})
     assert sr.gesamt_attribute(abzug)["sexAtBirth"]["values"] == 0

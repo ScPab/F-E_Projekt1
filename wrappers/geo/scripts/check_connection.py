@@ -14,6 +14,24 @@ Nutzt GEO_API_BASE_URL aus der Umgebung, falls gesetzt, sonst den
 NCBI-Standard https://eutils.ncbi.nlm.nih.gov/entrez/eutils.
 
 Exit-Code 0 bei Erfolg, 1 bei Fehler (z. B. für CI/Cron nutzbar).
+
+English: Smoke test: checks whether the GEO wrapper can actually talk to
+the real NCBI E-utilities API.
+
+Not a unit test (no mocking, real network request) — deliberately a simple,
+standalone script for the quick manual/CI check "does the connection to
+GEO/NCBI currently work", analogous to
+wrappers/gdc/scripts/check_connection.py. Checks metadata search
+(GEOWrapper.search) and schema introspection (GEOWrapper.get_schema) in
+sequence, see wrappers/geo/client.py.
+
+Invocation:
+    python wrappers/geo/scripts/check_connection.py
+
+Uses GEO_API_BASE_URL from the environment if set, otherwise the NCBI
+default https://eutils.ncbi.nlm.nih.gov/entrez/eutils.
+
+Exit code 0 on success, 1 on error (e.g. usable for CI/cron).
 """
 
 from __future__ import annotations
@@ -24,6 +42,8 @@ from pathlib import Path
 
 # Läuft auch ohne vorherige `pip install -e ./wrappers` — wrappers/ wird
 # direkt auf den Pfad gelegt, damit `import geo` funktioniert.
+# EN: Also runs without a prior `pip install -e ./wrappers` — wrappers/ is
+# put directly on the path so `import geo` works.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from geo import GEOWrapper  # noqa: E402

@@ -35,6 +35,44 @@ internes DataBridge-Schema/Ontologie-Begriff) definiert werden. `query`/
 `search` geben Ergebnisse aktuell noch mit den ENA-Originalfeldnamen zurück
 (`results`) — die Übersetzung in ein einheitliches internes Schema ist die
 Stelle, an der eine Mapping-Tabelle oder Ontologie-Anbindung andocken würde.
+
+English: Wrapper for the ENA (European Nucleotide Archive) API — EBI Portal
+API.
+
+In the spirit of the mediator-wrapper pattern, this module encapsulates all
+access to one concrete data source (here: ENA via the EBI Portal API,
+https://www.ebi.ac.uk/ena/portal/api/) and delivers data in a normalized
+intermediate form expected by the mediator. The transformation to
+anndata/.h5ad is deliberately NOT part of this wrapper — that is a separate,
+later step on the mediator side (see `wrappers/gdc/client.py` for the same
+principle in the first wrapper).
+
+Two-tier access pattern, analogous to the GDC wrapper:
+  - Metadata tier (`query`, `search`, `get_schema`): a single JSON endpoint
+    (`/search`), very similar to GDC — search query + field list +
+    `limit`/`offset` pagination. Field-name/schema introspection via
+    `/returnFields` (instead of `_mapping` for GDC).
+  - Bulk tier (`get_download_links`, `download_fastq_files`): ENA has no
+    separate manifest endpoint and no external tool like `gdc-client` —
+    `/search` already delivers the finished FASTQ download URLs for a read
+    run in the `fastq_ftp` field (multiple files semicolon-separated),
+    reachable directly via HTTPS (verified live).
+
+IMPORTANT DIFFERENCE FROM GDC/GEO: the ENA `/search` response contains NO
+total hit count (no "total" as with GDC, no "count" as with GEO's
+`esearch`). `pagination.has_more` in `query()` is therefore only a heuristic
+(page completely full -> presumably more hits), not reliable proof — if a
+real total count is needed, a different ENA endpoint would additionally
+have to be checked (e.g. `/api/beta/search` with different semantics),
+which was deliberately not done here (no verified need in the prototype).
+
+ONTOLOGY/MAPPING LAYER (later expansion stage, analogous to the GDC
+wrapper): `get_schema()` supplies the raw field names (`columnId`) of the
+ENA API. This list is the basis against which future field mappings (ENA
+field -> internal DataBridge schema/ontology term) are defined. `query`/
+`search` currently still return results with the original ENA field names
+(`results`) — the translation into a unified internal schema is the place
+where a mapping table or ontology connection would dock in.
 """
 
 from __future__ import annotations
@@ -52,6 +90,10 @@ DEFAULT_TIMEOUT = 30
 # Ergebnistypen ("result") laut ENA Portal API (`GET /results`) — Auswahl der
 # für den Testfall relevanten (Rohdaten/Studien-Metadaten), nicht die
 # vollständige Liste (u. a. fehlen "assembly", "coding"/"noncoding" etc.).
+# EN: Result types ("result") per the ENA Portal API (`GET /results`) — a
+# selection of the ones relevant for the test case (raw data/study
+# metadata), not the full list (e.g. "assembly", "coding"/"noncoding" etc.
+# are missing).
 RESULT_TYPES = ("read_run", "read_experiment", "read_study", "study", "sample", "analysis")
 
 StrOrList = Union[str, Iterable[str]]
@@ -77,6 +119,21 @@ def build_query(
     `extra` bei `build_filters()` im GDC-Wrapper.
 
     Beispiel: build_query(study_accession="PRJEB1234", library_strategy="RNA-Seq")
+        -> 'study_accession="PRJEB1234" AND library_strategy="RNA-Seq"'
+
+    English: Builds an ENA search query string (`query` parameter of
+    `/search`) from simplified search parameters.
+
+    Deliberately covers only the fields needed for the prototype (full list
+    via `ENAWrapper.get_schema()` or `/returnFields`):
+      - study_accession    – e.g. "PRJEB1234"
+      - library_strategy   – e.g. "RNA-Seq"
+      - instrument_platform – e.g. "ILLUMINA"
+    Further conditions can be added via `extra` (a list of raw query
+    fragments) without changing this function — analogous to `extra` in
+    `build_filters()` in the GDC wrapper.
+
+    Example: build_query(study_accession="PRJEB1234", library_strategy="RNA-Seq")
         -> 'study_accession="PRJEB1234" AND library_strategy="RNA-Seq"'
     """
     parts: list[str] = []
@@ -110,6 +167,15 @@ class ENAWrapper:
     Konstruktor-Parameter `base_url` — analog zum GDC-Wrapper wäre eine
     Umgebungsvariable `ENA_API_BASE_URL` der nächste Schritt, sobald der
     Mediator diesen Wrapper anbindet, siehe README.md).
+
+    English: Encapsulates access to ENA (European Nucleotide Archive) for
+    the mediator.
+
+    Base URL per the ENA Portal API documentation:
+    https://www.ebi.ac.uk/ena/portal/api (configurable via the constructor
+    parameter `base_url` — analogous to the GDC wrapper, an environment
+    variable `ENA_API_BASE_URL` would be the next step once the mediator
+    connects this wrapper, see README.md).
     """
 
     def __init__(
@@ -147,6 +213,16 @@ class ENAWrapper:
 
         Die Query-Spezifikation selbst wird als Tier-1-Cache-Eintrag
         ("Recipe") abgelegt, wie im GDC-Wrapper.
+
+        English: Runs a paginated search against an ENA result type.
+
+        `result`: one of `RESULT_TYPES` (default `read_run` — individual
+        sequencing runs, analogous to GDC's default endpoint `files`).
+        Pagination via `limit`/`offset` (named `size`/`from_` here,
+        analogous to the GDC wrapper).
+
+        The query specification itself is stored as a tier-1 cache entry
+        ("recipe"), as in the GDC wrapper.
         """
         if result not in RESULT_TYPES:
             raise ValueError(f"Unbekannter ENA-Ergebnistyp: {result!r} (erwartet: {RESULT_TYPES})")
@@ -174,10 +250,16 @@ class ENAWrapper:
             # ENA liefert keine Gesamttrefferzahl (siehe Modul-Docstring) —
             # "has_more" ist nur eine Heuristik (Seite voll -> vermutlich
             # weitere Treffer vorhanden), kein verlässlicher Beweis.
+            # EN: ENA delivers no total hit count (see module docstring) —
+            # "has_more" is only a heuristic (page full -> presumably more
+            # hits), not reliable proof.
             "pagination": {"limit": size, "offset": from_, "retrieved": len(results), "has_more": len(results) == size},
             # ENA-Originalfeldnamen unverändert — Übersetzung ins interne
             # Schema ist Aufgabe der späteren Ontologie-/Mapping-Schicht,
             # analog zum GDC-Wrapper (siehe Modul-Docstring).
+            # EN: Original ENA field names unchanged — translation into the
+            # internal schema is the job of the later ontology/mapping
+            # layer, analogous to the GDC wrapper (see module docstring).
             "results": results,
         }
 
@@ -197,6 +279,12 @@ class ENAWrapper:
         Library-Strategie, Sequenzier-Plattform) und ruft `query()` auf.
 
         Beispiel: search(study_accession="PRJEB1234", library_strategy="RNA-Seq")
+
+        English: Convenience function analogous to `GDCWrapper.search()`:
+        builds a search query from simplified parameters (study accession,
+        library strategy, sequencing platform) and calls `query()`.
+
+        Example: search(study_accession="PRJEB1234", library_strategy="RNA-Seq")
         """
         query = build_query(
             study_accession=study_accession,
@@ -213,6 +301,13 @@ class ENAWrapper:
         Feldliste ist die Grundlage, gegen die künftige Feld-Mappings
         (ENA-Feldname -> internes DataBridge-Schema/Ontologie-Begriff)
         definiert werden.
+
+        English: Fetches `returnFields` for an ENA result type and returns
+        the available field names (`columnId`) sorted as a list.
+
+        Analogous to `GDCWrapper.get_schema()` (`_mapping` there): this
+        field list is the basis against which future field mappings (ENA
+        field name -> internal DataBridge schema/ontology term) are defined.
         """
         if result not in RESULT_TYPES:
             raise ValueError(f"Unbekannter ENA-Ergebnistyp: {result!r} (erwartet: {RESULT_TYPES})")
@@ -239,6 +334,19 @@ class ENAWrapper:
         verifiziert auch per HTTPS abrufbar sind — ohne Auth-Token, da nur
         offen zugängliche Read-Runs ein `fastq_ftp`-Feld liefern (kontrollierte
         Daten liefern hier einen leeren Wert).
+
+        English: Returns the FASTQ download URLs (+ file sizes) for a read
+        run, from the `fastq_ftp`/`fastq_bytes` fields of a `read_run`
+        search.
+
+        ENA has no standalone manifest endpoint like GDC
+        (`/files?return_type=manifest`); the download addresses come
+        directly along with the metadata search. `fastq_ftp` delivers
+        host-relative paths without a scheme (e.g.
+        "ftp.sra.ebi.ac.uk/vol1/..."), which are verified live to also be
+        fetchable via HTTPS — without an auth token, since only openly
+        accessible read runs deliver a `fastq_ftp` field (controlled data
+        delivers an empty value here).
         """
         result = self.query(
             result="read_run",
@@ -273,6 +381,19 @@ class ENAWrapper:
         siehe cache.py) und sollten nach Verarbeitung via `purge()` wieder
         entfernt werden — wie im GDC-Wrapper nur als Hinweis, der eigentliche
         Zielpfad wird vom Aufrufer vorgegeben.
+
+        English: Downloads the FASTQ files of a read run directly via HTTP.
+
+        Unlike the GDC wrapper (`download_via_gdc_client`, external
+        `gdc-client` tool via subprocess), there is no comparable external
+        bulk-download tool for ENA — the addresses delivered by the search
+        are complete, directly fetchable file URLs (no directory listing
+        needed as with the GEO wrapper).
+
+        Raw data conceptually belongs in the tier-3 cache (`self.cache.raw`,
+        see cache.py) and should be removed again after processing via
+        `purge()` — as in the GDC wrapper, only a hint here, the actual
+        target path is supplied by the caller.
         """
         links = self.get_download_links(run_accession)
         if not links["files"]:
@@ -301,6 +422,12 @@ class ENAWrapper:
         Wrapper liefert strukturierte Metadaten/Rohdaten-Referenzen, die
         Transformation nach anndata ist ein separater Mediator-seitiger
         Schritt.
+
+        English: Converts an ENA response into the target format anndata/.h5ad.
+
+        Deliberately not part of this wrapper (see module docstring) — the
+        wrapper delivers structured metadata/raw-data references, the
+        transformation to anndata is a separate mediator-side step.
         """
         raise NotImplementedError(
             "Transformation nach anndata ist bewusst kein Teil des Wrappers, "

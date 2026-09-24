@@ -10,6 +10,19 @@ Kein Enum-Alignment für diesen ersten Ausschnitt, daher immer eine leere
 Liste von RDF-star-Annotationen — Rückgabeform identisch zu
 `mapping.cases_to_graph`, damit `serialize_with_provenance` unverändert
 wiederverwendet werden kann. Global-as-View wie bei GDC/GEO.
+
+English: Rule-based ENA run JSON -> RDF/OWL mapping (ABox).
+
+Analogous to `mapping.py` (GDC) and `mapping_geo.py`: for the response of
+`ENAWrapper.search(result="read_run", fields=[...])`. Ontology/TBox: see
+wissensnetz/ontology/databridge-core.ttl (`db:Study`/`db:Run`) — `db:Run` is
+deliberately shared with `mapping_geo.py` (see the comment there in the
+ontology: the same role "a run/sample within a series/study").
+
+No enum alignment for this first slice, hence always an empty list of
+RDF-star annotations — return shape identical to `mapping.cases_to_graph`,
+so `serialize_with_provenance` can be reused unchanged. Global-as-view as
+with GDC/GEO.
 """
 
 from __future__ import annotations
@@ -27,7 +40,10 @@ StarAnnotation = tuple[URIRef, URIRef, URIRef, str, float]
 
 
 def _slug(value: str) -> str:
-    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (siehe mapping.py)."""
+    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (siehe mapping.py).
+
+    English: Instance-IRI-suitable fragment from an arbitrary identifier (see mapping.py).
+    """
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-") or "unbekannt"
 
 
@@ -36,7 +52,10 @@ def _bind_prefixes(graph: Graph) -> None:
 
 
 def _to_int(value: Any) -> int | None:
-    """ENA liefert numerische Felder (z. B. `read_count`) als String — robust in int wandeln."""
+    """ENA liefert numerische Felder (z. B. `read_count`) als String — robust in int wandeln.
+
+    English: ENA delivers numeric fields (e.g. `read_count`) as strings — robustly convert to int.
+    """
     if value in (None, ""):
         return None
     try:
@@ -53,6 +72,15 @@ def runs_to_graph(runs: list[dict[str, Any]]) -> tuple[Graph, list[StarAnnotatio
     `read_count` (siehe `ENAWrapper.search`/`get_schema("read_run")` für die
     volle Feldliste; nicht angeforderte Felder fehlen einfach im Dict und
     werden hier übersprungen statt einen Fehler zu werfen).
+
+    English: Translates ENA `read_run` hits into RDF triples (study + run).
+
+    Expects fields such as `run_accession`, `study_accession`,
+    `description`, `library_strategy`, `instrument_platform`,
+    `scientific_name`, `read_count` (see `ENAWrapper.search`/
+    `get_schema("read_run")` for the full field list; fields not requested
+    are simply missing from the dict and are skipped here instead of raising
+    an error).
     """
     graph = Graph()
     _bind_prefixes(graph)

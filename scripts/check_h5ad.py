@@ -23,6 +23,32 @@ Rueckgabewert: 0 = in Ordnung, 1 = harter Fehler (unlesbar, NaN/Inf in X,
 doppelte Schluessel, leere Achse). Mit `--strict` fuehren auch Warnungen
 (leere obs-Spalten, fehlende Einbettung, leere Zeilen) zu 1 — brauchbar, um in
 einem Skript abzubrechen.
+
+English: Checks a generated `.h5ad` for content — not just "does it
+open".
+
+    python scripts/check_h5ad.py                      # newest .h5ad in the project
+    python scripts/check_h5ad.py path/to/file.h5ad
+    python scripts/check_h5ad.py file.h5ad --strict    # warnings count as errors
+
+Meant as a check after every `Generate` (UI, `run_selection.py
+--generate` or `/export/anndata`): which `obs` clinical fields actually
+arrived, is the matrix usable, is the tSNE embedding present?
+
+Why not just an HDF5 viewer: it shows that a column **exists**, not
+whether it **contains values**. That is exactly where the known gaps
+sit (clinical fields from the store, see wissensnetz/Tasks Archiv/
+HANDOFF_pablo_store_waechst.md, P3).
+
+Deliberately a PROJECT script (not in the wissensnetz package): it only
+reads a file, talks neither to the mediator nor to Fuseki. `anndata` is
+a prototype/mediator dependency, the core package stays anndata-free
+(wissensnetz/CLAUDE.md).
+
+Return value: 0 = OK, 1 = hard error (unreadable, NaN/Inf in X,
+duplicate keys, empty axis). With `--strict`, warnings too (empty obs
+columns, missing embedding, empty rows) lead to 1 — useful for aborting
+a script.
 """
 
 from __future__ import annotations
@@ -32,12 +58,17 @@ import sys
 from pathlib import Path
 
 # Projekt-Wurzel: diese Datei liegt unter <repo>/scripts/.
+# EN: Project root: this file lives under <repo>/scripts/.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Spalten, die MP-Lite fuer Hover und Faerbung erwartet (Oviedo-Feldliste,
 # siehe wissensnetz/prototype/mp_lite/h5ad_source.py::_OBS_FIELDS). Fehlen sie
 # ganz, ist das ein anderer Fall als "vorhanden, aber leer" — deshalb getrennt
 # gemeldet.
+# EN: Columns MP-Lite expects for hover and coloring (Oviedo field list,
+# see wissensnetz/prototype/mp_lite/h5ad_source.py::_OBS_FIELDS). If they
+# are missing entirely, that is a different case than "present but
+# empty" — hence reported separately.
 _ERWARTETE_OBS = (
     "sample_type", "submitter_id", "project_id", "race", "sex_at_birth", "ethnicity",
     "vital_status", "tumor_stage", "morphology", "site_of_resection_or_biopsy",
@@ -45,9 +76,11 @@ _ERWARTETE_OBS = (
 )
 
 # Einbettung, aus der MP-Lite die Genexpressions-Karte zeichnet.
+# EN: Embedding from which MP-Lite draws the gene expression map.
 _TSNE_KEY = "X_tsne_genes"
 
 # Werte, die pandas beim Lesen fuer "nicht gesetzt" liefern kann.
+# EN: Values pandas may return for "not set" when reading.
 _LEER = {"", "nan", "None", "<NA>", "NaN"}
 
 
@@ -56,7 +89,10 @@ def _err(*args: object) -> None:
 
 
 def find_latest(root: Path) -> Path | None:
-    """Neueste `.h5ad` unterhalb von ``root`` (nach Aenderungszeit)."""
+    """Neueste `.h5ad` unterhalb von ``root`` (nach Aenderungszeit).
+
+    English: Newest `.h5ad` below ``root`` (by modification time).
+    """
     dateien = [p for p in root.rglob("*.h5ad") if p.is_file()]
     if not dateien:
         return None
@@ -64,14 +100,20 @@ def find_latest(root: Path) -> Path | None:
 
 
 def _fill_state(series) -> tuple[int, list[str]]:
-    """``(gefuellte Werte, bis zu drei Beispiele)`` einer obs-Spalte."""
+    """``(gefuellte Werte, bis zu drei Beispiele)`` einer obs-Spalte.
+
+    English: ``(filled values, up to three examples)`` of an obs column.
+    """
     werte = [str(v) for v in series.tolist()]
     gefuellt = [v for v in werte if v not in _LEER]
     return len(gefuellt), gefuellt[:3]
 
 
 def check(path: Path) -> tuple[list[str], list[str]]:
-    """Datei pruefen und berichten. Gibt ``(fehler, warnungen)`` zurueck."""
+    """Datei pruefen und berichten. Gibt ``(fehler, warnungen)`` zurueck.
+
+    English: Checks the file and reports. Returns ``(errors, warnings)``.
+    """
     import anndata as ad
     import numpy as np
 
@@ -89,6 +131,7 @@ def check(path: Path) -> tuple[list[str], list[str]]:
         fehler.append("keine einzige Gen-Spalte (n_vars = 0)")
 
     # --- obs: die eigentliche Frage, welche Klinikfelder ankamen -----------
+    # EN: obs: the real question of which clinical fields arrived
     print("--- obs (Klinikfelder je Probe) ---")
     leere_spalten: list[str] = []
     for spalte in adata.obs.columns:
@@ -107,6 +150,7 @@ def check(path: Path) -> tuple[list[str], list[str]]:
                          + ", ".join(fehlende))
 
     # --- Schluessel -------------------------------------------------------
+    # EN: --- keys ---
     print("\n--- Schluessel ---")
     print(f"    obs_names: {list(adata.obs_names[:3])}  eindeutig={adata.obs_names.is_unique}")
     print(f"    var_names: {list(adata.var_names[:3])}  eindeutig={adata.var_names.is_unique}")
@@ -117,6 +161,7 @@ def check(path: Path) -> tuple[list[str], list[str]]:
         fehler.append("var_names sind nicht eindeutig (doppelte Gene)")
 
     # --- X ----------------------------------------------------------------
+    # EN: --- X (matrix) ---
     print("\n--- X (Matrix) ---")
     X = adata.X
     dicht = X.toarray() if hasattr(X, "toarray") else np.asarray(X)
@@ -138,6 +183,7 @@ def check(path: Path) -> tuple[list[str], list[str]]:
         fehler.append(f"{n_inf} Inf in X")
 
     # --- obsm -------------------------------------------------------------
+    # EN: --- obsm (embeddings) ---
     print("\n--- obsm (Einbettungen) ---")
     if len(adata.obsm):
         for key in adata.obsm:
@@ -191,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         fehler, warnungen = check(path)
-    except Exception as exc:  # noqa: BLE001 (jede Lesefehlerart ist hier ein Befund)
+    except Exception as exc:  # noqa: BLE001 (jede Lesefehlerart ist hier ein Befund) / EN: every read-error type is a finding here
         _err(f"\nDatei nicht lesbar: {type(exc).__name__}: {exc}")
         return 1
 

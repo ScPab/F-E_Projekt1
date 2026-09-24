@@ -40,6 +40,51 @@ Format der selection.json (= mediator/app/schemas.py::SelectionRequest):
       ],
       "size": 20
     }
+
+English: Helper script: send a selection (selection.json) through the
+mediator and display the result in the knowledge graph — the chain
+without a UI.
+
+    python scripts/run_selection.py selection.json
+    python scripts/run_selection.py selection.json --generate
+    python scripts/run_selection.py selection.json --generate --out wissensnetz/data/selection_demo.h5ad
+
+Flow:
+    1. POST <mediator>/selection/preview  or  /selection/generate
+       (UI selection -> fetch -> translation -> load; colleague B)
+    2. with --out: fetch the generated `.h5ad` via GET <mediator><download_url>
+       (otherwise it stays in the mediator container and MP-Lite cannot find it)
+    3. `wissensnetz selection <recipe_key>` per level (wissensnetz)
+
+This is the regular path since ADR-0003: **one** scope instead of a
+global preload. scripts/selection_demo.json is the versioned reference
+selection.
+
+Deliberately a PROJECT script (not in the wissensnetz package), pattern
+like scripts/load_gdc.py: the package stays "graph-db only", this
+script orchestrates mediator (HTTP) + wissensnetz. No GDC access.
+
+A precondition for step 2 is that the mediator writes the manifest
+(``wissensnetz.selection.write_selection``, see
+wissensnetz/HANDOFF_pablo_store_waechst.md, P1/P2). As long as that is
+not yet implemented, the script reports "no selection in the store" and
+shows only the mediator's response — that is the expected interim
+state, not a wissensnetz bug.
+
+Configuration: --mediator-url or ENV MEDIATOR_URL (default
+http://localhost:8000); Fuseki connection as in the package (ENV
+GRAPH_DB_URL/GRAPH_DB_DATASET, see .env.example).
+
+Format of selection.json (= mediator/app/schemas.py::SelectionRequest):
+
+    {
+      "levels": [
+        {"source": "gdc", "cohorts": ["TCGA-BRCA"],
+         "modality": "gene_expression",
+         "attributes": ["sex_at_birth", "tumor_stage"]}
+      ],
+      "size": 20
+    }
 """
 
 from __future__ import annotations
@@ -58,7 +103,11 @@ from wissensnetz.selection import list_selections, selection_exists
 
 
 def _post_selection(base: str, payload: dict, *, generate: bool, timeout: float) -> dict | None:
-    """Die Auswahl an den Mediator schicken. ``None`` bei einem HTTP-Fehler."""
+    """Die Auswahl an den Mediator schicken. ``None`` bei einem HTTP-Fehler.
+
+    English: Sends the selection to the mediator. ``None`` on an HTTP
+    error.
+    """
     endpoint = "/selection/generate" if generate else "/selection/preview"
     try:
         resp = requests.post(f"{base}{endpoint}", json=payload, timeout=timeout)
@@ -78,6 +127,14 @@ def _download(base: str, download_url: str, out_path: Path, *, timeout: float = 
 
     Bewusst über den Download-Endpoint statt über den ``path`` aus der Antwort:
     das `.h5ad` liegt im Mediator-**Container**, der Host sieht den Pfad nicht.
+
+    English: Streams the file via ``GET {base}{download_url}`` and
+    writes it to ``out_path`` (pattern: ``_download()`` in
+    ``scripts/fetch_pancancer_h5ad.py``).
+
+    Deliberately via the download endpoint instead of the ``path`` from
+    the response: the `.h5ad` lives inside the mediator **container**,
+    the host cannot see that path.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with requests.get(f"{base}{download_url}", stream=True, timeout=timeout) as r:
@@ -90,7 +147,11 @@ def _download(base: str, download_url: str, out_path: Path, *, timeout: float = 
 
 
 def _print_level(level: dict) -> str | None:
-    """Eine Ebene der Mediator-Antwort ausgeben; gibt den recipe_key zurück."""
+    """Eine Ebene der Mediator-Antwort ausgeben; gibt den recipe_key zurück.
+
+    English: Prints one level of the mediator response; returns the
+    recipe_key.
+    """
     sel = level.get("selection") or {}
     key = level.get("recipe_key")
     status = level.get("status", "?")
@@ -134,6 +195,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # utf-8-sig: Windows-Werkzeuge (PowerShell `Out-File -Encoding utf8`)
         # schreiben ein BOM; utf-8-sig liest BOM-behaftetes UND BOM-freies UTF-8.
+        # EN: utf-8-sig: Windows tools (PowerShell `Out-File -Encoding
+        # utf8`) write a BOM; utf-8-sig reads BOM-prefixed AND BOM-free
+        # UTF-8.
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except ValueError as exc:
         print(f"{path} ist kein gültiges JSON: {exc}", file=sys.stderr)
@@ -142,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     base = args.mediator_url.rstrip("/")
 
     # 1) Mediator erreichbar?
+    # EN: 1) Mediator reachable?
     try:
         requests.get(f"{base}/health", timeout=10).raise_for_status()
     except requests.RequestException:
@@ -150,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # 2) Fuseki erreichbar?
+    # EN: 2) Fuseki reachable?
     store = GraphStore()
     if not store.is_reachable():
         print(f"Fuseki nicht erreichbar unter {store.settings.base_url}.", file=sys.stderr)
@@ -170,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     keys = [k for k in (_print_level(level) for level in levels) if k]
 
     # 3) Optional: das .h5ad der ersten erfolgreichen Ebene herunterladen.
+    # EN: 3) Optional: download the .h5ad of the first successful level.
     if args.out:
         if not args.generate:
             print("--out wirkt nur zusammen mit --generate (die Vorschau erzeugt kein .h5ad).",
@@ -191,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"Download fehlgeschlagen: {exc}", file=sys.stderr)
 
     # 4) Ergebnis im Wissensnetz — dieselbe Ausgabe wie `wissensnetz selection <id>`.
+    # EN: 4) Result in the knowledge graph — same output as `wissensnetz selection <id>`.
     known = {e.get("selection_id") for e in list_selections(store)}
     for key in keys:
         print(f"\n--- wissensnetz selection {key} ---")
@@ -198,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
             print("(keine Auswahl im Store — schreibt der Mediator das Manifest schon? "
                   "siehe wissensnetz/HANDOFF_pablo_store_waechst.md, P1/P2)")
             continue
-        wissensnetz_cli(["selection", key])  # öffentlicher CLI-Einstieg
+        wissensnetz_cli(["selection", key])  # öffentlicher CLI-Einstieg / EN: public CLI entry point
 
     return 0 if keys else 1
 

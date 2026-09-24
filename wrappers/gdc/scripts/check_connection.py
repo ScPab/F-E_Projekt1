@@ -13,6 +13,23 @@ Nutzt GDC_API_BASE_URL aus der Umgebung, falls gesetzt (siehe .env.example),
 sonst den GDC-Standard https://api.gdc.cancer.gov.
 
 Exit-Code 0 bei Erfolg, 1 bei Fehler (z. B. für CI/Cron nutzbar).
+
+English: Smoke test: checks whether the GDC wrapper can actually talk to
+the real GDC API.
+
+Not a unit test (no mocking, real network request) — deliberately a simple,
+standalone script for the quick manual/CI check "does the connection to the
+GDC API currently work". Checks metadata search (GDCWrapper.search) and
+schema introspection (GDCWrapper.get_schema) in sequence, see
+wrappers/gdc/client.py.
+
+Invocation:
+    python wrappers/gdc/scripts/check_connection.py
+
+Uses GDC_API_BASE_URL from the environment if set (see .env.example),
+otherwise the GDC default https://api.gdc.cancer.gov.
+
+Exit code 0 on success, 1 on error (e.g. usable for CI/cron).
 """
 
 from __future__ import annotations
@@ -23,6 +40,8 @@ from pathlib import Path
 
 # Läuft auch ohne vorherige `pip install -e ./wrappers` — wrappers/ wird
 # direkt auf den Pfad gelegt, damit `import gdc` funktioniert.
+# EN: Also runs without a prior `pip install -e ./wrappers` — wrappers/ is
+# put directly on the path so `import gdc` works.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from gdc import GDCWrapper  # noqa: E402

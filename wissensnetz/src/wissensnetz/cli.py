@@ -19,6 +19,28 @@ Auswahl-Graphen (Aufgabe 13) — prüfbar ohne Oberfläche:
     wissensnetz selections             alle Auswahlen im Store auflisten
     wissensnetz selection <id>         eine Auswahl samt ihrer Fälle zeigen
     wissensnetz drop-selection <id>    Manifest einer Auswahl verwerfen
+
+English: CLI entry point for the wissensnetz (``wissensnetz ...``).
+
+Currently implemented (task 1 + 2):
+
+    wissensnetz status                 check reachability + dataset/TBox
+    wissensnetz init [--force]         ensure dataset + load TBox
+    wissensnetz load <file.ttl|->      load Turtle (default or named graph)
+    wissensnetz query "<SPARQL>"       run SELECT/ASK (table output)
+
+Enrichment (task 3) and feedback channel (task 4):
+
+    wissensnetz hierarchy <class>      sub-/superclasses via rdfs:subClassOf*
+    wissensnetz context <ref>          context of a case/diagnosis
+    wissensnetz feedback <event.json>  write an MP selection event
+    wissensnetz findings               list expert findings
+
+Selection graphs (task 13) — testable without a UI:
+
+    wissensnetz selections             list all selections in the store
+    wissensnetz selection <id>         show a selection with its cases
+    wissensnetz drop-selection <id>    discard a selection's manifest
 """
 
 from __future__ import annotations
@@ -57,7 +79,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Abfrage unverändert senden (keine PREFIXE voranstellen)",
     )
 
-    # --- Aufgabe 3: Anreicherung (Lesen) ---
+    # --- Aufgabe 3: Anreicherung (Lesen) --- / EN: --- Task 3: enrichment (reading) ---
     p_hier = sub.add_parser("hierarchy", help="Unter-/Oberklassen via rdfs:subClassOf*")
     p_hier.add_argument("klasse", help="Klasse als CURIE (db:Case) oder volle IRI")
     p_hier.add_argument("--up", action="store_true", help="Oberklassen statt Unterklassen")
@@ -69,7 +91,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Case (submitterId oder IRI) oder Diagnose (IRI oder Kennung wie d-11111111)",
     )
 
-    # --- Aufgabe 4: Rückkanal (Schreiben) ---
+    # --- Aufgabe 4: Rückkanal (Schreiben) --- / EN: --- Task 4: feedback channel (writing) ---
     p_fb = sub.add_parser("feedback", help="MP-Selektions-Event in den Nutzer-Graph schreiben")
     p_fb.add_argument("event", help="Pfad zu einem selection_event.json")
     p_fb.add_argument("--user", default=None, help="Nutzer-ID überschreiben (sonst aus dem Event)")
@@ -77,7 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_find = sub.add_parser("findings", help="Gespeicherte Experten-Erkenntnisse auflisten")
     p_find.add_argument("--user", default=None, help="nur Erkenntnisse dieses Nutzers")
 
-    # --- Aufgabe 13: Auswahl-Graphen ---
+    # --- Aufgabe 13: Auswahl-Graphen --- / EN: --- Task 13: selection graphs ---
     sub.add_parser("selections", help="Alle Auswahlen (Named Graphs) auflisten")
 
     p_sel = sub.add_parser("selection", help="Eine Auswahl samt ihrer Fälle zeigen")
@@ -169,7 +191,10 @@ def _cmd_hierarchy(store: GraphStore, klasse: str, up: bool, no_self: bool) -> i
 
 
 def _detect_kind(store: GraphStore, ref: str) -> str | None:
-    """'case' | 'diagnosis' | None — anhand des Store-Inhalts bestimmt."""
+    """'case' | 'diagnosis' | None — anhand des Store-Inhalts bestimmt.
+
+    English: 'case' | 'diagnosis' | None — determined from the store's content.
+    """
     if enrichment._is_iri(ref):
         term = enrichment._term(ref)
         if store.ask(PREFIXES + f"ASK {{ {term} a db:Case }}"):
@@ -354,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     except (GraphStoreError, FileNotFoundError) as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 1
-    return 2  # unbekannter Befehl (argparse fängt das eigentlich vorher ab)
+    return 2  # unbekannter Befehl (argparse fängt das eigentlich vorher ab) / EN: unknown command (argparse normally catches this earlier)
 
 
 if __name__ == "__main__":

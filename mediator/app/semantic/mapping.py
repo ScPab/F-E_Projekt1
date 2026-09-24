@@ -15,6 +15,24 @@ diese Übersetzungslogik bewusst quellenspezifisch (siehe Marcels Empfehlung
 im Mapping-Konzept: "Für eine Quelle genügt zunächst GaV"). Für eine zweite
 Quelle: eigenes mapping_<source>.py nach demselben Muster, siehe
 /docs/adding_new_sources.md.
+
+English: Rule-based GDC case JSON -> RDF/OWL mapping (ABox).
+
+Implements the construction rules from
+wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL for the
+case/project/demographic/diagnosis/samples slice (ontology/TBox: see
+wissensnetz/ontology/databridge-core.ttl, including the properties added for
+the Oviedo hover field list — see wissensnetz/prototype/mp_lite/HANDOFF.md):
+enum values are — where an alignment table has a hit — mapped onto external
+bio-ontologies (here: NCIt for primary_diagnosis), otherwise the raw text is
+kept as a literal. Edge provenance/confidence for alignment statements is
+modeled via RDF-star (see serialize_with_provenance).
+
+Global-as-view: GDC is currently the only connected source, so this
+translation logic is deliberately source-specific (see Marcel's
+recommendation in the mapping concept: "For one source, GaV is enough for
+now"). For a second source: its own mapping_<source>.py following the same
+pattern, see /docs/adding_new_sources.md.
 """
 
 from __future__ import annotations
@@ -36,6 +54,9 @@ INSTANCE_BASE = "http://databridge.hka/instance/"
 
 # (Subjekt, Prädikat, Objekt, Quelle-als-Turtle-Term, Konfidenz) für eine noch
 # anzuhängende RDF-star-Provenienz-Annotation, siehe serialize_with_provenance.
+# EN: (subject, predicate, object, source-as-Turtle-term, confidence) for an
+# RDF-star provenance annotation still to be appended, see
+# serialize_with_provenance.
 StarAnnotation = tuple[URIRef, URIRef, URIRef, str, float]
 
 
@@ -44,14 +65,22 @@ StarAnnotation = tuple[URIRef, URIRef, URIRef, str, float]
 # recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, Abschnitt 3): ein
 # UI-"Obj"-Attribut (Trigger) wird auf ein GDC-Feld + eine db:-Property
 # abgebildet. Ersetzt die frühere feste if-Kaskade in cases_to_graph.
+#
+# EN: Generic attribute mapping (M4/M5, see
+# recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, section 3): a UI "Obj"
+# attribute (trigger) is mapped onto a GDC field + a db: property. Replaces
+# the former fixed if-cascade in cases_to_graph.
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class AttributeMapping:
-    """Wohin (Ziel-Entity/Property) und wie (Datentyp) ein Attribut übersetzt wird."""
+    """Wohin (Ziel-Entity/Property) und wie (Datentyp) ein Attribut übersetzt wird.
 
-    gdc_field: str  # Punktpfad wie von GDC geliefert, z. B. "demographic.race"
+    English: Where (target entity/property) and how (data type) an attribute is translated.
+    """
+
+    gdc_field: str  # Punktpfad wie von GDC geliefert, z. B. "demographic.race" / EN: dotted path as delivered by GDC, e.g. "demographic.race"
     entity: str  # "case" | "project" | "demographic" | "diagnosis" | "sample"
     property_uri: URIRef
     datatype: URIRef = XSD.string
@@ -62,12 +91,22 @@ class AttributeMapping:
 # db:-Property. `primary_diagnosis` ist hier nur für die Feld-Ableitung
 # (resolve_case_fields) gelistet — die ABox-Erzeugung bleibt Sonderfall
 # (Alignment + Label-Fallback + RDF-star, siehe cases_to_graph).
+# EN: Known attributes: Oviedo/UI attribute name (see implementation plan
+# section 1, part 1a) -> GDC field + db: property already declared in
+# databridge-core.ttl. `primary_diagnosis` is listed here only for field
+# derivation (resolve_case_fields) — ABox generation remains a special case
+# (alignment + label fallback + RDF-star, see cases_to_graph).
 KNOWN_ATTRIBUTES: dict[str, AttributeMapping] = {
     # GDC hat das Feld von `gender` auf `sex_at_birth` umbenannt; der alte Name
     # existiert in der API nicht mehr (live gegen /files/_mapping und
     # /cases/_mapping geprueft, 2026-09-18). GDC ignoriert unbekannte Felder
     # stillschweigend, deshalb blieb die Spalte lange unbemerkt leer.
     # Der alte UI-Name wird ueber LEGACY_ATTRIBUTE_ALIASES weiter angenommen.
+    # EN: GDC renamed the field from `gender` to `sex_at_birth`; the old name
+    # no longer exists in the API (checked live against /files/_mapping and
+    # /cases/_mapping, 2026-09-18). GDC silently ignores unknown fields,
+    # which is why the column stayed unnoticed empty for a long time. The old
+    # UI name is still accepted via LEGACY_ATTRIBUTE_ALIASES.
     "sex_at_birth": AttributeMapping("demographic.sex_at_birth", "demographic", DB.sexAtBirth),
     "race": AttributeMapping("demographic.race", "demographic", DB.race),
     "ethnicity": AttributeMapping("demographic.ethnicity", "demographic", DB.ethnicity),
@@ -81,6 +120,9 @@ KNOWN_ATTRIBUTES: dict[str, AttributeMapping] = {
     # Oviedo-Attributname "tumor_stage" <-> GDC-Feld "ajcc_pathologic_stage"
     # (GDCs älteres "tumor_stage" existiert im aktuellen Schema nicht, siehe
     # wissensnetz/prototype/mp_lite/HANDOFF.md).
+    # EN: Oviedo attribute name "tumor_stage" <-> GDC field
+    # "ajcc_pathologic_stage" (GDC's older "tumor_stage" does not exist in
+    # the current schema, see wissensnetz/prototype/mp_lite/HANDOFF.md).
     "tumor_stage": AttributeMapping("diagnoses.ajcc_pathologic_stage", "diagnosis", DB.tumorStage),
     "has_metastasis": AttributeMapping("diagnoses.metastasis_at_diagnosis", "diagnosis", DB.metastasisAtDiagnosis),
     "sample_type": AttributeMapping("samples.sample_type", "sample", DB.sampleType),
@@ -91,6 +133,11 @@ KNOWN_ATTRIBUTES: dict[str, AttributeMapping] = {
 # zugehörige GDC-Feld würde zweimal angefragt. Ohne diese Tabelle würde ein
 # Aufrufer mit "gender" still auf `diagnoses.gender` umgebogen (siehe
 # `resolve_attribute`, dynamischer Pfad) — also falsch statt fehlerhaft.
+# EN: Old UI attribute names that are still accepted. Deliberately NOT in
+# KNOWN_ATTRIBUTES: otherwise they would appear twice in DEFAULT_ATTRIBUTES
+# and the associated GDC field would be requested twice. Without this table,
+# a caller using "gender" would be silently bent onto `diagnoses.gender`
+# (see `resolve_attribute`, dynamic path) — i.e. wrong instead of erroring.
 LEGACY_ATTRIBUTE_ALIASES: dict[str, str] = {
     "gender": "sex_at_birth",
 }
@@ -98,6 +145,9 @@ LEGACY_ATTRIBUTE_ALIASES: dict[str, str] = {
 # Rückwärtskompatibler Default für Aufrufer, die kein `attributes` angeben
 # (z. B. bestehendes POST /transform) — identisch zum bisherigen, fest
 # ausprogrammierten Feldumfang.
+# EN: Backwards-compatible default for callers that don't specify
+# `attributes` (e.g. the existing POST /transform) — identical to the
+# previous, fixed hardcoded field scope.
 DEFAULT_ATTRIBUTES: list[str] = list(KNOWN_ATTRIBUTES)
 
 _ENTITY_BY_GDC_PREFIX = {
@@ -117,12 +167,18 @@ _CAMEL_CASE_RE = re.compile(r"_([a-zA-Z0-9])")
 
 
 def _to_camel_case(name: str) -> str:
-    """'prior_malignancy' -> 'priorMalignancy' (für dynamisch erzeugte Property-Namen)."""
+    """'prior_malignancy' -> 'priorMalignancy' (für dynamisch erzeugte Property-Namen).
+
+    English: 'prior_malignancy' -> 'priorMalignancy' (for dynamically generated property names).
+    """
     return _CAMEL_CASE_RE.sub(lambda m: m.group(1).upper(), name)
 
 
 def _leaf_key(gdc_field: str) -> str:
-    """Letztes Pfadsegment eines GDC-Feldpfads, z. B. 'demographic.race' -> 'race'."""
+    """Letztes Pfadsegment eines GDC-Feldpfads, z. B. 'demographic.race' -> 'race'.
+
+    English: Last path segment of a GDC field path, e.g. 'demographic.race' -> 'race'.
+    """
     return gdc_field.rsplit(".", 1)[-1]
 
 
@@ -144,6 +200,24 @@ def resolve_attribute(attribute: str) -> AttributeMapping:
     sondern inline in der jeweiligen Transform-Ausgabe deklariert (siehe
     `_declare_dynamic_property`), damit der erzeugte Graph für sich genommen
     gültig/selbstbeschreibend bleibt.
+
+    English: Resolves a UI attribute (Obj trigger) to an `AttributeMapping`.
+
+    Known attributes (`KNOWN_ATTRIBUTES`) use their fixed db: property
+    declared in databridge-core.ttl. Deprecated names from
+    `LEGACY_ATTRIBUTE_ALIASES` are rewritten beforehand (e.g. "gender" ->
+    "sex_at_birth"). For unknown attributes, per decision 7.5
+    (Umsetzungsplan_UI-gesteuerte-Akquise.pdf, section 7.5: "create
+    dynamically"): the attribute is interpreted as a GDC field path (e.g.
+    "diagnoses.prior_malignancy"; without a dot, "diagnoses.<attribute>" is
+    assumed — most new Oviedo Obj fields are clinical diagnosis attributes,
+    see KNOWN_ATTRIBUTES). The last path segment supplies the property name
+    in camelCase; the property is NOT added to
+    wissensnetz/ontology/databridge-core.ttl (the wissensnetz remains owner
+    of the curated base ontology, see wissensnetz/CLAUDE.md), but declared
+    inline in the respective transform output (see
+    `_declare_dynamic_property`), so the generated graph stays valid/
+    self-describing on its own.
     """
     attribute = LEGACY_ATTRIBUTE_ALIASES.get(attribute, attribute)
     known = KNOWN_ATTRIBUTES.get(attribute)
@@ -157,7 +231,11 @@ def resolve_attribute(attribute: str) -> AttributeMapping:
 
 def _declare_dynamic_property(graph: Graph, mapping: AttributeMapping, declared: set[str]) -> None:
     """Deklariert eine zur Laufzeit erzeugte Property inline als owl:DatatypeProperty
-    (Entscheidung 7.5) — einmal pro Property und erzeugtem Graphen."""
+    (Entscheidung 7.5) — einmal pro Property und erzeugtem Graphen.
+
+    English: Declares a runtime-generated property inline as
+    owl:DatatypeProperty (decision 7.5) — once per property and generated graph.
+    """
     local_name = str(mapping.property_uri).rsplit("#", 1)[-1]
     if local_name in declared:
         return
@@ -186,7 +264,12 @@ def _apply_attributes(
     declared_dynamic: set[str],
 ) -> None:
     """Schreibt alle für eine Entity-Instanz zuständigen Attribute generisch
-    als Literal-Tripel (M5) — ersetzt die frühere if-Kaskade pro Feld."""
+    als Literal-Tripel (M5) — ersetzt die frühere if-Kaskade pro Feld.
+
+    English: Writes all attributes responsible for an entity instance
+    generically as literal triples (M5) — replaces the former per-field
+    if-cascade.
+    """
     for attr, mapping in mappings:
         value = source.get(_leaf_key(mapping.gdc_field))
         if value is None or value == "":
@@ -207,6 +290,12 @@ def load_alignment_table(path: str | Path) -> dict[str, str]:
     Fehlt die Datei (z. B. noch nicht befüllt/nicht gemountet), wird eine
     leere Tabelle zurückgegeben — Alignment ist optional, der Fallback auf
     Literal-Text greift dann für alle Werte (siehe cases_to_graph).
+
+    English: Loads the enum -> NCIt alignment table.
+
+    If the file is missing (e.g. not yet populated/mounted), an empty table
+    is returned — alignment is optional, the fallback to literal text then
+    applies to all values (see cases_to_graph).
     """
     p = Path(path)
     if not p.exists():
@@ -216,7 +305,10 @@ def load_alignment_table(path: str | Path) -> dict[str, str]:
 
 
 def _slug(value: str) -> str:
-    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (z. B. TCGA-Barcode, UUID)."""
+    """Instanz-IRI-taugliches Fragment aus einem beliebigen Bezeichner (z. B. TCGA-Barcode, UUID).
+
+    English: Instance-IRI-suitable fragment from an arbitrary identifier (e.g. TCGA barcode, UUID).
+    """
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-") or "unbekannt"
 
 
@@ -245,6 +337,21 @@ def cases_to_graph(
     Gibt den Haupt-Graphen sowie eine Liste offener RDF-star-Annotationen
     zurück (Provenienz/Konfidenz für erfolgreiche NCIt-Alignments) — diese
     hängt serialize_with_provenance an die Turtle-Ausgabe an.
+
+    English: Translates GDC `cases` hits into RDF triples
+    (case/project/demographic/diagnoses/samples).
+
+    Expects the nested form as delivered by GDCWrapper.search("cases",
+    fields=[...]). Which attributes (beyond the case/project identity) are
+    written as triples is determined by `attributes` — a list of UI
+    attribute names (Obj triggers, see
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf), resolved via
+    `resolve_attribute()`. Without one, `DEFAULT_ATTRIBUTES` applies
+    (backwards-compatible with the former, fixed hardcoded field scope).
+
+    Returns the main graph as well as a list of open RDF-star annotations
+    (provenance/confidence for successful NCIt alignments) — these are
+    appended to the Turtle output by serialize_with_provenance.
     """
     alignment = alignment or {}
     attributes = list(attributes) if attributes is not None else DEFAULT_ATTRIBUTES
@@ -256,6 +363,8 @@ def cases_to_graph(
 
     # primary_diagnosis bleibt Sonderfall (Alignment + Label-Fallback + RDF-star,
     # siehe unten) — aus der generischen Mapping-Schleife ausgenommen.
+    # EN: primary_diagnosis remains a special case (alignment + label
+    # fallback + RDF-star, see below) — excluded from the generic mapping loop.
     resolved_by_entity: dict[str, list[tuple[str, AttributeMapping]]] = {}
     for attr in attributes:
         if attr == "primary_diagnosis":
@@ -338,6 +447,16 @@ def serialize_with_provenance(graph: Graph, star_annotations: list[StarAnnotatio
     unterscheidet sich je rdflib-Version, während dieses Textformat exakt dem
     Beispiel aus wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL entspricht und
     damit garantiert spezifikationskonform bleibt:
+        << s p o >> prov:wasDerivedFrom gdc:submission ; db:confidence 1.0 .
+
+    English: Serializes the graph to Turtle and appends RDF-star provenance
+    blocks.
+
+    RDF-star is deliberately appended here as text instead of generated via
+    an rdflib-internal quoted-triple API — Turtle-star support differs per
+    rdflib version, while this text format matches exactly the example from
+    wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL and thus stays guaranteed
+    spec-compliant:
         << s p o >> prov:wasDerivedFrom gdc:submission ; db:confidence 1.0 .
     """
     turtle = graph.serialize(format="turtle")

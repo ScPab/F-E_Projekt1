@@ -18,6 +18,24 @@ case/project/demographic/diagnosis/samples ist über POST /transform
 angebunden (siehe app/semantic/mapping.py). Die Transformation nach
 anndata/.h5ad (Expressionsmatrizen, Teil 3 aus wissensnetz/HANDOFF_anndata.md)
 ist über POST /export/anndata angebunden (siehe app/semantic/expression.py).
+
+English: DataBridge Mediator – FastAPI skeleton.
+
+The mediator is the central entry point of the mediator-wrapper architecture:
+it accepts requests and delegates them to the matching wrapper modules
+(wrappers/gdc, wrappers/geo, wrappers/ena, wrappers/cbioportal, installed as a
+Python package in the same container, see
+docs/adr/0001-wrapper-als-python-package.md) for the actual data acquisition.
+
+The endpoints exposed here (/query, /schema/{endpoint}, /manifest) form the
+interface through which later callers (frontend, other services) access the
+GDC wrapper — without the GDC wrapper having to be its own network service.
+
+The semantic transformation (GDC JSON -> RDF/OWL) for the
+case/project/demographic/diagnosis/samples slice is wired up via POST
+/transform (see app/semantic/mapping.py). The transformation into
+anndata/.h5ad (expression matrices, part 3 of wissensnetz/HANDOFF_anndata.md)
+is wired up via POST /export/anndata (see app/semantic/expression.py).
 """
 
 import os
@@ -60,6 +78,9 @@ from .semantic.paths import alignment_path, export_dir, ontology_path
 # Felder, die für JEDE Case-Abfrage strukturell nötig sind (Identität/
 # Join-Schlüssel bzw. Instanz-IRI-Bildung, siehe cases_to_graph) — unabhängig
 # davon, welche Attribute die UI zusätzlich anfordert.
+# EN: Fields structurally required for EVERY case query (identity/join key
+# or instance-IRI formation, see cases_to_graph) — regardless of which
+# attributes the UI additionally requests.
 BASE_CASE_FIELDS = ["case_id", "submitter_id", "project.project_id", "samples.sample_id"]
 
 
@@ -72,6 +93,14 @@ def resolve_case_fields(attributes: list[str]) -> list[str]:
     `semantic_mapping.resolve_attribute` aufgelöste GDC-Feld hinzu — bekannte
     Oviedo-Attributnamen (KNOWN_ATTRIBUTES) ebenso wie neue, deren Property
     laut Entscheidung 7.5 dynamisch entsteht.
+
+    English: Derives the GDC fields to request from UI attributes (M4, see
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, section 3:
+    "TRANSFORM_CASE_FIELDS from constant to derived ... core of the trigger
+    idea"). `BASE_CASE_FIELDS` are always included; for every attribute the
+    GDC field resolved via `semantic_mapping.resolve_attribute` is added —
+    known Oviedo attribute names (KNOWN_ATTRIBUTES) as well as new ones whose
+    property is created dynamically per decision 7.5.
     """
     fields = list(BASE_CASE_FIELDS)
     for attr in attributes:
@@ -84,6 +113,9 @@ def resolve_case_fields(attributes: list[str]) -> list[str]:
 # Rückwärtskompatibler Default für POST /transform (unverändertes Verhalten:
 # derselbe Feldumfang wie die frühere feste Konstante — DEFAULT_ATTRIBUTES
 # deckt exakt dieselben 11 Attribute ab, siehe app/semantic/mapping.py).
+# EN: Backwards-compatible default for POST /transform (unchanged behavior:
+# the same field scope as the former fixed constant — DEFAULT_ATTRIBUTES
+# covers exactly the same 11 attributes, see app/semantic/mapping.py).
 TRANSFORM_CASE_FIELDS = resolve_case_fields(semantic_mapping.DEFAULT_ATTRIBUTES)
 
 
@@ -116,6 +148,26 @@ def fetch_selection_files(
     Umformung — dieselbe verschachtelte Form wie von GDCs `/cases`),
     `failed_cohorts` für Kohorten, deren Query fehlschlug (killt nicht den
     gesamten Abruf, siehe wissensnetz/HANDOFF_export_stratified.md).
+
+    English: The shared fetch step (M3, see
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, section 1b/3): ONE
+    files query per cohort delivers both the file/sample mapping (basis for
+    anndata, see `_build_anndata_from_hits`) AND the embedded case objects
+    (basis for `cases_to_graph`) at the same time — for `cases.<field>`
+    fields, GDC returns the same nested case structure as the standalone
+    `/cases` endpoint directly alongside the file hits (verified live).
+    Replaces the two previously independent fetches (`/transform`'s own
+    `search("cases", ...)` and `/export/anndata`'s `query("files", ...)` with
+    a smaller field list, see module docstring section 1b of the plan) with a
+    single fetch, stratified per cohort (see
+    wissensnetz/HANDOFF_export_stratified.md).
+
+    Returns `(hits, cases, failed_cohorts)`: `hits` raw (file hits, for the
+    file/sample mapping and the manifest), `cases` deduplicated by
+    `case_id`/`submitter_id` (directly `cases_to_graph`-compatible, no
+    reshaping needed — same nested form as GDC's `/cases`), `failed_cohorts`
+    for cohorts whose query failed (does not kill the whole fetch, see
+    wissensnetz/HANDOFF_export_stratified.md).
     """
     file_fields = ["file_id", "file_name"] + [f"cases.{f}" for f in resolve_case_fields(attributes)]
     n_each = per_cohort_size or size
@@ -133,6 +185,7 @@ def fetch_selection_files(
             result = wrapper.query("files", filters=filters, fields=file_fields, size=n_each)
         except RequestException:
             # eine leere/kaputte Kohorte soll nicht den ganzen Abruf killen
+            # EN: an empty/broken cohort should not kill the whole fetch
             failed_cohorts.append(cohort)
             continue
         hits.extend(result["results"])
@@ -155,10 +208,14 @@ app = FastAPI(
 
 # Einzelne, wiederverwendete Wrapper-Instanz (hält u. a. die requests.Session
 # und den Cache-Zugriffspunkt, siehe wrappers/gdc/cache.py).
+# EN: Single, reused wrapper instance (holds, among other things, the
+# requests.Session and the cache access point, see wrappers/gdc/cache.py).
 _gdc_wrapper: GDCWrapper | None = None
 
 # Analog wiederverwendete Instanzen für die weiteren Wrapper (siehe
 # wrappers/geo, wrappers/ena, wrappers/cbioportal).
+# EN: Analogously reused instances for the other wrappers (see wrappers/geo,
+# wrappers/ena, wrappers/cbioportal).
 _geo_wrapper: GEOWrapper | None = None
 _ena_wrapper: ENAWrapper | None = None
 _cbioportal_wrapper: CBioPortalWrapper | None = None
@@ -167,11 +224,19 @@ _cbioportal_wrapper: CBioPortalWrapper | None = None
 # POST /transform mit load=true). Verbindung wird aus ENV gelesen
 # (GRAPH_DB_URL/GRAPH_DB_DATASET/..., siehe wissensnetz/src/wissensnetz/config.py
 # und docker-compose.yml für den Compose-internen Wert).
+# EN: Single, reused GraphStore instance (Fuseki connection for POST
+# /transform with load=true). Connection is read from ENV
+# (GRAPH_DB_URL/GRAPH_DB_DATASET/..., see
+# wissensnetz/src/wissensnetz/config.py and docker-compose.yml for the
+# compose-internal value).
 _graph_store: GraphStore | None = None
 
 
 def get_gdc_wrapper() -> GDCWrapper:
-    """Liefert eine lazily initialisierte, geteilte GDCWrapper-Instanz."""
+    """Liefert eine lazily initialisierte, geteilte GDCWrapper-Instanz.
+
+    English: Returns a lazily initialized, shared GDCWrapper instance.
+    """
     global _gdc_wrapper
     if _gdc_wrapper is None:
         base_url = os.environ.get("GDC_API_BASE_URL", "https://api.gdc.cancer.gov")
@@ -180,7 +245,10 @@ def get_gdc_wrapper() -> GDCWrapper:
 
 
 def get_geo_wrapper() -> GEOWrapper:
-    """Liefert eine lazily initialisierte, geteilte GEOWrapper-Instanz."""
+    """Liefert eine lazily initialisierte, geteilte GEOWrapper-Instanz.
+
+    English: Returns a lazily initialized, shared GEOWrapper instance.
+    """
     global _geo_wrapper
     if _geo_wrapper is None:
         base_url = os.environ.get("GEO_API_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
@@ -189,7 +257,10 @@ def get_geo_wrapper() -> GEOWrapper:
 
 
 def get_ena_wrapper() -> ENAWrapper:
-    """Liefert eine lazily initialisierte, geteilte ENAWrapper-Instanz."""
+    """Liefert eine lazily initialisierte, geteilte ENAWrapper-Instanz.
+
+    English: Returns a lazily initialized, shared ENAWrapper instance.
+    """
     global _ena_wrapper
     if _ena_wrapper is None:
         base_url = os.environ.get("ENA_API_BASE_URL", "https://www.ebi.ac.uk/ena/portal/api")
@@ -198,7 +269,10 @@ def get_ena_wrapper() -> ENAWrapper:
 
 
 def get_cbioportal_wrapper() -> CBioPortalWrapper:
-    """Liefert eine lazily initialisierte, geteilte CBioPortalWrapper-Instanz."""
+    """Liefert eine lazily initialisierte, geteilte CBioPortalWrapper-Instanz.
+
+    English: Returns a lazily initialized, shared CBioPortalWrapper instance.
+    """
     global _cbioportal_wrapper
     if _cbioportal_wrapper is None:
         base_url = os.environ.get("CBIOPORTAL_API_BASE_URL", "https://www.cbioportal.org/api")
@@ -207,7 +281,10 @@ def get_cbioportal_wrapper() -> CBioPortalWrapper:
 
 
 def get_graph_store() -> GraphStore:
-    """Liefert eine lazily initialisierte, geteilte GraphStore-Instanz."""
+    """Liefert eine lazily initialisierte, geteilte GraphStore-Instanz.
+
+    English: Returns a lazily initialized, shared GraphStore instance.
+    """
     global _graph_store
     if _graph_store is None:
         _graph_store = GraphStore()
@@ -216,7 +293,10 @@ def get_graph_store() -> GraphStore:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    """Einfacher Health-Check, damit Orchestrierung (z. B. Docker Compose) den Service prüfen kann."""
+    """Einfacher Health-Check, damit Orchestrierung (z. B. Docker Compose) den Service prüfen kann.
+
+    English: Simple health check so orchestration (e.g. Docker Compose) can probe the service.
+    """
     return {"status": "ok"}
 
 
@@ -226,6 +306,10 @@ async def query(request: QueryRequest) -> dict:
 
     Delegiert an GDCWrapper.search — vereinfachte Suchparameter werden dort
     in einen validen GDC-`filters`-Query übersetzt.
+
+    English: Metadata search against GDC (test case: TCGA-BRCA / RNA-Seq /
+    open). Delegates to GDCWrapper.search — simplified search parameters are
+    translated there into a valid GDC `filters` query.
     """
     wrapper = get_gdc_wrapper()
     try:
@@ -250,6 +334,10 @@ async def schema(endpoint: str) -> dict:
 
     Vorbereitung für die spätere Ontologie-/Mapping-Schicht, siehe
     wrappers/gdc/client.py (Modul-Docstring, `get_schema`).
+
+    English: Available fields of a GDC endpoint (cases/files/projects/annotations).
+    Preparation for the later ontology/mapping layer, see wrappers/gdc/client.py
+    (module docstring, `get_schema`).
     """
     wrapper = get_gdc_wrapper()
     try:
@@ -263,7 +351,10 @@ async def schema(endpoint: str) -> dict:
 
 @app.post("/manifest")
 async def manifest(request: ManifestRequest) -> dict:
-    """Manifest (Bulk-Tier) für eine Files-Query erzeugen, zur Übergabe an gdc-client."""
+    """Manifest (Bulk-Tier) für eine Files-Query erzeugen, zur Übergabe an gdc-client.
+
+    English: Generate a manifest (bulk tier) for a files query, to pass to gdc-client.
+    """
     wrapper = get_gdc_wrapper()
     filters = build_filters(
         project_id=request.project_id,
@@ -279,12 +370,16 @@ async def manifest(request: ManifestRequest) -> dict:
 
 # ----------------------------------------------------------------------
 # GEO (Gene Expression Omnibus), siehe wrappers/geo/client.py
+# EN: GEO (Gene Expression Omnibus), see wrappers/geo/client.py
 # ----------------------------------------------------------------------
 
 
 @app.post("/geo/query")
 async def geo_query(request: GeoQueryRequest) -> dict:
-    """Metadaten-Suche gegen GEO (esearch+esummary), analog zu POST /query."""
+    """Metadaten-Suche gegen GEO (esearch+esummary), analog zu POST /query.
+
+    English: Metadata search against GEO (esearch+esummary), analogous to POST /query.
+    """
     wrapper = get_geo_wrapper()
     try:
         return wrapper.search(
@@ -301,7 +396,10 @@ async def geo_query(request: GeoQueryRequest) -> dict:
 
 @app.get("/geo/schema")
 async def geo_schema(db: str = "gds") -> dict:
-    """Verfügbare Such-Feld-Tags einer GEO/Entrez-Datenbank (einfo), analog zu GET /schema/{endpoint}."""
+    """Verfügbare Such-Feld-Tags einer GEO/Entrez-Datenbank (einfo), analog zu GET /schema/{endpoint}.
+
+    English: Available search field tags of a GEO/Entrez database (einfo), analogous to GET /schema/{endpoint}.
+    """
     wrapper = get_geo_wrapper()
     try:
         fields = wrapper.get_schema(db)
@@ -312,7 +410,10 @@ async def geo_schema(db: str = "gds") -> dict:
 
 @app.get("/geo/ftp-link/{accession}")
 async def geo_ftp_link(accession: str) -> dict:
-    """FTP-Verzeichnislink einer GEO-Accession (Bulk-Tier-Äquivalent zu POST /manifest)."""
+    """FTP-Verzeichnislink einer GEO-Accession (Bulk-Tier-Äquivalent zu POST /manifest).
+
+    English: FTP directory link of a GEO accession (bulk-tier equivalent to POST /manifest).
+    """
     wrapper = get_geo_wrapper()
     try:
         link = wrapper.get_ftp_link(accession)
@@ -325,12 +426,16 @@ async def geo_ftp_link(accession: str) -> dict:
 
 # ----------------------------------------------------------------------
 # ENA (European Nucleotide Archive), siehe wrappers/ena/client.py
+# EN: ENA (European Nucleotide Archive), see wrappers/ena/client.py
 # ----------------------------------------------------------------------
 
 
 @app.post("/ena/query")
 async def ena_query(request: EnaQueryRequest) -> dict:
-    """Metadaten-Suche gegen ENA (/search), analog zu POST /query."""
+    """Metadaten-Suche gegen ENA (/search), analog zu POST /query.
+
+    English: Metadata search against ENA (/search), analogous to POST /query.
+    """
     wrapper = get_ena_wrapper()
     try:
         return wrapper.search(
@@ -350,7 +455,10 @@ async def ena_query(request: EnaQueryRequest) -> dict:
 
 @app.get("/ena/schema/{result}")
 async def ena_schema(result: str) -> dict:
-    """Verfügbare Feldnamen eines ENA-Ergebnistyps (/returnFields), analog zu GET /schema/{endpoint}."""
+    """Verfügbare Feldnamen eines ENA-Ergebnistyps (/returnFields), analog zu GET /schema/{endpoint}.
+
+    English: Available field names of an ENA result type (/returnFields), analogous to GET /schema/{endpoint}.
+    """
     wrapper = get_ena_wrapper()
     try:
         fields = wrapper.get_schema(result)
@@ -363,7 +471,10 @@ async def ena_schema(result: str) -> dict:
 
 @app.get("/ena/download-links/{run_accession}")
 async def ena_download_links(run_accession: str) -> dict:
-    """FASTQ-Download-URLs eines Read-Runs (Bulk-Tier-Äquivalent zu POST /manifest)."""
+    """FASTQ-Download-URLs eines Read-Runs (Bulk-Tier-Äquivalent zu POST /manifest).
+
+    English: FASTQ download URLs of a read run (bulk-tier equivalent to POST /manifest).
+    """
     wrapper = get_ena_wrapper()
     try:
         return wrapper.get_download_links(run_accession)
@@ -373,6 +484,7 @@ async def ena_download_links(run_accession: str) -> dict:
 
 # ----------------------------------------------------------------------
 # cBioPortal, siehe wrappers/cbioportal/client.py
+# EN: cBioPortal, see wrappers/cbioportal/client.py
 # ----------------------------------------------------------------------
 
 
@@ -382,7 +494,10 @@ async def cbioportal_studies(
     size: int = 20,
     from_: int = Query(0, alias="from"),
 ) -> dict:
-    """Studien-Suche gegen cBioPortal (/studies), analog zu POST /query."""
+    """Studien-Suche gegen cBioPortal (/studies), analog zu POST /query.
+
+    English: Study search against cBioPortal (/studies), analogous to POST /query.
+    """
     wrapper = get_cbioportal_wrapper()
     try:
         return wrapper.list_studies(keyword=keyword, size=size, from_=from_)
@@ -394,7 +509,10 @@ async def cbioportal_studies(
 
 @app.get("/cbioportal/schema/{study_id}")
 async def cbioportal_schema(study_id: str) -> dict:
-    """Klinische Attribut-IDs einer Studie, analog zu GET /schema/{endpoint}."""
+    """Klinische Attribut-IDs einer Studie, analog zu GET /schema/{endpoint}.
+
+    English: Clinical attribute IDs of a study, analogous to GET /schema/{endpoint}.
+    """
     wrapper = get_cbioportal_wrapper()
     try:
         fields = wrapper.get_schema(study_id)
@@ -410,7 +528,10 @@ async def cbioportal_clinical_data(
     size: int = 20,
     from_: int = Query(0, alias="from"),
 ) -> dict:
-    """Klinische Datenpunkte (Attribut/Wert je Patient oder Sample) einer Studie."""
+    """Klinische Datenpunkte (Attribut/Wert je Patient oder Sample) einer Studie.
+
+    English: Clinical data points (attribute/value per patient or sample) of a study.
+    """
     wrapper = get_cbioportal_wrapper()
     try:
         return wrapper.get_clinical_data(
@@ -424,7 +545,10 @@ async def cbioportal_clinical_data(
 
 @app.get("/cbioportal/molecular-profiles/{study_id}")
 async def cbioportal_molecular_profiles(study_id: str) -> list[dict]:
-    """Verfügbare molekulare Profile einer Studie (Vorbereitung für /cbioportal/molecular-data)."""
+    """Verfügbare molekulare Profile einer Studie (Vorbereitung für /cbioportal/molecular-data).
+
+    English: Available molecular profiles of a study (preparation for /cbioportal/molecular-data).
+    """
     wrapper = get_cbioportal_wrapper()
     try:
         return wrapper.list_molecular_profiles(study_id)
@@ -434,7 +558,10 @@ async def cbioportal_molecular_profiles(study_id: str) -> list[dict]:
 
 @app.get("/cbioportal/sample-lists/{study_id}")
 async def cbioportal_sample_lists(study_id: str) -> list[dict]:
-    """Vordefinierte Sample-Listen einer Studie (Vorbereitung für /cbioportal/molecular-data)."""
+    """Vordefinierte Sample-Listen einer Studie (Vorbereitung für /cbioportal/molecular-data).
+
+    English: Predefined sample lists of a study (preparation for /cbioportal/molecular-data).
+    """
     wrapper = get_cbioportal_wrapper()
     try:
         return wrapper.list_sample_lists(study_id)
@@ -446,7 +573,10 @@ async def cbioportal_sample_lists(study_id: str) -> list[dict]:
 async def cbioportal_molecular_data(
     molecular_profile_id: str, request: CBioMolecularDataRequest
 ) -> dict:
-    """Genomische Profildaten für eine Gen-/Sample-Auswahl (Bulk-Tier-Äquivalent zu POST /manifest)."""
+    """Genomische Profildaten für eine Gen-/Sample-Auswahl (Bulk-Tier-Äquivalent zu POST /manifest).
+
+    English: Genomic profile data for a gene/sample selection (bulk-tier equivalent to POST /manifest).
+    """
     wrapper = get_cbioportal_wrapper()
     try:
         return wrapper.get_molecular_data(
@@ -478,6 +608,25 @@ async def transform(request: TransformRequest) -> dict:
     Turtle-Ausgabe bleibt roh erhalten, damit bei `gdc` die angehängten
     RDF-star-Blöcke (Provenienz/Konfidenz) nicht durch einen rdflib-Roundtrip
     verloren gehen.
+
+    English: Source JSON -> RDF/OWL triples (Turtle), via a dedicated mapping
+    module per `source`.
+
+    - `gdc`: GDC cases -> RDF/OWL, per
+      wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL (`app/semantic/mapping.py`)
+      — including NCIt alignment with RDF-star provenance.
+    - `geo`: GEO series -> RDF/OWL (`app/semantic/mapping_geo.py`).
+    - `ena`: ENA runs -> RDF/OWL (`app/semantic/mapping_ena.py`).
+    - `cbioportal`: cBioPortal clinical data of a study -> RDF/OWL
+      (`app/semantic/mapping_cbioportal.py`), requires `study_id`.
+
+    Accepts either raw hits per source, or fetches them live via the
+    matching wrapper (see the TransformRequest field descriptions). Output is
+    always the generated Turtle text; with `load=true` it is additionally
+    written directly via Graph Store Protocol into graph-db (Fuseki) (see
+    `wissensnetz.GraphStore.load_turtle`, ADR-0002) — the Turtle output stays
+    raw so that, for `gdc`, the appended RDF-star blocks (provenance/
+    confidence) are not lost through an rdflib round-trip.
     """
     if request.source == "gdc":
         if request.cases is not None:
@@ -584,6 +733,10 @@ async def ontology() -> Response:
 
     Quelle: wissensnetz/ontology/databridge-core.ttl (siehe app/semantic/paths.py
     für die Pfad-Auflösung über DATABRIDGE_ONTOLOGY_DIR).
+
+    English: Returns the current base ontology (TBox) for inspection.
+    Source: wissensnetz/ontology/databridge-core.ttl (see app/semantic/paths.py
+    for path resolution via DATABRIDGE_ONTOLOGY_DIR).
     """
     path = ontology_path()
     if not path.exists():
@@ -598,6 +751,13 @@ async def ontology() -> Response:
 # den Wrapper durch — der Mediator entscheidet hier bewusst NICHT über
 # Inhalte (Abschnitt 1a: "Er nimmt das JSON, ruft die Wrapper-Funktion, und
 # die Intelligenz liegt im JSON, nicht in ihm").
+#
+# EN: UI-driven acquisition (M1/M2), see
+# recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf. Accepts the selection
+# JSON from the planned frontend panel and passes it through to the wrapper
+# — the mediator deliberately does NOT decide on content here (section 1a:
+# "It takes the JSON, calls the wrapper function, and the intelligence lives
+# in the JSON, not in it").
 # ----------------------------------------------------------------------
 
 
@@ -609,6 +769,14 @@ def _selection_recipe_key(level: SingleSelection, request: SelectionRequest) -> 
     (wrapper.cache.recipes.key_for). Fachlicher Join-Schlüssel über RDF und
     anndata hinweg bleibt `db:submitterId` (siehe `_build_anndata_from_hits`/
     `cases_to_graph`), dieser recipe_key ist nur die Anfrage-Identität.
+
+    English: Recipe key as selection identity (M7): the same selection yields
+    the same key regardless of whether it is requested via
+    /selection/preview or /selection/generate — basis for the named graph and
+    the .h5ad filename. Uses the same cache mechanism as POST /export/anndata
+    (wrapper.cache.recipes.key_for). The domain join key across RDF and
+    anndata remains `db:submitterId` (see `_build_anndata_from_hits`/
+    `cases_to_graph`); this recipe_key is only the request identity.
     """
     wrapper = get_gdc_wrapper()
     recipe = {
@@ -630,6 +798,14 @@ class SelectionFetchResult:
     immer gebraucht) und ein lazy `build_anndata`-Callback, das NUR
     `/selection/generate` aufruft, damit `/selection/preview` keine teuren
     Downloads/Matrixaufbauten auslöst (Entscheidung 7.3).
+
+    English: Result of the source-dependent fetch+translation of a selection
+    level (back-mediator, M9, see
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf) — shared shape for
+    both endpoints: `graph`/`star_annotations` (RDF, always needed) and a
+    lazy `build_anndata` callback that ONLY `/selection/generate` calls, so
+    that `/selection/preview` does not trigger expensive downloads/matrix
+    builds (decision 7.3).
     """
 
     graph: Graph
@@ -649,6 +825,15 @@ def _fetch_selection_level(
     nur für preview real (generate best-effort, siehe
     `_build_anndata_from_geo_best_effort`) — beide Endpunkte behandeln eine
     fehlschlagende Ebene unabhängig von den anderen (Entscheidung 7.2).
+
+    English: Back-mediator dispatcher (M9): translates a generic selection
+    level (cohort/modality/attributes/source from the UI panel) into the
+    respective native request form of the chosen data source.
+
+    `gdc` and `cbioportal` are wired up for both preview AND generate, `geo`
+    only genuinely for preview (generate is best-effort, see
+    `_build_anndata_from_geo_best_effort`) — both endpoints handle a failing
+    level independently of the others (decision 7.2).
     """
     if level.modality != "gene_expression":
         raise ValueError(f"Modalität {level.modality!r} noch nicht angebunden (siehe Umsetzungsplan W6).")
@@ -674,6 +859,9 @@ def _fetch_gdc_level(
 ) -> SelectionFetchResult:
     """GDC-Zweig des Back-Mediators — unverändert die bisherige Logik (M3/M4),
     nur um das gemeinsame `SelectionFetchResult` herum verpackt.
+
+    English: GDC branch of the back-mediator — the previous logic (M3/M4)
+    unchanged, just wrapped in the shared `SelectionFetchResult`.
     """
     wrapper = get_gdc_wrapper()
     hits, cases, failed_cohorts = fetch_selection_files(
@@ -712,6 +900,18 @@ def _resolve_cbioportal_study(wrapper: CBioPortalWrapper, cohort: str) -> Option
     mRNA-Profil), sonst Code+"tcga", sonst nur der Code, sonst der erste
     Treffer der Stichwortsuche. `None`, wenn keine Studie gefunden wurde oder
     die Anfrage fehlschlägt.
+
+    English: Back-mediator core for cBioPortal: cancer type -> matching study.
+
+    `list_studies(keyword=...)` searches by keyword (see
+    `cancer_types.cancer_name`); cBioPortal's hit order is not a quality/
+    completeness ordering (observed live e.g. for "brca": a small HTAN
+    sub-study ranked before the established TCGA PanCancer Atlas reference
+    study) — hence a tiered preference instead of the first hit: first a
+    study whose `studyId` contains both the cohort code AND
+    "tcga_pan_can_atlas" (broad, curated mRNA profile), else code+"tcga",
+    else just the code, else the first hit of the keyword search. `None` if
+    no study was found or the request fails.
     """
     keyword = cancer_types.cancer_name(cohort)
     code = (cancer_code(cohort) or cohort).lower()
@@ -739,6 +939,11 @@ def _pick_cbioportal_profile(wrapper: CBioPortalWrapper, study_id: str) -> Optio
     """Wählt ein mRNA-Expressionsprofil einer Studie (Heuristik: `molecularProfileId`
     enthält "mrna" oder `molecularAlterationType` ist "MRNA_EXPRESSION") — für
     `get_molecular_data()`, das `_build_anndata_from_cbioportal` braucht.
+
+    English: Picks an mRNA expression profile of a study (heuristic:
+    `molecularProfileId` contains "mrna" or `molecularAlterationType` is
+    "MRNA_EXPRESSION") — for `get_molecular_data()`, needed by
+    `_build_anndata_from_cbioportal`.
     """
     try:
         profiles = wrapper.list_molecular_profiles(study_id)
@@ -756,6 +961,9 @@ def _pick_cbioportal_profile(wrapper: CBioPortalWrapper, study_id: str) -> Optio
 def _pick_cbioportal_sample_list(wrapper: CBioPortalWrapper, study_id: str) -> Optional[str]:
     """Wählt eine Sample-Liste einer Studie (bevorzugt eine, deren ID auf
     "_all" endet, sonst die größte) — für `get_molecular_data()`.
+
+    English: Picks a sample list of a study (prefers one whose ID ends in
+    "_all", otherwise the largest) — for `get_molecular_data()`.
     """
     try:
         sample_lists = wrapper.list_sample_lists(study_id)
@@ -777,6 +985,13 @@ def _fetch_cbioportal_level(level: SingleSelection, request: SelectionRequest, r
     (unverändert wiederverwendet) übersetzt werden. Mehrere `level.cohorts`
     ergeben mehrere Studien, deren Graphen vereinigt werden (analog zu GDCs
     Multi-Kohorten-Support).
+
+    English: cBioPortal branch of the back-mediator (M9): each cohort is
+    mapped to a study via `_resolve_cbioportal_study`, whose clinical data is
+    genuinely fetched and translated via
+    `mapping_cbioportal.clinical_data_to_graph` (reused unchanged). Multiple
+    `level.cohorts` yield multiple studies whose graphs are unioned (analogous
+    to GDC's multi-cohort support).
     """
     wrapper = get_cbioportal_wrapper()
     n_each = request.per_cohort_size or request.size
@@ -784,6 +999,7 @@ def _fetch_cbioportal_level(level: SingleSelection, request: SelectionRequest, r
     combined.bind("db", semantic_mapping.DB)
     failed_cohorts: list[str] = []
     resolved: list[tuple[str, list[str]]] = []  # (study_id, sample_ids)
+    # EN: (study_id, sample_ids)
 
     for cohort in level.cohorts:
         study_id = _resolve_cbioportal_study(wrapper, cohort)
@@ -826,6 +1042,17 @@ def _build_anndata_from_cbioportal(
     resolvierter Studie wird ein mRNA-Profil + eine Sample-Liste gewählt
     (siehe `_pick_cbioportal_profile`/`_pick_cbioportal_sample_list`); fehlt
     eines davon, wird nur diese Studie übersprungen, nicht die ganze Ebene.
+
+    English: Builds a `.h5ad` from cBioPortal's `get_molecular_data()`
+    (back-mediator M9).
+
+    Unlike GDC, cBioPortal already delivers finished, tabular values (no raw
+    download/gdc-client needed) — `get_molecular_data()` does, however,
+    require an explicit `entrezGeneIds` list, for which the small,
+    live-verified `cancer_types.DEMO_GENE_PANEL` is used (see there). For
+    each resolved study, an mRNA profile + a sample list is chosen (see
+    `_pick_cbioportal_profile`/`_pick_cbioportal_sample_list`); if either is
+    missing, only that study is skipped, not the whole level.
     """
     gene_ids_str = [str(g) for g in cancer_types.DEMO_GENE_PANEL.values()]
     gene_labels = {str(entrez_id): symbol for symbol, entrez_id in cancer_types.DEMO_GENE_PANEL.items()}
@@ -894,6 +1121,13 @@ def _fetch_geo_level(level: SingleSelection, request: SelectionRequest, recipe_k
     siehe cancer_types.py-Modul-Docstring) gegen `gds` gesucht. Preview ist
     real (`mapping_geo.series_to_graph`); Generate ist Best-Effort, siehe
     `_build_anndata_from_geo_best_effort`.
+
+    English: GEO branch of the back-mediator (M9): each cohort is mapped to a
+    free-text search term via `cancer_types.cancer_name` and searched against
+    `gds` via `GEOWrapper.query()` (not `.search()`, which does not pass
+    through `extra`, see the cancer_types.py module docstring). Preview is
+    genuine (`mapping_geo.series_to_graph`); generate is best-effort, see
+    `_build_anndata_from_geo_best_effort`.
     """
     wrapper = get_geo_wrapper()
     n_each = request.per_cohort_size or request.size
@@ -930,6 +1164,9 @@ def _fetch_geo_level(level: SingleSelection, request: SelectionRequest, recipe_k
 # Dateiendungen, die der Best-Effort-GEO-Parser als tabellenartig versucht
 # (siehe `_build_anndata_from_geo_best_effort`) — bewusst eng gefasst, damit
 # z. B. `.tar`/`.RData`/`.CEL`-Archive gar nicht erst erfolglos geparst werden.
+# EN: File extensions the best-effort GEO parser attempts to treat as
+# table-like (see `_build_anndata_from_geo_best_effort`) — deliberately kept
+# narrow so that e.g. `.tar`/`.RData`/`.CEL` archives are not even attempted.
 _GEO_TABLE_SUFFIXES = (".txt", ".tsv", ".csv", ".txt.gz", ".tsv.gz", ".csv.gz")
 
 
@@ -947,6 +1184,17 @@ def _build_anndata_from_geo_best_effort(
     für ALLE Serien, wird ein klarer Fehler geworfen statt einer erfundenen
     Matrix; scheitert es nur für einzelne Serien, werden die übrigen trotzdem
     genutzt.
+
+    English: Best-effort matrix build from GEO supplementary files
+    (back-mediator M9, agreed with the user as "also try GEO (best effort)").
+
+    Unlike GDC's uniform STAR gene-counts files, GEO has NO uniform file
+    format across series. This attempt loads, per series, the first file
+    with a table-like extension (`_GEO_TABLE_SUFFIXES`) and reads it
+    generically as an ID/value table (first string column = ID, first
+    numeric column = value). If this fails for ALL series, a clear error is
+    raised instead of a fabricated matrix; if it only fails for individual
+    series, the remaining ones are still used.
     """
     raw_dir = export_dir() / "geo_raw" / recipe_key
     values: dict[str, dict[str, float]] = {}
@@ -1043,6 +1291,24 @@ def _load_selection_knowledge(turtle: str) -> None:
     `sex_at_birth`), entstehen zwei Werte für dieselbe Property, bis Marcel die
     Ersetzungslogik liefert (siehe Handoff, P4) — absichtlich noch nicht
     selbst nachgebaut, damit es nicht zwei Varianten davon gibt.
+
+    English: Loads the knowledge base of a selection into the default graph
+    (P1, see wissensnetz/HANDOFF_pablo_store_waechst.md): the store is empty
+    at start and grows with every `/selection/*` call — runs for both
+    `preview` AND `generate` (answers decision 7.3: `preview` = fetch +
+    translation + load, without raw data/matrix). `load_turtle` sends the
+    text raw to Fuseki (no rdflib round-trip), so the appended RDF-star
+    blocks survive (see `serialize_with_provenance`, ADR-0002,
+    `wissensnetz/CLAUDE.md` "RDF-star trap").
+
+    DELIBERATE, DOCUMENTED TECH DEBT (P4 in the handoff): pure appending, no
+    `DELETE WHERE` per case before loading. RDF is a set — identical
+    statements (instance IRIs are deterministically formed from `case_id`)
+    collapse on their own and do no harm. But if a value for the same case
+    changes between two calls (e.g. GDC updates `sex_at_birth`), two values
+    for the same property result, until Marcel delivers the replacement
+    logic (see handoff, P4) — deliberately not rebuilt here so there is no
+    second variant of it.
     """
     store = get_graph_store()
     try:
@@ -1062,6 +1328,16 @@ async def selection_preview(request: SelectionRequest) -> SelectionPreviewRespon
     das ist der Unterschied zwischen billig und teuer. Eine fehlschlagende
     Ebene liefert `status="error"`, ohne die anderen Ebenen der Anfrage zu
     beeinträchtigen.
+
+    English: Cheap preview endpoint (decision 7.3: shared fetch without
+    matrices, but WITH loading — see `_load_selection_knowledge`/P1).
+
+    ONE files query per level (M3, `fetch_selection_files`), from which
+    `cases_to_graph()` -> Turtle -> (if `request.load`) into the store.
+    Deliberately builds NO anndata matrix (see `selection_generate` for
+    that) — that is the difference between cheap and expensive. A failing
+    level returns `status="error"` without affecting the other levels of the
+    request.
     """
     alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
     levels: list[SelectionLevelResult] = []
@@ -1098,6 +1374,18 @@ async def selection_generate(request: SelectionRequest) -> SelectionGenerateResp
     erzeugte Auswahl (identischer `recipe_key`) wird weder erneut
     heruntergeladen noch erneut gebaut — derselbe Cache-Kurzschluss wie in
     `POST /export/anndata`, jetzt auch hier.
+
+    English: Expensive generate endpoint: in addition to the Turtle
+    serialization/loading (see `selection_preview`), builds a `.h5ad` per
+    level, on the same shared sample set (M3+M6). As with
+    `selection_preview`, a failing level (e.g. missing `gdc-client` or
+    unreachable Fuseki, see `_build_anndata_from_hits`) does not affect the
+    other levels of the request.
+
+    P5 (see wissensnetz/HANDOFF_pablo_store_waechst.md): a selection that has
+    already been generated (identical `recipe_key`) is neither downloaded nor
+    built again — the same cache short-circuit as in POST /export/anndata,
+    now here too.
     """
     alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
     wrapper = get_gdc_wrapper()
@@ -1156,6 +1444,17 @@ def _build_anndata_from_hits(
     Serialisierungen"). Bricht mit einem klaren Fehler ab, statt eine
     unvollständige Matrix zurückzugeben, wenn `gdc-client` fehlt oder Fuseki
     nicht erreichbar ist.
+
+    English: Builds an anndata/.h5ad from files hits (see
+    `fetch_selection_files`, M3) (M6, see wissensnetz/HANDOFF_anndata.md and
+    app/semantic/expression.py): download via `gdc-client`, X/var from the
+    quantification files, `obs` from the wissensnetz.
+
+    Shared core for POST /export/anndata and POST /selection/generate — works
+    on exactly the `hits` the caller determined via `fetch_selection_files()`
+    (M3: "one fetch, two serializations"). Aborts with a clear error instead
+    of returning an incomplete matrix if `gdc-client` is missing or Fuseki is
+    unreachable.
     """
     file_ids: list[str] = []
     sample_case_map: dict[str, str] = {}
@@ -1196,6 +1495,8 @@ def _build_anndata_from_hits(
 
     # Zuordnung Datei -> Probe direkt aus den Suchtreffern (dieselbe Regel wie
     # oben beim Aufbau von sample_case_map: sample_id, sonst file_id als Fallback).
+    # EN: File -> sample mapping directly from the search hits (same rule as
+    # above when building sample_case_map: sample_id, else file_id as fallback).
     file_id_to_sample_id = {
         hit["file_id"]: ((hit.get("cases") or [{}])[0].get("samples") or [{}])[0].get("sample_id")
         or hit["file_id"]
@@ -1248,6 +1549,13 @@ def _build_anndata_from_hits(
     # (sample_case_map) — gleiches Ergebnis für den Moment (build_obs griff
     # ohnehin nur einzeln über sample_case_map zu), austauschbar gegen
     # cases_for_selection, sobald verfügbar.
+    # EN: Interim solution for P3 (see wissensnetz/HANDOFF_pablo_store_waechst.md):
+    # `all_cases(store)` still returns the ENTIRE stock, not scoped to this
+    # selection — `wissensnetz.cases_for_selection(store, selection_id)` does
+    # not exist yet (Marcel delivers it with P2). Until then, filter to the
+    # submitter_ids we already have from the shared fetch (sample_case_map)
+    # — same result for now (build_obs accessed it individually via
+    # sample_case_map anyway), swappable for cases_for_selection once available.
     selected_submitters = {sub for sub in sample_case_map.values() if sub}
     cases_by_submitter = {
         c["submitter_id"]: c for c in all_cases(store) if c.get("submitter_id") in selected_submitters
@@ -1256,7 +1564,7 @@ def _build_anndata_from_hits(
     obs = expression_export.build_obs(
         sample_case_map, cases_by_submitter, sample_types=sample_types, gdc_project_by_sample=sample_project_map
     )
-    obs = obs.loc[sample_ids]  # dieselbe Zeilenreihenfolge wie X sicherstellen
+    obs = obs.loc[sample_ids]  # dieselbe Zeilenreihenfolge wie X sicherstellen / EN: ensure the same row order as X
     var = expression_export.build_var(gene_ids_out, gene_labels)
 
     obsm: dict[str, Any] = {}
@@ -1269,7 +1577,7 @@ def _build_anndata_from_hits(
     adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
 
     out_filename = filename or f"{recipe_key}.h5ad"
-    out_filename = Path(out_filename).name  # nur Basisname, keine Pfad-Traversal
+    out_filename = Path(out_filename).name  # nur Basisname, keine Pfad-Traversal / EN: basename only, no path traversal
     if not out_filename.endswith(".h5ad"):
         out_filename += ".h5ad"
     out_path = expression_export.write_h5ad(adata, export_dir() / out_filename)
@@ -1299,6 +1607,15 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     (M6) das `.h5ad` — derselbe Kern, den auch POST /selection/generate nutzt.
     Siehe GET /export/anndata/download/{filename} für den eigentlichen
     Datei-Download.
+
+    English: GDC expression files -> anndata/.h5ad (part 3, see
+    wissensnetz/HANDOFF_anndata.md and app/semantic/expression.py).
+
+    Fetches the matching expression files via the shared fetch step (M3,
+    `fetch_selection_files`) and builds the `.h5ad` from them via
+    `_build_anndata_from_hits` (M6) — the same core that POST
+    /selection/generate also uses. See GET
+    /export/anndata/download/{filename} for the actual file download.
     """
     wrapper = get_gdc_wrapper()
 
@@ -1324,6 +1641,12 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     # einzige Attribut, das dieser Endpunkt traditionell anfordert (obs-Spalte
     # "sample_type"); zusätzliche Klinikfelder kommen künftig über
     # POST /selection/generate (M6), das beliebige `attributes[]` je Ebene kennt.
+    # EN: Fetch files PER project instead of a single combined query
+    # (stratification, see wissensnetz/HANDOFF_export_stratified.md) —
+    # "sample_type" is the only attribute this endpoint traditionally
+    # requests (obs column "sample_type"); additional clinical fields will
+    # come in future via POST /selection/generate (M6), which knows arbitrary
+    # `attributes[]` per level.
     projects = request.project_id if isinstance(request.project_id, list) else [request.project_id]
     hits, _shared_cases, failed_projects = fetch_selection_files(
         wrapper,
@@ -1368,7 +1691,10 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
 
 @app.get("/export/anndata/download/{filename}")
 async def export_anndata_download(filename: str) -> FileResponse:
-    """Lädt eine zuvor über POST /export/anndata erzeugte `.h5ad`-Datei herunter."""
+    """Lädt eine zuvor über POST /export/anndata erzeugte `.h5ad`-Datei herunter.
+
+    English: Downloads a `.h5ad` file previously generated via POST /export/anndata.
+    """
     safe_name = Path(filename).name
     if safe_name != filename:
         raise HTTPException(status_code=400, detail="Ungültiger Dateiname.")

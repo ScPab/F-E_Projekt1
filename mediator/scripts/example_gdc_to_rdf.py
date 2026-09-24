@@ -6,6 +6,16 @@ das Ergebnis nach scripts/output/tcga_brca_sample.ttl.
 
 Aufruf (aus dem Verzeichnis mediator/, mit installiertem rdflib):
     python scripts/example_gdc_to_rdf.py
+
+English: Example script: TCGA-BRCA sample cases -> RDF/OWL (Turtle), end to
+end without a running mediator service.
+
+Uses the same mapping logic as POST /transform (app/semantic/mapping.py),
+reads the sample data from sample_data/cases_brca_sample.json and writes the
+result to scripts/output/tcga_brca_sample.ttl.
+
+Invocation (from the mediator/ directory, with rdflib installed):
+    python scripts/example_gdc_to_rdf.py
 """
 
 from __future__ import annotations
@@ -15,7 +25,7 @@ import sys
 from pathlib import Path
 
 MEDIATOR_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(MEDIATOR_ROOT))  # macht das app-Package importierbar, ohne den Mediator zu starten
+sys.path.insert(0, str(MEDIATOR_ROOT))  # macht das app-Package importierbar, ohne den Mediator zu starten / EN: makes the app package importable without starting the mediator
 
 from app.semantic import mapping  # noqa: E402
 from app.semantic.paths import alignment_path  # noqa: E402

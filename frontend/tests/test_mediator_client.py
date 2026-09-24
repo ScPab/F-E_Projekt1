@@ -4,6 +4,13 @@
 das, was die Oberflaeche an den Mediator schickt und wie sie Fehler behandelt —
 die Fenster-Schicht braucht es dafuer nicht, weil ``mediator_client`` bewusst
 Qt-frei ist.
+
+English: Task 17 — acceptance test of the mediator client: without Qt,
+without network.
+
+``requests`` is mocked, no byte goes out. What is tested is exactly what the
+UI sends to the mediator and how it handles errors — the window layer is not
+needed for that, because ``mediator_client`` is deliberately Qt-free.
 """
 
 from __future__ import annotations
@@ -21,7 +28,10 @@ import mediator_client as mc  # noqa: E402
 
 
 class FakeResponse:
-    """Minimales ``requests.Response``-Double."""
+    """Minimales ``requests.Response``-Double.
+
+    English: Minimal ``requests.Response`` double.
+    """
 
     def __init__(self, status_code: int = 200, payload=None, text: str = "") -> None:
         self.status_code = status_code
@@ -38,7 +48,13 @@ class FakeResponse:
 class FakeStreamResponse:
     """Minimales ``requests.Response``-Double für ``download()`` — Context-Manager
     plus ``iter_content`` statt ``json()`` (andere API-Form als ``FakeResponse``,
-    weil ``download()`` streamt statt einmalig ``.json()`` zu lesen)."""
+    weil ``download()`` streamt statt einmalig ``.json()`` zu lesen).
+
+    English: Minimal ``requests.Response`` double for ``download()`` — context
+    manager plus ``iter_content`` instead of ``json()`` (a different API shape
+    than ``FakeResponse``, because ``download()`` streams instead of reading
+    ``.json()`` once).
+    """
 
     def __init__(self, status_code: int = 200, chunks: list[bytes] | None = None, text: str = "") -> None:
         self.status_code = status_code
@@ -86,6 +102,7 @@ def test_build_request_has_exactly_one_level_with_the_right_field_names() -> Non
         size=20,
     )
     # Feldnamen gegen die OpenAPI des Mediators (SelectionRequest/SingleSelection).
+    # EN: Field names against the mediator's OpenAPI (SelectionRequest/SingleSelection).
     assert set(payload) == {"levels", "size"}
     assert len(payload["levels"]) == 1
     level = payload["levels"][0]
@@ -125,7 +142,12 @@ def test_build_request_clamps_size_to_the_openapi_limits(given, expected) -> Non
 def test_several_sources_become_several_levels() -> None:
     """``SingleSelection.source`` ist ein einzelner Wert — mehrere Quellen
     werden deshalb zu mehreren Ebenen. Genau dafuer gibt es ``levels``
-    (ADR-0003, Entscheidung 7.2: parallele, gleichrangige Auswahlen)."""
+    (ADR-0003, Entscheidung 7.2: parallele, gleichrangige Auswahlen).
+
+    English: ``SingleSelection.source`` is a single value — multiple sources
+    therefore become multiple levels. That is exactly what ``levels`` is for
+    (ADR-0003, decision 7.2: parallel, equal-ranked selections).
+    """
     payload = mc.build_selection_request(
         cohorts=["TCGA-BRCA"],
         modality="gene_expression",
@@ -135,6 +157,7 @@ def test_several_sources_become_several_levels() -> None:
     )
     assert [lvl["source"] for lvl in payload["levels"]] == ["gdc", "ena", "geo"]
     # Alles ausser der Quelle ist je Ebene gleich.
+    # EN: Everything except the source is the same per level.
     for level in payload["levels"]:
         assert level["cohorts"] == ["TCGA-BRCA"]
         assert level["modality"] == "gene_expression"
@@ -144,7 +167,11 @@ def test_several_sources_become_several_levels() -> None:
 
 def test_no_source_yields_no_level() -> None:
     """Ohne Quelle entsteht eine leere Ebenenliste. Das Fenster faengt den Fall
-    ab, bevor es sendet — der Mediator verlangt minItems 1."""
+    ab, bevor es sendet — der Mediator verlangt minItems 1.
+
+    English: Without a source, an empty level list results. The window
+    catches this case before sending — the mediator requires minItems 1.
+    """
     payload = mc.build_selection_request(
         cohorts=["TCGA-BRCA"], modality="gene_expression",
         attributes=[], sources=[], size=20,
@@ -154,6 +181,7 @@ def test_no_source_yields_no_level() -> None:
 
 # --------------------------------------------------------------------------
 # preview / generate treffen die richtigen Pfade
+# EN: preview / generate hit the right paths
 # --------------------------------------------------------------------------
 def test_preview_posts_to_selection_preview() -> None:
     with patch.object(mc.requests, "post", return_value=FakeResponse(payload=_level())) as post:
@@ -173,6 +201,8 @@ def test_generate_posts_to_selection_generate() -> None:
 def test_timeouts_differ_between_preview_and_generate() -> None:
     # Generieren laedt Rohdaten herunter und dauert Minuten — ein gemeinsames
     # Zeitlimit waere entweder zu knapp oder zu lasch.
+    # EN: Generating downloads raw data and takes minutes — a shared timeout
+    # would be either too tight or too lax.
     assert mc.PREVIEW_TIMEOUT < mc.GENERATE_TIMEOUT
     with patch.object(mc.requests, "post", return_value=FakeResponse(payload=_level())) as post:
         mc.preview({}, base_url="http://h")
@@ -193,6 +223,7 @@ def test_base_url_comes_from_the_environment(monkeypatch) -> None:
 
 # --------------------------------------------------------------------------
 # Fehler werden zurueckgegeben, nicht geworfen
+# EN: Errors are returned, not raised
 # --------------------------------------------------------------------------
 def test_connection_error_becomes_a_result_not_an_exception() -> None:
     with patch.object(mc.requests, "post", side_effect=requests.ConnectionError("refused")):
@@ -241,7 +272,11 @@ def test_download_writes_the_streamed_bytes_to_dest_path(tmp_path) -> None:
 
 def test_download_creates_missing_parent_directories(tmp_path) -> None:
     """Ziel liegt in noch nicht existierenden Ordnern — wie ``wissensnetz/data/``
-    beim allerersten Download."""
+    beim allerersten Download.
+
+    English: The destination is in folders that do not yet exist — like
+    ``wissensnetz/data/`` on the very first download.
+    """
     dest = tmp_path / "does" / "not" / "exist" / "out.h5ad"
     with patch.object(mc.requests, "get", return_value=FakeStreamResponse(chunks=[b"x"])):
         result = mc.download("/x", str(dest), base_url="http://h")
@@ -288,7 +323,11 @@ def test_levels_returns_all_of_them() -> None:
 
 def test_failed_level_is_still_an_ok_request() -> None:
     """Eine fehlgeschlagene Ebene ist keine fehlgeschlagene Anfrage — sonst
-    ginge die Fehlermeldung des Mediators verloren."""
+    ginge die Fehlermeldung des Mediators verloren.
+
+    English: A failed level is not a failed request — otherwise the
+    mediator's error message would be lost.
+    """
     payload = _level(status="error", error="Keine Treffer.", turtle=None, triple_count=None)
     with patch.object(mc.requests, "post", return_value=FakeResponse(payload=payload)):
         result = mc.preview({}, base_url="http://h")
@@ -299,7 +338,11 @@ def test_failed_level_is_still_an_ok_request() -> None:
 
 def test_mehrere_kohorten_stehen_in_derselben_ebene() -> None:
     """``SingleSelection.cohorts`` ist eine Liste — mehrere Kohorten ergeben
-    KEINE weiteren Ebenen (anders als mehrere Quellen)."""
+    KEINE weiteren Ebenen (anders als mehrere Quellen).
+
+    English: ``SingleSelection.cohorts`` is a list — multiple cohorts do NOT
+    result in additional levels (unlike multiple sources).
+    """
     payload = mc.build_selection_request(
         cohorts=["TCGA-BRCA", "TCGA-LUAD", "TCGA-KIRC"],
         modality="gene_expression", attributes=["sex_at_birth"],

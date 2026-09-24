@@ -1,4 +1,7 @@
-"""Wrapper-Modul für die ENA (European Nucleotide Archive) API — EBI Portal API."""
+"""Wrapper-Modul für die ENA (European Nucleotide Archive) API — EBI Portal API.
+
+English: Wrapper module for the ENA (European Nucleotide Archive) API — EBI Portal API.
+"""
 
 from .cache import WrapperCache
 from .client import ENAWrapper, build_query

@@ -12,6 +12,23 @@ Zum Zuschnitt: der Store weiss nicht, welcher Fall aus welchem Aufruf kam — de
 Mediator laedt alles in den Default-Graph und ruft ``write_selection`` nie auf,
 es gibt also weder Manifest noch Named Graph. "Was ist neu" kann deshalb nur die
 Oberflaeche selbst wissen, ueber zwei Abzuege und :func:`diff`.
+
+English: Read-only access to the knowledge network — **without any Qt
+import**.
+
+Like ``mediator_client.py``, this module stays testable without a screen: it
+returns simple Python data (``dict``/``list``), no widgets and no rdflib
+objects. Reading happens via the ``wissensnetz`` package in its own process
+(ADR-0004, point 3) — **no** additional endpoint in the mediator.
+
+Nothing is written here. The store belongs to the mediator; the UI only reads
+it.
+
+On scope: the store does not know which case came from which call — the
+mediator loads everything into the default graph and never calls
+``write_selection``, so there is neither a manifest nor a named graph. "What
+is new" can therefore only be known by the UI itself, via two snapshots and
+:func:`diff`.
 """
 
 from __future__ import annotations
@@ -21,12 +38,15 @@ from typing import Any
 from wissensnetz.graphstore import GraphStore
 
 # Zustaende eines Knotens im Vergleich zweier Abzuege.
+# EN: States of a node when comparing two snapshots.
 NEU = "neu"
 GEWACHSEN = "gewachsen"
 UNVERAENDERT = "unveraendert"
 
 # --- Die drei Abfragen -------------------------------------------------------
+# EN: The three queries
 # a) Wurzel: wie viele Faelle und Kohorten stehen ueberhaupt im Store.
+# EN: a) Root: how many cases and cohorts are in the store at all.
 QUERY_ROOT = """\
 PREFIX db: <http://databridge.hka/onto#>
 SELECT (COUNT(DISTINCT ?case) AS ?cases) (COUNT(DISTINCT ?project) AS ?projects)
@@ -37,6 +57,7 @@ WHERE {
 """
 
 # b) Kohorten mit ihrer Fallzahl.
+# EN: b) Cohorts with their case count.
 QUERY_COHORTS = """\
 PREFIX db: <http://databridge.hka/onto#>
 SELECT ?projectId (COUNT(DISTINCT ?case) AS ?cases)
@@ -58,6 +79,18 @@ GROUP BY ?projectId
 # Anfassen "aufgeraeumt" wuerden: es wirft die Rueckverweise
 # (db:isDemographicOf, db:describesCase) heraus und laesst die NCIt-IRI aus
 # db:primaryDiagnosis weg, waehrend der Text aus db:primaryDiagnosisLabel bleibt.
+# EN: c) Attributes per cohort, in ONE call for all cohorts.
+#
+# This query **does not know the attribute list** — and that must stay this
+# way: if ``resolve_attribute()`` in the mediator dynamically creates a new
+# property, it appears here automatically. So do not build in a list of
+# properties, not even "just in case".
+#
+# ``isLiteral(?v)`` incidentally does two things that would otherwise get
+# "cleaned up" the next time someone touches this: it throws out the
+# back-references (db:isDemographicOf, db:describesCase) and leaves out the
+# NCIt IRI from db:primaryDiagnosis, while the text from
+# db:primaryDiagnosisLabel stays.
 QUERY_ATTRIBUTES = """\
 PREFIX db:  <http://databridge.hka/onto#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -80,26 +113,44 @@ def default_store() -> GraphStore:
     ``GRAPH_DB_HOST`` hat die Vorgabe ``localhost``; der Container-Name
     ``graph-db`` gilt nur innerhalb von Compose. Die Oberflaeche laeuft als
     Host-Prozess und braucht deshalb keine Sonderbehandlung.
+
+    English: A :class:`GraphStore` with the settings from the environment.
+
+    ``GRAPH_DB_HOST`` defaults to ``localhost``; the container name
+    ``graph-db`` only applies inside Compose. The UI runs as a host process
+    and therefore needs no special handling.
     """
     return GraphStore()
 
 
 def store_url(store: GraphStore) -> str:
-    """Die Basis-URL des Stores — fuer die Meldung "nicht erreichbar"."""
+    """Die Basis-URL des Stores — fuer die Meldung "nicht erreichbar".
+
+    English: The base URL of the store — for the "unreachable" message.
+    """
     return store.settings.base_url
 
 
 def is_reachable(store: GraphStore) -> bool:
-    """Reicht :meth:`GraphStore.is_reachable` durch."""
+    """Reicht :meth:`GraphStore.is_reachable` durch.
+
+    English: Passes :meth:`GraphStore.is_reachable` through.
+    """
     return store.is_reachable()
 
 
 # --- Abzug -------------------------------------------------------------------
+# EN: Snapshot
 def _zahl(zeile: dict[str, Any], name: str) -> int:
     """Einen Zaehlwert aus einer SPARQL-Zeile holen; fehlt er, ist er 0.
 
     COUNT liefert die Zahl als Zeichenkette ("20"), und bei leerem Store kann
     die Bindung ganz fehlen — beides darf keinen KeyError geben.
+
+    English: Get a count value from a SPARQL row; if missing, it is 0.
+
+    COUNT returns the number as a string ("20"), and with an empty store the
+    binding may be missing entirely — neither case may raise a KeyError.
     """
     try:
         return int(zeile.get(name) or 0)
@@ -108,7 +159,11 @@ def _zahl(zeile: dict[str, Any], name: str) -> int:
 
 
 def local_name(iri: str) -> str:
-    """Der lokale Teil einer Property-IRI (``…onto#sexAtBirth`` -> ``sexAtBirth``)."""
+    """Der lokale Teil einer Property-IRI (``…onto#sexAtBirth`` -> ``sexAtBirth``).
+
+    English: The local part of a property IRI (``…onto#sexAtBirth`` ->
+    ``sexAtBirth``).
+    """
     for trenner in ("#", "/"):
         if trenner in iri:
             iri = iri.rsplit(trenner, 1)[-1]
@@ -117,7 +172,11 @@ def local_name(iri: str) -> str:
 
 def leerer_abzug() -> dict[str, Any]:
     """Ein wohlgeformter Abzug ohne Inhalt — die Form, auf die sich alles
-    Weitere verlassen darf."""
+    Weitere verlassen darf.
+
+    English: A well-formed, empty snapshot — the shape everything else can
+    rely on.
+    """
     return {"cases": 0, "projects": 0, "cohorts": {}}
 
 
@@ -130,6 +189,10 @@ def snapshot(store: GraphStore) -> dict[str, Any]:
          "cohorts": {"TCGA-BRCA": {"cases": 20,
                                    "attributes": {"sexAtBirth": {"cases": 20,
                                                                  "values": 2}}}}}
+
+    English: The complete snapshot of the store from exactly three queries.
+
+    Shape as shown above.
     """
     abzug = leerer_abzug()
 
@@ -154,6 +217,8 @@ def snapshot(store: GraphStore) -> dict[str, Any]:
             continue
         # Eine Kohorte, die nur in c) auftaucht, trotzdem aufnehmen: die Form
         # des Abzugs soll nicht davon abhaengen, welche Abfrage zuerst lief.
+        # EN: Include a cohort that only appears in c) anyway: the shape of
+        # the snapshot should not depend on which query ran first.
         kohorte = abzug["cohorts"].setdefault(projekt, {"cases": 0, "attributes": {}})
         kohorte["attributes"][local_name(eigenschaft)] = {
             "cases": _zahl(zeile, "cases"),
@@ -164,8 +229,12 @@ def snapshot(store: GraphStore) -> dict[str, Any]:
 
 
 # --- Vergleich ---------------------------------------------------------------
+# EN: Comparison
 def _zustand(vorher: int | None, nachher: int) -> dict[str, Any]:
-    """Zustand und Zuwachs eines einzelnen Knotens."""
+    """Zustand und Zuwachs eines einzelnen Knotens.
+
+    English: State and growth of a single node.
+    """
     if vorher is None:
         return {"state": NEU, "plus": nachher}
     if nachher > vorher:
@@ -179,11 +248,18 @@ def diff(vorher: dict[str, Any] | None, nachher: dict[str, Any] | None) -> dict[
     Die Markierung gilt fuer **den letzten Aufruf** und wird nicht gespeichert.
     Eine Historie ueber die Sitzung hinaus waere erfunden, weil der Store sie
     nicht hergibt.
+
+    English: Compare two snapshots: what is new, what has grown.
+
+    The marking applies to **the last call** and is not stored. A history
+    beyond the session would be fabricated, because the store does not
+    provide one.
     """
     vorher = vorher or leerer_abzug()
     nachher = nachher or leerer_abzug()
 
     # Die Wurzel gilt als neu, wenn vorher ueberhaupt nichts im Store stand.
+    # EN: The root counts as new if there was nothing in the store before.
     alt_gesamt = vorher.get("cases", 0)
     unterschied: dict[str, Any] = {
         "root": _zustand(alt_gesamt if alt_gesamt else None, nachher.get("cases", 0)),
@@ -213,9 +289,13 @@ def diff(vorher: dict[str, Any] | None, nachher: dict[str, Any] | None) -> dict[
 
 
 # --- Reihenfolge -------------------------------------------------------------
+# EN: Ordering
 # Neu zuerst, dann gewachsen, dann nach Fallzahl absteigend. Das ist nicht
 # Kosmetik: die Reihen zeigen hoechstens sieben Knoten, und eine neue Kohorte
 # darf nie hinter "… N weitere" verschwinden.
+# EN: New first, then grown, then descending by case count. This is not
+# cosmetics: the rows show at most seven nodes, and a new cohort must never
+# disappear behind "… N more".
 _RANG = {NEU: 0, GEWACHSEN: 1, UNVERAENDERT: 2}
 
 
@@ -229,21 +309,31 @@ def _sortiere(eintraege: dict[str, Any], zustaende: dict[str, Any]) -> list[str]
 
 def sortierte_kohorten(abzug: dict[str, Any],
                        unterschied: dict[str, Any] | None = None) -> list[str]:
-    """Die Kohorten in Anzeigereihenfolge."""
+    """Die Kohorten in Anzeigereihenfolge.
+
+    English: The cohorts in display order.
+    """
     return _sortiere(abzug.get("cohorts") or {}, (unterschied or {}).get("cohorts") or {})
 
 
 def sortierte_attribute(abzug: dict[str, Any], projekt: str,
                         unterschied: dict[str, Any] | None = None) -> list[str]:
-    """Die Attribute einer Kohorte in Anzeigereihenfolge."""
+    """Die Attribute einer Kohorte in Anzeigereihenfolge.
+
+    English: The attributes of a cohort in display order.
+    """
     kohorte = (abzug.get("cohorts") or {}).get(projekt) or {}
     zustaende = ((unterschied or {}).get("attributes") or {}).get(projekt) or {}
     return _sortiere(kohorte.get("attributes") or {}, zustaende)
 
 
 # --- Namen: Store-Property oder Panel-Attribut -------------------------------
+# EN: Names: store property or panel attribute
 def _camel(panel_name: str) -> str:
-    """``sex_at_birth`` -> ``sexAtBirth``."""
+    """``sex_at_birth`` -> ``sexAtBirth``.
+
+    English: ``sex_at_birth`` -> ``sexAtBirth``.
+    """
     kopf, *rest = panel_name.split("_")
     return kopf + "".join(teil[:1].upper() + teil[1:] for teil in rest)
 
@@ -262,6 +352,20 @@ def panel_name(local: str, panel_namen: list[str]) -> str | None:
     ``primary_diagnosis`` als ``db:primaryDiagnosisLabel``. Eine halb stimmende
     Rueckuebersetzung waere genau die Sorte stiller Fehlzuordnung, die uns schon
     das tote GDC-Feld ``gender`` eingebrockt hat.
+
+    English: The panel-property matching the store property — **only on
+    exact match**.
+
+    The panel writes ``sex_at_birth``, the store carries ``db:sexAtBirth``.
+    The translation belongs to the mediator (``KNOWN_ATTRIBUTES``), which the
+    UI may not import. Hence the mechanical rule: camelCase of the panel name
+    must exactly match the local name, otherwise there is no second line.
+
+    That leaves two of the eleven without a second line, and that is correct:
+    ``has_metastasis`` sits as ``db:metastasisAtDiagnosis`` in the store,
+    ``primary_diagnosis`` as ``db:primaryDiagnosisLabel``. A half-correct
+    back-translation would be exactly the kind of silent misattribution that
+    already got us the dead GDC field ``gender``.
     """
     for name in panel_namen or []:
         if _camel(name) == local:
@@ -270,6 +374,7 @@ def panel_name(local: str, panel_namen: list[str]) -> str | None:
 
 
 # --- Auf die Auswahl im Panel einschraenken --------------------------------
+# EN: Restrict to the selection in the panel
 def store_property(panel: str, zuordnung: dict[str, str] | None = None) -> str:
     """Unter welcher Property ein Panel-Attribut im Store liegt.
 
@@ -278,6 +383,14 @@ def store_property(panel: str, zuordnung: dict[str, str] | None = None) -> str:
     deshalb ausdruecklich als ``store_property`` in ``config/panel.json`` —
     geraten wird hier nichts (siehe :func:`panel_name` zur selben Frage in der
     Gegenrichtung).
+
+    English: Under which property a panel attribute is stored.
+
+    Nine of the eleven follow mechanically from the camelCase of the panel
+    name; ``primary_diagnosis`` and ``has_metastasis`` do not. The two are
+    therefore explicitly listed as ``store_property`` in
+    ``config/panel.json`` — nothing is guessed here (see :func:`panel_name`
+    for the same question in the opposite direction).
     """
     return (zuordnung or {}).get(panel) or _camel(panel)
 
@@ -295,9 +408,22 @@ def auswahl_abzug(abzug: dict[str, Any], kohorten: str | list[str],
 
     Die Schluessel bleiben die Store-Namen, damit ein Vergleich aus
     :func:`diff` weiterhin passt.
+
+    English: Restrict a snapshot to the selection in the panel.
+
+    Exactly the chosen cohorts with exactly the checked attributes are shown
+    — not everything that is in the store. The **numbers** still come from
+    the store; whatever has never been fetched shows as 0 instead of being
+    missing. This way one sees, before clicking, what the selection will
+    move in the network.
+
+    The keys remain the store names, so that a comparison from :func:`diff`
+    still fits.
     """
     # Eine einzelne Kohorte darf auch als Zeichenkette kommen; ohne diese Zeile
     # liefe sie als Liste ihrer Buchstaben durch.
+    # EN: A single cohort may also come as a plain string; without this line
+    # it would run through as a list of its characters.
     if isinstance(kohorten, str):
         kohorten = [kohorten] if kohorten else []
     if not kohorten:
@@ -331,6 +457,17 @@ def gesamt_attribute(abzug: dict[str, Any]) -> dict[str, dict[str, Any]]:
     Die Zahl der **Werte** wird bewusst nicht summiert: das sind distinkte Werte
     je Kohorte, und "female" in zwei Kohorten waere sonst zweimal gezaehlt. Wer
     sie braucht, klappt eine Kohorte auf.
+
+    English: The attributes summarized across **all** cohorts of the
+    snapshot.
+
+    The attributes apply to the whole selection, not a single cohort — in the
+    order they stand next to the cohorts, not under one of them. For display,
+    the **cases are therefore summed**.
+
+    The number of **values** is deliberately not summed: those are distinct
+    values per cohort, and "female" in two cohorts would otherwise be counted
+    twice. Whoever needs it expands a cohort.
     """
     gesamt: dict[str, dict[str, Any]] = {}
     for kohorte in (abzug.get("cohorts") or {}).values():
@@ -344,7 +481,11 @@ def gesamt_attribute(abzug: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def gesamt_zustand(unterschied: dict[str, Any] | None,
                    name: str) -> dict[str, Any]:
     """Zustand eines Attributs ueber alle Kohorten: neu, wenn es in einer neu
-    ist; gewachsen mit der Summe der Zuwaechse."""
+    ist; gewachsen mit der Summe der Zuwaechse.
+
+    English: State of an attribute across all cohorts: new if it is new in
+    one of them; grown with the sum of the increases.
+    """
     if not unterschied:
         return {"state": UNVERAENDERT, "plus": 0}
     zustaende = [je.get(name) for je in (unterschied.get("attributes") or {}).values()
@@ -359,7 +500,10 @@ def gesamt_zustand(unterschied: dict[str, Any] | None,
 
 def sortierte_gesamt_attribute(abzug: dict[str, Any],
                                unterschied: dict[str, Any] | None = None) -> list[str]:
-    """Die zusammengefassten Attribute in Anzeigereihenfolge."""
+    """Die zusammengefassten Attribute in Anzeigereihenfolge.
+
+    English: The summarized attributes in display order.
+    """
     eintraege = gesamt_attribute(abzug)
     zustaende = {name: gesamt_zustand(unterschied, name) for name in eintraege}
     return _sortiere(eintraege, zustaende)

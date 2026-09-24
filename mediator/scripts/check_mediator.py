@@ -15,6 +15,24 @@ fastapi, httpx, requests, rdflib sowie dem lokalen gdc-Package, z. B. via
     python scripts/check_mediator.py
 
 Exit-Code 0, wenn alle Checks erfolgreich sind, sonst 1.
+
+English: Smoke test: checks the mediator REST layer end to end — transfer
+(passing a request through to the GDC API via POST /query) and translation
+(GDC cases -> RDF/OWL via POST /transform, see app/semantic/mapping.py and
+wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL).
+
+Loads the FastAPI app directly in-process (fastapi.testclient.TestClient)
+instead of starting its own process — no `docker compose up` or running
+`uvicorn` needed. Makes real network requests against the real GDC API (no
+mocking), so it checks the complete path mediator -> GDC wrapper -> GDC API
+-> mapping -> Turtle.
+
+Invocation (from the mediator/ directory, with dependencies installed:
+fastapi, httpx, requests, rdflib as well as the local gdc package, e.g. via
+`pip install -e ../wrappers`):
+    python scripts/check_mediator.py
+
+Exit code 0 if all checks succeed, otherwise 1.
 """
 
 from __future__ import annotations
@@ -50,7 +68,10 @@ def check_ontology() -> bool:
 
 
 def check_query_transfer() -> bool:
-    """Übertragung: POST /query muss die Anfrage an die echte GDC-API weiterreichen und Treffer liefern."""
+    """Übertragung: POST /query muss die Anfrage an die echte GDC-API weiterreichen und Treffer liefern.
+
+    English: Transfer: POST /query must pass the request through to the real GDC API and return hits.
+    """
     r = client.post(
         "/query",
         json={
@@ -73,7 +94,10 @@ def check_query_transfer() -> bool:
 
 
 def check_transform_translation() -> bool:
-    """Übersetzung: POST /transform muss GDC-Cases live abrufen und als RDF/OWL (Turtle) übersetzen."""
+    """Übersetzung: POST /transform muss GDC-Cases live abrufen und als RDF/OWL (Turtle) übersetzen.
+
+    English: Translation: POST /transform must fetch GDC cases live and translate them into RDF/OWL (Turtle).
+    """
     r = client.post("/transform", json={"source": "gdc", "project_id": "TCGA-BRCA", "size": 3})
     if r.status_code != 200:
         print(f"[transform]  FEHLER -- Status {r.status_code}: {r.text}")
@@ -90,6 +114,10 @@ def check_transform_translation() -> bool:
     # RDF-star-Anhang (Provenienz/Konfidenz) folgt eigener Grammatik, siehe
     # app/semantic/mapping.py (serialize_with_provenance) und
     # docs/adding_new_sources.md, Abschnitt 4.
+    # EN: Only the main Turtle part is directly parseable with rdflib; any
+    # RDF-star appendix (provenance/confidence) follows its own grammar, see
+    # app/semantic/mapping.py (serialize_with_provenance) and
+    # docs/adding_new_sources.md, section 4.
     main_part = turtle.split("# RDF-star:")[0]
     try:
         g = Graph()

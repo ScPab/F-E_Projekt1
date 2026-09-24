@@ -3,6 +3,13 @@
 Gearbeitet wird mit einem kleinen kuenstlichen ``AnnData`` im Speicher. Fehlt
 ``anndata`` im Testlauf, werden die Tests uebersprungen, die es brauchen; die
 reine Rechnung (softmax, Skalierung) laeuft auch ohne.
+
+English: Tests for ``morph`` — without Qt, without a screen, without a file
+on disk.
+
+Work is done with a small artificial ``AnnData`` in memory. If ``anndata`` is
+missing in the test run, the tests that need it are skipped; the pure
+computation (softmax, scaling) also runs without it.
 """
 
 from __future__ import annotations
@@ -18,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import morph  # noqa: E402
 
 # Die fuenfzehn Regler in Oviedos fester Reihenfolge und Benennung.
+# EN: The fifteen sliders in Oviedo's fixed order and naming.
 ERWARTETE_REIHENFOLGE = [
     "genes", "mirna", "cancer", "type", "race", "sex_at_birth", "ethnicity",
     "primary_diagnosis", "has_metastasis", "vital_status", "cancer (ver)",
@@ -26,7 +34,10 @@ ERWARTETE_REIHENFOLGE = [
 
 
 def _adata(n: int = 8, *, mit_layout: bool = True, einwertig: bool = False):
-    """Ein kleines AnnData im Speicher — nur so viel, wie ``morph`` liest."""
+    """Ein kleines AnnData im Speicher — nur so viel, wie ``morph`` liest.
+
+    English: A small AnnData in memory — only as much as ``morph`` reads.
+    """
     ad = pytest.importorskip("anndata")
     pd = pytest.importorskip("pandas")
 
@@ -52,6 +63,7 @@ def _adata(n: int = 8, *, mit_layout: bool = True, einwertig: bool = False):
 
 
 # --- Rechnung ----------------------------------------------------------------
+# EN: Computation
 def test_softmax_summiert_auf_eins() -> None:
     a = morph.softmax(np.array([0.0, 0.5, 1.0, 2.0]))
     assert a.sum() == pytest.approx(1.0)
@@ -59,14 +71,22 @@ def test_softmax_summiert_auf_eins() -> None:
 
 
 def test_softmax_ist_bei_grossen_werten_stabil() -> None:
-    """Ohne Abzug des Maximums liefe ``exp`` hier ueber."""
+    """Ohne Abzug des Maximums liefe ``exp`` hier ueber.
+
+    English: Without subtracting the maximum, ``exp`` would overflow here.
+    """
     a = morph.softmax(np.array([1000.0, 1001.0]))
     assert a.sum() == pytest.approx(1.0)
 
 
 def test_ein_regler_auf_eins_ergibt_fast_genau_dieses_encoding() -> None:
     """Mit SENS = 10 draengt ein einzelner Regler auf 1 die uebrigen praktisch
-    auf null — genau das ist der Sinn des Sensibilitaets-Koeffizienten."""
+    auf null — genau das ist der Sinn des Sensibilitaets-Koeffizienten.
+
+    English: With SENS = 10, a single slider set to 1 pushes the others
+    practically to zero — that is exactly the point of the sensitivity
+    coefficient.
+    """
     n = 5
     erstes = np.tile([1.0, 0.0], (n, 1))
     zweites = np.tile([0.0, 1.0], (n, 1))
@@ -97,14 +117,22 @@ def test_skaliere_layout_zentriert_und_skaliert() -> None:
 
 
 def test_skaliere_layout_vertraegt_einen_einzigen_punkt() -> None:
-    """Alle Punkte auf derselben Stelle: Division durch null waere der Absturz."""
+    """Alle Punkte auf derselben Stelle: Division durch null waere der Absturz.
+
+    English: All points at the same spot: division by zero would be the
+    crash.
+    """
     arr = np.array([[3.0, 3.0], [3.0, 3.0]])
     assert not morph.skaliere_layout(arr).any()
 
 
 # --- Modell ------------------------------------------------------------------
+# EN: Model
 def test_reihenfolge_der_fuenfzehn_eintraege() -> None:
-    """Auch deaktivierte bleiben sichtbar und an ihrem Platz."""
+    """Auch deaktivierte bleiben sichtbar und an ihrem Platz.
+
+    English: Even disabled ones stay visible and in their place.
+    """
     modell = morph.baue_encodings(_adata())
     assert [e.name for e in modell.eintraege] == ERWARTETE_REIHENFOLGE
 
@@ -116,7 +144,10 @@ def test_genes_startet_auf_dem_basisgewicht() -> None:
 
 
 def test_ohne_obsm_gibt_es_keine_basis_und_einen_benannten_grund() -> None:
-    """Kein Layout heisst keine Karte — und keine erfundene Punktwolke."""
+    """Kein Layout heisst keine Karte — und keine erfundene Punktwolke.
+
+    English: No layout means no map — and no fabricated point cloud.
+    """
     modell = morph.baue_encodings(_adata(mit_layout=False))
     assert modell.hat_basis is False
     assert modell.eintraege[0].grund == "obsm 'X_tsne_genes' fehlt"
@@ -158,9 +189,15 @@ def test_encodings_haben_die_form_der_punktzahl() -> None:
 
 
 # --- Meldung ohne 2D-Layout --------------------------------------------------
+# EN: Message without a 2D layout
 def test_meldung_nennt_die_probenzahl_als_grund() -> None:
     """Zwei Proben ergeben auch mit compute_tsne=true kein obsm — dann muss die
-    Meldung das sagen, sonst sucht man am Schalter statt an der Probenzahl."""
+    Meldung das sagen, sonst sucht man am Schalter statt an der Probenzahl.
+
+    English: Two samples produce no obsm even with compute_tsne=true — then
+    the message must say so, otherwise one looks at the flag instead of the
+    sample count.
+    """
     text = morph.text_ohne_layout(2)
     assert "nur 2 Proben" in text
     assert "keine tSNE" in text

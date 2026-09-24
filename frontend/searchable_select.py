@@ -21,6 +21,32 @@ Tastatur; :class:`SearchableSelect` (einwertig) und :class:`MultiSelect`
 (Haekchenliste) leiten davon ab. **Kein zweites Popup-Geruest daneben** — die
 Eigenheiten von :class:`PopupCard` sind teuer erarbeitet (siehe deren Docstring)
 und sollen genau einmal gepflegt werden.
+
+English: Popup selection menus — single-valued (cohort) and multi-valued
+(object, source).
+
+Pattern: a button shows the current choice, a click expands a card below it
+that has a search field at the top and the filtered list below.
+
+Why not ``QComboBox`` with ``setEditable(True)``: its completer replaces the
+text in the field and does not allow a two-line row with a code on the
+right. And why not a permanently visible list in the panel: 32 cohorts need
+space that the narrow selection panel does not have — the list would
+overlap the rows underneath it. The same was true for the attribute and
+source lists (task 18): eleven attributes in a 240-pixel-high box were
+always cut off.
+
+The rows are painted by a :class:`RowDelegate` instead of per-row widgets
+(``setItemWidget``). A delegate knows the actually available width, elides
+the name if needed, and can reliably right-align the code; row widgets were
+wider than the visible area, pushing the code out of view.
+
+Structure: :class:`_AufklappAuswahl` holds the card, search field, height
+adjustment and keyboard handling; :class:`SearchableSelect` (single-valued)
+and :class:`MultiSelect` (checkbox list) derive from it. **No second popup
+scaffold next to it** — the quirks of :class:`PopupCard` were expensively
+worked out (see its docstring) and are meant to be maintained in exactly one
+place.
 """
 
 from __future__ import annotations
@@ -45,26 +71,35 @@ from PySide6.QtWidgets import (
 import theme
 
 # Rollen je Listeneintrag.
-VALUE_ROLE = Qt.ItemDataRole.UserRole          # was gesendet wird (project_id)
-LABEL_ROLE = Qt.ItemDataRole.UserRole + 1      # Klarname
-CODE_ROLE = Qt.ItemDataRole.UserRole + 2       # Kuerzel/Hinweis rechts
-SEARCH_ROLE = Qt.ItemDataRole.UserRole + 3     # vorberechneter Suchtext
-KIND_ROLE = Qt.ItemDataRole.UserRole + 4       # KIND_ROW oder KIND_HEADER
+# EN: Roles per list entry.
+VALUE_ROLE = Qt.ItemDataRole.UserRole          # was gesendet wird (project_id) / EN: what gets sent (project_id)
+LABEL_ROLE = Qt.ItemDataRole.UserRole + 1      # Klarname / EN: display name
+CODE_ROLE = Qt.ItemDataRole.UserRole + 2       # Kuerzel/Hinweis rechts / EN: code/hint on the right
+SEARCH_ROLE = Qt.ItemDataRole.UserRole + 3     # vorberechneter Suchtext / EN: precomputed search text
+KIND_ROLE = Qt.ItemDataRole.UserRole + 4       # KIND_ROW oder KIND_HEADER / EN: KIND_ROW or KIND_HEADER
 
 KIND_ROW = "row"
 KIND_HEADER = "header"
 
 # So viele Zeilen zeigt die aufgeklappte Karte hoechstens; darueber wird
 # gescrollt. Neun passt auf kleine Bildschirme und ist genug zum Ueberblicken.
+# EN: The expanded card shows at most this many rows; beyond that it
+# scrolls. Nine fits small screens and is enough to get an overview.
 MAX_ROWS = 9
 # Dieselbe Schranke als Hoehe — die Mehrfachauswahl mischt hohe Zeilen mit
 # niedrigen Gruppenueberschriften, da traegt eine Zeilenzahl nicht mehr.
+# EN: The same limit expressed as a height — the multi-select mixes tall
+# rows with short group headings, so a row count no longer works.
 MAX_CARD_HEIGHT = MAX_ROWS * theme.ROW_HEIGHT
 
 
 def _ist_angehakt(index) -> bool:
     """Haekchenzustand eines Index — Qt liefert ihn je nach Fassung als
-    ``Qt.CheckState`` oder als ``int``."""
+    ``Qt.CheckState`` oder als ``int``.
+
+    English: Checked state of an index — depending on the Qt version, Qt
+    returns it as ``Qt.CheckState`` or as ``int``.
+    """
     zustand = index.data(Qt.ItemDataRole.CheckStateRole)
     if zustand is None:
         return False
@@ -83,6 +118,19 @@ class RowDelegate(QStyledItemDelegate):
     aufklappenden Karte greifen Stylesheet-Hintergruende nicht (siehe
     :class:`PopupCard`), es bliebe unsichtbar oder schwarz. Also wird es gemalt
     wie alles andere in der Zeile auch. Farben und Masse stehen in ``theme``.
+
+    English: Paints a row: checkbox and/or round marker, name, code on the
+    right.
+
+    What gets painted is decided by ``mit_punkt`` and ``mit_kaestchen``: the
+    cohort has the colored marker, the checkbox lists have the checkbox. The
+    marker is purely visual (see ``theme.dot_color``) and would have no
+    meaning in ``Obj`` and ``Datenquelle`` anyway.
+
+    The checkbox deliberately does **not** come from ``QListWidget::indicator``:
+    in the popup card, stylesheet backgrounds have no effect (see
+    :class:`PopupCard`), it would remain invisible or black. So it is painted
+    like everything else in the row. Colors and sizes live in ``theme``.
     """
 
     def __init__(self, parent: QWidget | None = None, *,
@@ -106,9 +154,12 @@ class RowDelegate(QStyledItemDelegate):
         ausgewaehlt = bool(option.state & QStyle.StateFlag.State_Selected)
         # Kein Schwebe-Zustand auf deaktivierten Zeilen: sie sehen sonst
         # anklickbar aus, obwohl sie es nicht sind.
+        # EN: No hover state on disabled rows: otherwise they look clickable
+        # even though they are not.
         schwebt = aktiv and bool(option.state & QStyle.StateFlag.State_MouseOver)
 
         # Hintergrund der Zeile als abgerundete Karte.
+        # EN: Row background as a rounded card.
         feld = rect.adjusted(2, 1, -2, -1)
         if ausgewaehlt and aktiv:
             painter.setBrush(theme.qcolor(theme.ACCENT_BG))
@@ -137,6 +188,7 @@ class RowDelegate(QStyledItemDelegate):
         code_breite = metrik.horizontalAdvance(code) + 16 if code else 0
 
         # Kuerzel (Kohorte) bzw. Hinweis (deaktivierte Quelle) rechts, gedaempft.
+        # EN: Code (cohort) or hint (disabled source) on the right, muted.
         if code:
             painter.setPen(theme.qcolor(theme.TEXT_MUTED))
             painter.drawText(
@@ -146,6 +198,7 @@ class RowDelegate(QStyledItemDelegate):
             )
 
         # Klarname dazwischen, bei Bedarf gekuerzt.
+        # EN: Display name in between, elided if needed.
         breite = feld.right() - code_breite - links - 8
         painter.setPen(theme.qcolor(theme.TEXT if aktiv else theme.TEXT_MUTED))
         painter.drawText(
@@ -156,7 +209,10 @@ class RowDelegate(QStyledItemDelegate):
         painter.restore()
 
     def _male_ueberschrift(self, painter: QPainter, option, index) -> None:
-        """Gruppenueberschrift: fett, gedaempft, ohne Kaestchen und Hintergrund."""
+        """Gruppenueberschrift: fett, gedaempft, ohne Kaestchen und Hintergrund.
+
+        English: Group heading: bold, muted, without checkbox or background.
+        """
         schrift = QFont(option.font)
         schrift.setBold(True)
         painter.setFont(schrift)
@@ -172,6 +228,11 @@ class RowDelegate(QStyledItemDelegate):
 
         Drei Zustaende: leer, angehakt (Akzentfarbe), deaktiviert (gedaempft).
         Dass ENA und GEO nicht anhakbar sind, muss man *sehen*.
+
+        English: Paint the checkbox; returns its right edge.
+
+        Three states: empty, checked (accent color), disabled (muted). That
+        ENA and GEO cannot be checked must be *visible*.
         """
         s = theme.CHECK_SIZE
         kasten = QRect(feld.left() + 12, feld.center().y() - s // 2, s, s)
@@ -211,6 +272,13 @@ class RowDelegate(QStyledItemDelegate):
         Klick im Kaestchen-Rechteck des Stils liegt. Zusammen mit
         ``itemClicked`` waere das ein doppeltes Umschalten — die Zeile bliebe
         scheinbar unveraendert, und zwar nur in einem schmalen Streifen links.
+
+        English: The toggling is done by the list, not the delegate.
+
+        ``QStyledItemDelegate`` toggles a checkbox by itself as soon as the
+        click lands inside the style's checkbox rectangle. Together with
+        ``itemClicked`` that would be a double toggle — the row would appear
+        unchanged, and only within a narrow strip on the left.
         """
         return False
 
@@ -225,6 +293,16 @@ class PopupCard(QFrame):
     ebenso ausdruecklich, wie :class:`RowDelegate` es fuer die Zeilen tut.
     Nachgestellt mit drei Varianten (ohne border-radius, nur Palette,
     Transluzenz abgeschaltet); keine davon half.
+
+    English: The popup card — paints its own background.
+
+    Necessary because this top-level window fills nothing under Windows 11
+    that Qt should be filling: neither the stylesheet backgrounds nor the
+    palette were applied, the card stayed black and the dark text on it
+    unreadable. Borders and text, by contrast, were drawn — so we paint the
+    surface just as explicitly as :class:`RowDelegate` does for the rows.
+    Reproduced with three variants (without border-radius, palette only,
+    translucency disabled); none of them helped.
     """
 
     def paintEvent(self, event) -> None:  # noqa: D102
@@ -233,6 +311,10 @@ class PopupCard(QFrame):
         # Wuerde nur das abgerundete Rechteck gefuellt, blieben an den Ecken
         # schwarze Zwickel stehen: was hier nicht gemalt wird, fuellt niemand,
         # und Transluzenz hat daran nichts geaendert.
+        # EN: FIRST fill the entire surface, THEN paint the rounded border on
+        # top. If only the rounded rectangle were filled, black wedges would
+        # remain in the corners: whatever is not painted here, nobody fills,
+        # and translucency changed nothing about that.
         painter.fillRect(self.rect(), theme.qcolor(theme.WINDOW_BG))
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -250,6 +332,14 @@ class _AufklappAuswahl(QWidget):
     Hoehenanpassung und Tastaturbedienung. Was eine Zeile *bedeutet* — Wert
     setzen oder Haekchen umschalten — steht in den Unterklassen
     (:meth:`_aktiviere`).
+
+    English: Shared mechanics of :class:`SearchableSelect` and
+    :class:`MultiSelect`.
+
+    Contains the button, card, optional search field, list, empty message,
+    height adjustment and keyboard handling. What a row *means* — setting a
+    value or toggling a checkbox — lives in the subclasses
+    (:meth:`_aktiviere`).
     """
 
     def __init__(
@@ -266,6 +356,7 @@ class _AufklappAuswahl(QWidget):
         super().__init__(parent)
         self._max_hoehe = max_hoehe
         # Wird beim Aufklappen gesetzt (siehe _platz_nach_unten).
+        # EN: Set when expanding (see _platz_nach_unten).
         self._platz = max_hoehe
 
         layout = QVBoxLayout(self)
@@ -277,6 +368,7 @@ class _AufklappAuswahl(QWidget):
         layout.addWidget(self._button)
 
         # Qt.Popup: schliesst sich beim Klick daneben und bei Escape von selbst.
+        # EN: Qt.Popup: closes itself on a click elsewhere and on Escape.
         self._popup = PopupCard(self, Qt.WindowType.Popup)
         self._popup.setObjectName(theme.OBJ_POPUP)
         popup_layout = QVBoxLayout(self._popup)
@@ -286,6 +378,9 @@ class _AufklappAuswahl(QWidget):
         # Suchfeld nur, wo es sich lohnt: ueber drei Datenquellen waere es
         # Ballast, ueber elf Attributen mit Namen wie
         # 'site_of_resection_or_biopsy' ist es der schnellste Weg.
+        # EN: Search field only where it pays off: over three data sources it
+        # would be dead weight, over eleven attributes with names like
+        # 'site_of_resection_or_biopsy' it is the fastest way.
         self._search: QLineEdit | None = None
         if mit_suche:
             self._search = QLineEdit()
@@ -301,7 +396,7 @@ class _AufklappAuswahl(QWidget):
         self._list.setItemDelegate(
             RowDelegate(self._list, mit_punkt=mit_punkt, mit_kaestchen=mit_kaestchen)
         )
-        self._list.setMouseTracking(True)          # fuer den Schwebe-Zustand
+        self._list.setMouseTracking(True)          # fuer den Schwebe-Zustand / EN: for the hover state
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._list.installEventFilter(self)
         self._list.itemClicked.connect(self._geklickt)
@@ -309,6 +404,8 @@ class _AufklappAuswahl(QWidget):
 
         # Eigener Hinweis statt einer leeren Liste: ein Kasten ohne Inhalt sieht
         # kaputt aus, nicht wie "nichts gefunden".
+        # EN: A dedicated message instead of an empty list: a box with no
+        # content looks broken, not like "nothing found".
         self._empty = QLabel(leer_text)
         self._empty.setObjectName(theme.OBJ_ROW_CODE)
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -318,7 +415,10 @@ class _AufklappAuswahl(QWidget):
     # -- Aufbau ------------------------------------------------------------
     @staticmethod
     def _zeile(entry: dict[str, Any]) -> QListWidgetItem:
-        """Eine gewoehnliche Zeile aus ``{"value", "label", "code", ...}``."""
+        """Eine gewoehnliche Zeile aus ``{"value", "label", "code", ...}``.
+
+        English: An ordinary row built from ``{"value", "label", "code", ...}``.
+        """
         value = entry.get("value") or ""
         item = QListWidgetItem()
         item.setData(KIND_ROLE, KIND_ROW)
@@ -331,12 +431,19 @@ class _AufklappAuswahl(QWidget):
     # -- Auswahl -----------------------------------------------------------
     def _geklickt(self, item: QListWidgetItem) -> None:
         """Klick auf eine Zeile. Ueberschriften und deaktivierte Eintraege
-        ignorieren — Qt meldet den Klick auch fuer sie."""
+        ignorieren — Qt meldet den Klick auch fuer sie.
+
+        English: Click on a row. Ignore headings and disabled entries — Qt
+        reports the click for them too.
+        """
         if item.flags() & Qt.ItemFlag.ItemIsEnabled:
             self._aktiviere(item)
 
     def _aktiviere(self, item: QListWidgetItem) -> None:
-        """Was ein Klick oder Enter auf dieser Zeile bedeutet."""
+        """Was ein Klick oder Enter auf dieser Zeile bedeutet.
+
+        English: What a click or Enter on this row means.
+        """
         raise NotImplementedError
 
     # -- Aufklappen --------------------------------------------------------
@@ -345,7 +452,7 @@ class _AufklappAuswahl(QWidget):
             self._popup.hide()
             return
         if self._search is not None:
-            self._search.clear()      # loest _filter aus: alles wieder sichtbar
+            self._search.clear()      # loest _filter aus: alles wieder sichtbar / EN: triggers _filter: everything visible again
         else:
             self._filter("")
         self._popup.setFixedWidth(max(self._button.width(), 320))
@@ -363,7 +470,11 @@ class _AufklappAuswahl(QWidget):
 
     def _grenze(self) -> int:
         """Nie hoeher als erlaubt und nie ueber den Bildschirmrand hinaus; drei
-        Zeilen bleiben aber immer stehen, sonst waere die Karte unbrauchbar."""
+        Zeilen bleiben aber immer stehen, sonst waere die Karte unbrauchbar.
+
+        English: Never taller than allowed and never beyond the screen edge;
+        but three rows always remain, otherwise the card would be unusable.
+        """
         return max(min(self._max_hoehe, self._platz), 3 * theme.ROW_HEIGHT)
 
     def _platz_nach_unten(self) -> int:
@@ -373,6 +484,15 @@ class _AufklappAuswahl(QWidget):
         Bildschirm laufen — die Attributkarte ist mit elf Zeilen und drei
         Ueberschriften hoch genug dafuer. Abgezogen wird, was ausser der Liste
         noch in der Karte steckt (Raender, Suchfeld) und ein Rand nach unten.
+
+        English: How tall the list is still allowed to become below the
+        button.
+
+        The card is its own window and would otherwise run off the bottom of
+        the screen — the attribute card, with eleven rows and three headings,
+        is tall enough for that to happen. What is subtracted is whatever else
+        is in the card besides the list (margins, search field) and a bottom
+        margin.
         """
         bildschirm = self.screen()
         if bildschirm is None:
@@ -391,7 +511,10 @@ class _AufklappAuswahl(QWidget):
             self._passe_hoehe_an()
 
     def _ueberschriften_nachziehen(self) -> None:
-        """Hook: in :class:`MultiSelect` verschwinden leere Gruppen."""
+        """Hook: in :class:`MultiSelect` verschwinden leere Gruppen.
+
+        English: Hook: in :class:`MultiSelect` empty groups disappear.
+        """
 
     def _passe_hoehe_an(self) -> None:
         """Die Karte auf die Trefferzahl schrumpfen (hoechstens ``max_hoehe``).
@@ -400,12 +523,22 @@ class _AufklappAuswahl(QWidget):
         zeigt eine grosse leere Flaeche. Gezaehlt wird in Pixeln und **inklusive
         der Gruppenueberschriften**: nach Zeilenzahl waere die Karte in ``Obj``
         zu klein und wuerde scrollen, obwohl alles hineinpasst.
+
+        English: Shrink the card to the hit count (at most ``max_hoehe``).
+
+        Without this, the menu keeps the height for nine rows even with two
+        hits, showing a large empty area. Counted in pixels and **including
+        the group headings**: by row count alone the card in ``Obj`` would be
+        too small and would scroll even though everything fits.
         """
         hoehe = 0
         treffer = 0
         # Die groesste Hoehe, bei der die Karte mit GANZEN Zeilen endet — sonst
         # steht unten eine halbe Zeile, und genau daran hat man in Aufgabe 17
         # gesehen, dass eine Liste abgeschnitten ist.
+        # EN: The greatest height at which the card ends with WHOLE rows —
+        # otherwise a half row would sit at the bottom, and that is exactly
+        # how, in task 17, a list was seen to be cut off.
         ganze_zeilen = 0
         grenze = self._grenze()
         for row in range(self._list.count()):
@@ -423,6 +556,9 @@ class _AufklappAuswahl(QWidget):
             self._list.setFixedHeight(min(hoehe, ganze_zeilen or grenze) + 8)
             # Leiste nur zeigen, wenn wirklich mehr da ist als hineinpasst —
             # sonst blitzt sie bei knapp passendem Inhalt neben den Kuerzeln auf.
+            # EN: Only show the scrollbar when there really is more than
+            # fits — otherwise it flashes next to the codes when the content
+            # just barely fits.
             self._list.setVerticalScrollBarPolicy(
                 Qt.ScrollBarPolicy.ScrollBarAsNeeded if hoehe > grenze
                 else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
@@ -432,9 +568,15 @@ class _AufklappAuswahl(QWidget):
     # -- Tastatur ----------------------------------------------------------
     def eventFilter(self, obj: Any, event: QEvent) -> bool:  # noqa: D102
         """Pfeiltasten und Enter aus dem Suchfeld an die Liste weiterreichen —
-        sonst muesste man zum Auswaehlen zur Maus greifen."""
+        sonst muesste man zum Auswaehlen zur Maus greifen.
+
+        English: Forward arrow keys and Enter from the search field to the
+        list — otherwise one would have to reach for the mouse to select.
+        """
         # ``getattr``, weil dieser Filter schon waehrend des Aufbaus Ereignisse
         # bekommt — da gibt es die Liste noch nicht.
+        # EN: ``getattr`` because this filter already receives events during
+        # construction — the list does not exist yet at that point.
         if (event.type() == QEvent.Type.KeyPress
                 and obj in (self._search, getattr(self, "_list", None))):
             if self._taste(event.key()):
@@ -442,7 +584,10 @@ class _AufklappAuswahl(QWidget):
         return super().eventFilter(obj, event)
 
     def _taste(self, taste: int) -> bool:
-        """``True``, wenn die Taste hier verbraucht wurde."""
+        """``True``, wenn die Taste hier verbraucht wurde.
+
+        English: ``True`` if the key was consumed here.
+        """
         if taste in (Qt.Key.Key_Down, Qt.Key.Key_Up):
             self._springe(1 if taste == Qt.Key.Key_Down else -1)
             return True
@@ -458,6 +603,12 @@ class _AufklappAuswahl(QWidget):
 
         Uebersprungen werden versteckte Zeilen und Gruppenueberschriften; sonst
         bliebe der Cursor auf einer Zeile stehen, die nichts tut.
+
+        English: Move to the next selectable, visible row in ``richtung``
+        (direction).
+
+        Hidden rows and group headings are skipped; otherwise the cursor
+        would stay on a row that does nothing.
         """
         reihe = self._list.currentRow()
         for _ in range(self._list.count()):
@@ -477,6 +628,12 @@ class SearchableSelect(_AufklappAuswahl):
     ``entries`` ist eine Liste von ``{"value", "label", "code"}``. Gesendet wird
     immer ``value``; gesucht wird ueber ``code`` und ``value`` — der Klarname
     ist Beschriftung, kein Suchbegriff.
+
+    English: Button with an expandable, searchable list — a **single** value.
+
+    ``entries`` is a list of ``{"value", "label", "code"}``. What is always
+    sent is ``value``; the search covers ``code`` and ``value`` — the display
+    name is a label, not a search term.
     """
 
     selection_changed = Signal(str)
@@ -487,6 +644,9 @@ class SearchableSelect(_AufklappAuswahl):
             # Der Platzhalter nennt das Suchmuster ausdruecklich: seit die Suche
             # nur das Kuerzel trifft, wuerde "lung" sonst kommentarlos leer
             # ausgehen.
+            # EN: The placeholder names the search pattern explicitly: since
+            # the search only matches the code, "lung" would otherwise come
+            # back empty without explanation.
             platzhalter="Kuerzel suchen, z. B. BRCA …",
             leer_text="Kein Kuerzel passt",
             mit_punkt=True,
@@ -497,6 +657,9 @@ class SearchableSelect(_AufklappAuswahl):
         # Ohne Vorauswahl starten: die Oberflaeche waehlt nicht fuer den
         # Forscher. Eine vorbelegte Kohorte wird sonst leicht uebersehen und
         # landet im Auftrag, ohne dass jemand sie gewollt hat.
+        # EN: Start without a preselection: the UI does not choose for the
+        # researcher. Otherwise a preset cohort is easily overlooked and ends
+        # up in the request without anyone having wanted it.
         self._beschrifte()
 
     def _fill(self, entries: list[dict[str, str]]) -> None:
@@ -507,6 +670,10 @@ class SearchableSelect(_AufklappAuswahl):
             # der offiziellen Studienabkuerzung (BRCA, LUAD, KIRC). Der Klarname
             # steht weiter in der Zeile, damit man sieht, was sich hinter dem
             # Kuerzel verbirgt — er ist Beschriftung, kein Suchbegriff.
+            # EN: Deliberately ONLY code and value, not the display name: the
+            # search uses the official study abbreviation (BRCA, LUAD, KIRC).
+            # The display name still appears in the row so one can see what
+            # is behind the code — it is a label, not a search term.
             item.setData(SEARCH_ROLE,
                          f"{item.data(CODE_ROLE)} {item.data(VALUE_ROLE)}".lower())
             self._list.addItem(item)
@@ -515,7 +682,10 @@ class SearchableSelect(_AufklappAuswahl):
         return self._value
 
     def set_value(self, value: str) -> None:
-        """Einen Wert waehlen; ``""`` setzt die Auswahl zurueck."""
+        """Einen Wert waehlen; ``""`` setzt die Auswahl zurueck.
+
+        English: Choose a value; ``""`` resets the selection.
+        """
         if not value:
             self._value = ""
             self._list.setCurrentRow(-1)
@@ -533,7 +703,11 @@ class SearchableSelect(_AufklappAuswahl):
 
     def _beschrifte(self, text: str = "") -> None:
         """Die Schaltflaeche beschriften — ohne Auswahl gedaempft, wie bei der
-        Mehrfachauswahl."""
+        Mehrfachauswahl.
+
+        English: Label the button — muted without a selection, as with the
+        multi-select.
+        """
         self._button.setText(text or "Keine Auswahl")
         self._button.setStyleSheet(theme.select_button_style(not text))
 
@@ -559,6 +733,22 @@ class MultiSelect(_AufklappAuswahl):
 
     Geschlossen wird ueber Escape, Klick daneben oder erneuten Klick auf die
     Schaltflaeche.
+
+    English: Button with an expandable checkbox list — **multiple** values.
+
+    ``entries`` are rows ``{"value", "label", "code", "enabled", "tooltip",
+    "search"}`` and group headings ``{"kind": "header", "label"}``. The
+    difference from :class:`SearchableSelect`:
+
+    - A click toggles the checkbox, **the card stays open** — otherwise it
+      would have to be reopened for every attribute.
+    - The button's label summarizes multiple values.
+    - ``checked_values()`` returns **panel order**, not click order: the
+      client passes the order through unchanged to the mediator
+      (``test_build_request_takes_the_checked_attributes_in_order``), so a
+      click order would silently end up in the request.
+
+    Closed via Escape, a click elsewhere, or clicking the button again.
     """
 
     selection_changed = Signal(list)
@@ -580,6 +770,8 @@ class MultiSelect(_AufklappAuswahl):
             leer_text=leer_text,
             # In ``Obj`` und ``Datenquelle`` haette der farbige Anker keine
             # Bedeutung; die Kohortenliste behaelt ihn, sie hatte ihn schon.
+            # EN: In ``Obj`` and ``Datenquelle`` the colored marker would have
+            # no meaning; the cohort list keeps it, it already had it.
             mit_punkt=mit_punkt,
             mit_kaestchen=True,
             max_hoehe=max_hoehe,
@@ -599,6 +791,8 @@ class MultiSelect(_AufklappAuswahl):
                 item.setSizeHint(QSize(0, theme.GROUP_ROW_HEIGHT))
                 # Nicht anwaehlbar, kein Haekchen: eine Ueberschrift traegt
                 # keinen Wert und darf nie im Auftrag landen.
+                # EN: Not selectable, no checkbox: a heading carries no value
+                # and must never end up in the request.
                 item.setFlags(Qt.ItemFlag.NoItemFlags)
                 self._list.addItem(item)
                 continue
@@ -620,13 +814,19 @@ class MultiSelect(_AufklappAuswahl):
                 # Sichtbar, aber nicht anhakbar — ehrliche Luecke statt
                 # unsichtbarer Grenze. Der Grund steht als Hinweis rechts in der
                 # Zeile (``code``) und im Tooltip.
+                # EN: Visible but not checkable — an honest gap instead of an
+                # invisible limit. The reason is shown as a hint on the right
+                # of the row (``code``) and in the tooltip.
                 item.setFlags(Qt.ItemFlag.NoItemFlags)
                 item.setCheckState(Qt.CheckState.Unchecked)
             self._list.addItem(item)
 
     # -- Auswahl -----------------------------------------------------------
     def checked_values(self) -> list[str]:
-        """Die angehakten Werte in Panel-Reihenfolge."""
+        """Die angehakten Werte in Panel-Reihenfolge.
+
+        English: The checked values in panel order.
+        """
         werte = []
         for row in range(self._list.count()):
             item = self._list.item(row)
@@ -648,7 +848,10 @@ class MultiSelect(_AufklappAuswahl):
         self._beschrifte()
 
     def _aktiviere(self, item: QListWidgetItem) -> None:
-        """Haekchen umschalten — und die Karte **offen lassen**."""
+        """Haekchen umschalten — und die Karte **offen lassen**.
+
+        English: Toggle the checkbox — and **leave the card open**.
+        """
         if not (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
             return
         item.setCheckState(
@@ -663,6 +866,10 @@ class MultiSelect(_AufklappAuswahl):
         # Fokus im Suchfeld steht: ein Leerzeichen taugt dort ohnehin nicht als
         # Suchbegriff (Attributnamen tragen Unterstriche), und ohne das muesste
         # man zum Anhaken zur Maus greifen.
+        # EN: Space toggles the row under the cursor — even when the focus is
+        # in the search field: a space is useless there as a search term
+        # anyway (attribute names contain underscores), and without this one
+        # would have to reach for the mouse to check a box.
         if taste == Qt.Key.Key_Space:
             item = self._list.currentItem()
             if item is not None and not item.isHidden():
@@ -676,6 +883,11 @@ class MultiSelect(_AufklappAuswahl):
 
         Das Panel ist rund 360 Pixel breit: ab drei Werten stehen dort die
         ersten beiden plus ``+N``, der vollstaendige Satz im Tooltip.
+
+        English: The button shows the selection without wrapping.
+
+        The panel is around 360 pixels wide: from three values onward it
+        shows the first two plus ``+N``, with the full set in the tooltip.
         """
         kurz, namen = [], []
         for row in range(self._list.count()):
@@ -686,6 +898,9 @@ class MultiSelect(_AufklappAuswahl):
                 # Auf der Schaltflaeche steht das Kuerzel, wo es eines gibt:
                 # "BRCA · KIRC +1" passt ins Panel, drei Klarnamen nicht. Der
                 # volle Satz steht im Tooltip.
+                # EN: The button shows the code where one exists: "BRCA ·
+                # KIRC +1" fits the panel, three display names do not. The
+                # full set is in the tooltip.
                 kurz.append(item.data(CODE_ROLE) or name)
 
         if not namen:
@@ -704,7 +919,12 @@ class MultiSelect(_AufklappAuswahl):
     def _ueberschriften_nachziehen(self) -> None:
         """Eine Gruppenueberschrift verschwindet, wenn keines ihrer Attribute
         mehr passt — sonst steht 'Sample' allein ueber einer leeren Flaeche und
-        sieht nach einem Fehler aus."""
+        sieht nach einem Fehler aus.
+
+        English: A group heading disappears when none of its attributes
+        still match — otherwise 'Sample' would stand alone over an empty
+        area and look like a bug.
+        """
         kopf: QListWidgetItem | None = None
         treffer = False
         for row in range(self._list.count() + 1):

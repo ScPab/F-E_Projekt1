@@ -14,6 +14,24 @@ Nutzt ENA_API_BASE_URL aus der Umgebung, falls gesetzt, sonst den
 EBI-Standard https://www.ebi.ac.uk/ena/portal/api.
 
 Exit-Code 0 bei Erfolg, 1 bei Fehler (z. B. für CI/Cron nutzbar).
+
+English: Smoke test: checks whether the ENA wrapper can actually talk to
+the real EBI Portal API.
+
+Not a unit test (no mocking, real network request) — deliberately a simple,
+standalone script for the quick manual/CI check "does the connection to
+ENA currently work", analogous to
+wrappers/gdc/scripts/check_connection.py. Checks metadata search
+(ENAWrapper.search) and schema introspection (ENAWrapper.get_schema) in
+sequence, see wrappers/ena/client.py.
+
+Invocation:
+    python wrappers/ena/scripts/check_connection.py
+
+Uses ENA_API_BASE_URL from the environment if set, otherwise the EBI
+default https://www.ebi.ac.uk/ena/portal/api.
+
+Exit code 0 on success, 1 on error (e.g. usable for CI/cron).
 """
 
 from __future__ import annotations
@@ -24,6 +42,8 @@ from pathlib import Path
 
 # Läuft auch ohne vorherige `pip install -e ./wrappers` — wrappers/ wird
 # direkt auf den Pfad gelegt, damit `import ena` funktioniert.
+# EN: Also runs without a prior `pip install -e ./wrappers` — wrappers/ is
+# put directly on the path so `import ena` works.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ena import ENAWrapper  # noqa: E402
@@ -31,6 +51,8 @@ from requests import RequestException  # noqa: E402
 
 # Öffentlich zugängliche Beispiel-Studie (RNA-Seq), zum schnellen manuellen
 # Nachvollziehen live gegen die ENA-Weboberfläche geprüft.
+# EN: Publicly accessible example study (RNA-Seq), checked live against the
+# ENA web interface for quick manual verification.
 SAMPLE_STUDY_ACCESSION = "PRJEB1234"
 
 

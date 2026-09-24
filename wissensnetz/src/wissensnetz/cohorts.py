@@ -8,11 +8,25 @@ importieren diese Konstante, damit es genau **eine** Quelle gibt.
 Dieses Modul ist bewusst abhängigkeitsfrei (nur stdlib), damit es Teil des
 installierbaren ``wissensnetz``-Pakets bleiben kann (Paket-Deps: rdflib/requests).
 Farb-/Colormap-Logik gehört in die Prototyp-Schicht, nicht hierher.
+
+English: The 32 TCGA cohorts of the Oviedo original — **single source of
+truth**.
+
+The order is the canonical Oviedo order and determines both the load order
+(`scripts/load_gdc.py --pancancer`) and the color/legend ordering in MP-lite
+(`prototype/mp_lite/app.py`). Both sides import this constant, so there is
+exactly **one** source.
+
+This module is deliberately dependency-free (stdlib only), so it can remain
+part of the installable ``wissensnetz`` package (package deps:
+rdflib/requests). Color/colormap logic belongs in the prototype layer, not
+here.
 """
 
 from __future__ import annotations
 
 # Kanonische Oviedo-Reihenfolge (GDC project_id = "TCGA-<code>").
+# EN: Canonical Oviedo order (GDC project_id = "TCGA-<code>").
 OVIEDO_COHORTS: tuple[str, ...] = (
     "ACC", "CHOL", "BLCA", "BRCA", "CESC", "COAD", "UCEC", "ESCA", "GBM", "HNSC",
     "KICH", "KIRC", "KIRP", "DLBC", "LIHC", "LGG", "LUAD", "LUSC", "SKCM", "MESO",
@@ -21,15 +35,21 @@ OVIEDO_COHORTS: tuple[str, ...] = (
 )
 
 # Vollständige GDC-project_id-Liste in derselben Reihenfolge.
+# EN: Full GDC project_id list in the same order.
 COHORT_PROJECT_IDS: tuple[str, ...] = tuple(f"TCGA-{code}" for code in OVIEDO_COHORTS)
 
 # Schneller Lookup: Krebs-Code -> Position in der Oviedo-Reihenfolge (für Farbe).
+# EN: Fast lookup: cancer code -> position in the Oviedo order (for color).
 COHORT_INDEX: dict[str, int] = {code: i for i, code in enumerate(OVIEDO_COHORTS)}
 
 
 def cancer_code(project_id: str | None) -> str | None:
     """``"TCGA-PRAD" -> "PRAD"`` (Präfix ``"TCGA-"`` abschneiden); sonst
-    ``project_id`` unverändert. Ohne Wert ``None``."""
+    ``project_id`` unverändert. Ohne Wert ``None``.
+
+    English: ``"TCGA-PRAD" -> "PRAD"`` (strip the ``"TCGA-"`` prefix);
+    otherwise ``project_id`` unchanged. ``None`` without a value.
+    """
     if not project_id:
         return None
     pid = str(project_id)

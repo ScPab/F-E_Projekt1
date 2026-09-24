@@ -21,6 +21,31 @@ clientseitig als CustomJS, weil dort ein Browser dazwischensteht.
 
 **Nur lesen.** Weder ``mediator/`` noch ``wrappers/`` noch ``mp_lite/`` werden
 angefasst; die beiden Hilfsmodule werden gelesen, nicht veraendert.
+
+English: The morphing projection: encodings and positions — **without any Qt
+import**.
+
+The same pattern as ``store_reader.py`` next to ``netz_view.py``: the
+computation and the file reading are kept separate from the view and are
+therefore testable without a screen.
+
+The mathematics is not reinvented. ``encodings.py`` and ``h5ad_source.py``
+from ``wissensnetz/prototype/mp_lite/`` are already Qt-free and are
+**reused** here. They are loaded via their file path, not via ``import``:
+``wissensnetz/prototype/`` is not a package, and ``import encodings`` would
+hit Python's stdlib package ``encodings`` (codecs). ``mp_lite/app.py`` does
+the same for the same reason and explains it there in detail.
+
+The morphing itself is one line of numpy::
+
+    pos = Σ aᵢ · E[i]     with  a = softmax(SENS · slider)
+
+Computed here in the GUI thread — with 5000 points and 15 encodings that is a
+fraction of a millisecond. In MP-Lite the same weighting runs client-side as
+CustomJS, because there a browser sits in between.
+
+**Read-only.** Neither ``mediator/`` nor ``wrappers/`` nor ``mp_lite/`` are
+touched; the two helper modules are read, not modified.
 """
 
 from __future__ import annotations
@@ -35,17 +60,22 @@ import numpy as np
 from wissensnetz.cohorts import cancer_code
 
 # --- Konstanten des Originals (mp_lite/app.py) -------------------------------
-SENS = 10.0          # Sensibilitaets-Koeffizient der softmax
-CIRCLE_SCALE = 5.0   # Radius der Kreis-Encodings
-BASE_WEIGHT = 0.5    # Startgewicht der Basis-View (wie z[0]=0.5 im Original)
+# EN: Constants from the original (mp_lite/app.py)
+SENS = 10.0          # Sensibilitaets-Koeffizient der softmax / EN: sensitivity coefficient of the softmax
+CIRCLE_SCALE = 5.0   # Radius der Kreis-Encodings / EN: radius of the circle encodings
+BASE_WEIGHT = 0.5    # Startgewicht der Basis-View (wie z[0]=0.5 im Original) / EN: initial weight of the base view (like z[0]=0.5 in the original)
 
 # Die beiden 2D-Layouts, die der Mediator schreibt. Keine anderen Schluessel
 # erfinden: so schreibt er sie, so prueft ``scripts/check_h5ad.py`` sie, so liest
 # MP-Lite sie.
+# EN: The two 2D layouts that the mediator writes. Do not invent other keys:
+# this is how it writes them, how ``scripts/check_h5ad.py`` checks them, and
+# how MP-Lite reads them.
 KEY_GENES = "X_tsne_genes"
 KEY_MIRNA = "X_tsne_mirna"
 
 # Gruende, warum ein Regler nicht nutzbar ist — woertlich diese drei.
+# EN: Reasons why a slider is not usable — literally these three.
 GRUND_SPALTE = "Spalte fehlt in obs"
 GRUND_EINWERTIG = "nur ein Wert vorhanden"
 GRUND_MARKER = "Marker nicht in var"
@@ -54,6 +84,10 @@ GRUND_MARKER = "Marker nicht in var"
 # faellt hier **nicht** wie MP-Lite auf synthetische Punkte zurueck: er ist das
 # Werkzeug, mit dem geforscht wird, und eine erfundene Punktwolke waere dort eine
 # Luege.
+# EN: What the canvas says when there is no layout at all (deliverable 7). The
+# explorer does **not** fall back to synthetic points here as MP-Lite does: it
+# is the tool used for research, and a fabricated point cloud would be a lie
+# there.
 TEXT_OHNE_LAYOUT = (
     f"Die Datei enthaelt kein 2D-Layout (obsm '{KEY_GENES}').\n"
     "Erzeuge sie mit compute_tsne=true, etwa ueber\n"
@@ -65,6 +99,11 @@ TEXT_OHNE_LAYOUT = (
 # sinnvoll zu rechnen. Die Datei hat dann kein ``obsm``, **obwohl**
 # ``compute_tsne=true`` gesetzt war — ohne diesen Hinweis sucht man den Fehler
 # an der falschen Stelle.
+# EN: Below this sample count, ``expression.compute_tsne`` in the mediator
+# returns ``None``: tSNE needs perplexity < n_samples, and below that it makes
+# no sense to compute. The file then has no ``obsm``, **even though**
+# ``compute_tsne=true`` was set — without this hint one looks for the bug in
+# the wrong place.
 TSNE_MIN_PROBEN = 4
 
 
@@ -73,6 +112,11 @@ def text_ohne_layout(anzahl: int = 0) -> str:
 
     Bei sehr wenigen Proben steht der tatsaechliche Grund davor: dann liegt es
     nicht am fehlenden Schalter, sondern an der Probenzahl.
+
+    English: The message for a file without a 2D layout.
+
+    With very few samples the actual reason is prepended: then the cause is
+    not the missing flag but the sample count.
     """
     if 0 < anzahl < TSNE_MIN_PROBEN:
         probe = "Probe" if anzahl == 1 else "Proben"
@@ -84,13 +128,14 @@ def text_ohne_layout(anzahl: int = 0) -> str:
 
 
 # --- mp_lite-Hilfsmodule per Dateipfad laden (siehe Modul-Docstring) ---------
+# EN: Load mp_lite helper modules by file path (see module docstring)
 _MP_LITE = (Path(__file__).resolve().parent.parent
             / "wissensnetz" / "prototype" / "mp_lite")
 
 
 def _lade_modul(name: str, datei: str):
     spec = importlib.util.spec_from_file_location(name, _MP_LITE / datei)
-    if spec is None or spec.loader is None:      # pragma: no cover - Datei fehlt
+    if spec is None or spec.loader is None:      # pragma: no cover - Datei fehlt / EN: file missing
         raise ImportError(f"{datei} nicht gefunden unter {_MP_LITE}")
     modul = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(modul)
@@ -112,8 +157,12 @@ layout = _h5.layout
 
 
 # --- Rechnung ----------------------------------------------------------------
+# EN: Computation
 def softmax(z: np.ndarray) -> np.ndarray:
-    """Numerisch stabile softmax (Maximum abgezogen), Summe 1."""
+    """Numerisch stabile softmax (Maximum abgezogen), Summe 1.
+
+    English: Numerically stable softmax (maximum subtracted), sums to 1.
+    """
     e = np.exp(np.asarray(z, dtype=float) - np.max(z))
     return e / e.sum()
 
@@ -129,6 +178,18 @@ def skaliere_layout(arr: np.ndarray, ziel: float = CIRCLE_SCALE) -> np.ndarray:
 
     Ohne diese Skalierung springt das Bild beim Morphen zwischen tSNE und
     Kreis-Encoding, weil die Wertebereiche auseinanderliegen.
+
+    English: Center a tSNE layout and scale it to
+    ``max |coordinate| ≈ target``.
+
+    Copied from ``mp_lite/app.py::_scale_layout`` — constants and behavior
+    identical. Copied because ``app.py`` imports Bokeh at module level and is
+    therefore not importable; the clean location would be
+    ``wissensnetz/src/wissensnetz/``, but moving it touches ``app.py`` and is
+    a separate decision.
+
+    Without this scaling the image jumps when morphing between tSNE and
+    circle encoding, because the value ranges differ.
     """
     arr = np.asarray(arr, dtype=float)
     if arr.size == 0:
@@ -141,7 +202,11 @@ def skaliere_layout(arr: np.ndarray, ziel: float = CIRCLE_SCALE) -> np.ndarray:
 @dataclass
 class Eintrag:
     """Ein Regler: Name, Startwert und das Encoding — oder der Grund, warum es
-    keines gibt."""
+    keines gibt.
+
+    English: A slider: name, initial value and the encoding — or the reason
+    why there is none.
+    """
 
     name: str
     start: float = 0.0
@@ -155,10 +220,13 @@ class Eintrag:
 
 @dataclass
 class Morphmodell:
-    """Alles, was die Ansicht zum Zeichnen braucht — und nichts von Qt."""
+    """Alles, was die Ansicht zum Zeichnen braucht — und nichts von Qt.
+
+    English: Everything the view needs to draw — and nothing from Qt.
+    """
 
     eintraege: list[Eintrag] = field(default_factory=list)
-    punkte: list[dict] = field(default_factory=list)      # eine Zeile je Probe
+    punkte: list[dict] = field(default_factory=list)      # eine Zeile je Probe / EN: one row per sample
     kohorten: list[str | None] = field(default_factory=list)
     dateiname: str = ""
     hat_basis: bool = False
@@ -173,7 +241,11 @@ class Morphmodell:
 
     def stapel(self) -> np.ndarray:
         """Die nutzbaren Encodings als ``(N, k, 2)`` — einmal gestapelt, damit
-        jede Reglerbewegung nur noch eine Summe ist."""
+        jede Reglerbewegung nur noch eine Summe ist.
+
+        English: The usable encodings as ``(N, k, 2)`` — stacked once so that
+        every slider movement is just a sum.
+        """
         nutzbar = [e.encoding for e in self.eintraege if e.nutzbar]
         if not nutzbar:
             return np.zeros((self.anzahl, 0, 2))
@@ -189,6 +261,15 @@ def positionen(modell: Morphmodell, gewichte: list[float] | np.ndarray) -> np.nd
 
     Gerechnet wird ueber ein gestapeltes ``(N, k, 2)``-Array und ``einsum``,
     nicht ueber eine Python-Schleife je Punkt.
+
+    English: The point positions for a slider setting: ``Σ aᵢ · E[i]``.
+
+    ``gewichte`` is in the order of **all** entries; entries that are not
+    usable do not count, exactly as in MP-Lite, where only the active sliders
+    drive the engine.
+
+    Computed via a stacked ``(N, k, 2)`` array and ``einsum``, not via a
+    Python loop per point.
     """
     aktive = [w for e, w in zip(modell.eintraege, gewichte) if e.nutzbar]
     stapel = modell.stapel()
@@ -199,11 +280,18 @@ def positionen(modell: Morphmodell, gewichte: list[float] | np.ndarray) -> np.nd
 
 
 # --- Modell aus einer .h5ad bauen -------------------------------------------
+# EN: Build the model from a .h5ad
 def _spalte(punkte: list[dict], name: str) -> list[Any] | None:
     """Eine ``obs``-Spalte als Liste — ``None``, wenn sie in der Datei fehlt.
 
     ``points_from_obs`` fuellt fehlende Spalten mit ``None`` auf; eine Spalte
     gilt deshalb als fehlend, wenn sie ueberall leer ist.
+
+    English: An ``obs`` column as a list — ``None`` if it is missing from the
+    file.
+
+    ``points_from_obs`` fills missing columns with ``None``; a column is
+    therefore considered missing if it is empty everywhere.
     """
     if not punkte or name not in punkte[0]:
         return None
@@ -213,7 +301,10 @@ def _spalte(punkte: list[dict], name: str) -> list[Any] | None:
 
 def _kreis(punkte: list[dict], name: str, titel: str, *,
            werte: list[Any] | None = None) -> Eintrag:
-    """Kreis-Encoding einer kategorialen Spalte."""
+    """Kreis-Encoding einer kategorialen Spalte.
+
+    English: Circle encoding of a categorical column.
+    """
     vals = werte if werte is not None else _spalte(punkte, name)
     if vals is None:
         return Eintrag(titel, grund=GRUND_SPALTE)
@@ -224,7 +315,11 @@ def _kreis(punkte: list[dict], name: str, titel: str, *,
 
 def _ordinal(werte: list[Any]) -> list[float | None]:
     """Kategorie -> ganzzahliger Ordinal-Code (0..k-1, sortiert), fehlend ->
-    ``None``. Entspricht Oviedos ``cancer#``/``tumor_stage#``."""
+    ``None``. Entspricht Oviedos ``cancer#``/``tumor_stage#``.
+
+    English: Category -> integer ordinal code (0..k-1, sorted), missing ->
+    ``None``. Corresponds to Oviedo's ``cancer#``/``tumor_stage#``.
+    """
     def fehlt(v: object) -> bool:
         return v is None or str(v).strip() in ("", "--")
 
@@ -235,7 +330,10 @@ def _ordinal(werte: list[Any]) -> list[float | None]:
 
 def _linear_ordinal(punkte: list[dict], name: str, titel: str, richtung: str, *,
                     werte: list[Any] | None = None) -> Eintrag:
-    """Lineares Encoding einer Kategorie ueber ihren Ordinal-Code."""
+    """Lineares Encoding einer Kategorie ueber ihren Ordinal-Code.
+
+    English: Linear encoding of a category via its ordinal code.
+    """
     vals = werte if werte is not None else _spalte(punkte, name)
     if vals is None:
         return Eintrag(titel, grund=GRUND_SPALTE)
@@ -246,7 +344,10 @@ def _linear_ordinal(punkte: list[dict], name: str, titel: str, richtung: str, *,
 
 
 def _marker(adata: Any, symbol: str, titel: str, richtung: str) -> Eintrag:
-    """Lineares Encoding einer Expressionsspalte aus ``X``."""
+    """Lineares Encoding einer Expressionsspalte aus ``X``.
+
+    English: Linear encoding of an expression column from ``X``.
+    """
     spalte = marker_column(adata, symbol)
     if spalte is None:
         return Eintrag(titel, grund=GRUND_MARKER)
@@ -258,7 +359,11 @@ def _marker(adata: Any, symbol: str, titel: str, richtung: str) -> Eintrag:
 
 def _basis(adata: Any, key: str, titel: str, anzahl: int, start: float) -> Eintrag:
     """Eine Basis-View aus ``obsm`` — skaliert, damit sie mit den Kreisen
-    vergleichbar ist."""
+    vergleichbar ist.
+
+    English: A base view from ``obsm`` — scaled so that it is comparable to
+    the circles.
+    """
     arr = layout(adata, key)
     if arr is None or arr.shape[0] != anzahl:
         return Eintrag(titel, start=start, grund=f"obsm '{key}' fehlt")
@@ -276,11 +381,24 @@ def baue_encodings(adata: Any, dateiname: str = "") -> Morphmodell:
     Eine bewusste Abweichung vom Original: Oviedos ``gender`` heisst hier
     ``sex_at_birth`` — GDC hat das Feld umbenannt, und fachlich ist es nicht
     dasselbe.
+
+    English: Build the morph model from a loaded ``AnnData``.
+
+    The fifteen entries are in Oviedo's fixed order and naming, **even when
+    individual ones are not usable** — a disabled slider stays visible and in
+    its place, the same rule as for ENA and GEO in the selection panel:
+    honest gap instead of an invisible boundary.
+
+    A deliberate deviation from the original: Oviedo's ``gender`` is called
+    ``sex_at_birth`` here — GDC renamed the field, and professionally it is
+    not the same thing.
     """
     punkte = points_from_obs(adata) if adata is not None else []
     anzahl = len(punkte)
 
     # Kohorten-Code je Probe: aus project_id, ersatzweise aus der Spalte cancer.
+    # EN: Cohort code per sample: from project_id, falling back to the cancer
+    # column.
     kohorten = [cancer_code(p.get("project_id")) or p.get("cancer") for p in punkte]
     kohorten_werte = [k for k in kohorten]
 
@@ -305,6 +423,9 @@ def baue_encodings(adata: Any, dateiname: str = "") -> Morphmodell:
     # Ohne Basis-View keine Karte (Deliverable 7). Die uebrigen Encodings
     # bleiben stehen, damit man sieht, was da waere — gezeichnet wird trotzdem
     # nichts.
+    # EN: Without a base view there is no map (deliverable 7). The remaining
+    # encodings stay in place so one can see what would be there — nothing is
+    # drawn nonetheless.
     hat_basis = any(e.nutzbar for e in eintraege[:2])
     return Morphmodell(eintraege=eintraege, punkte=punkte, kohorten=kohorten,
                        dateiname=dateiname, hat_basis=hat_basis)
@@ -315,6 +436,12 @@ def lade_modell(pfad: str | Path | None = None) -> tuple[Morphmodell | None, str
 
     Laeuft im Worker-Thread (siehe ``worker.H5adWorker``): ``pancancer.h5ad``
     ist 44 MB, im GUI-Thread friert das Fenster mehrere Sekunden ein.
+
+    English: Load a ``.h5ad`` and build the model. Returns
+    ``(model, error)``.
+
+    Runs in the worker thread (see ``worker.H5adWorker``): ``pancancer.h5ad``
+    is 44 MB; in the GUI thread the window would freeze for several seconds.
     """
     ziel = resolve_h5ad_path(pfad)
     adata = load_h5ad(ziel)
@@ -323,5 +450,5 @@ def lade_modell(pfad: str | Path | None = None) -> tuple[Morphmodell | None, str
                       "Fehlt anndata, oder ist die Datei keine gueltige .h5ad?")
     try:
         return baue_encodings(adata, dateiname=ziel.name), ""
-    except Exception as fehler:      # noqa: BLE001 - jede Stoerung gleich melden
+    except Exception as fehler:      # noqa: BLE001 - jede Stoerung gleich melden / EN: report every disruption alike
         return None, f"{ziel.name} liess sich nicht auswerten: {fehler}"

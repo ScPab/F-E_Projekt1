@@ -14,6 +14,25 @@ versionsabhängig; Fuseki unterstützt SPARQL-star nativ (ADR-0002; CLAUDE.md
 Named Graph pro Nutzer (``http://databridge.hka/graph/user/<slug>``) hält die
 Kern-TBox/ABox im Default-Graph sauber getrennt; Erkenntnisse bleiben so
 isoliert, versionierbar und widerrufbar.
+
+English: Feedback channel (task 4): expert findings from MP back into the
+wissensnetz.
+
+Flow (per ``recherche/_archiv/Rueckkanal-Konzept_MP-zu-RDF``, section 6;
+summarized in ``recherche/DataBridge_Stand_und_Ausrichtung.md``, part A.3):
+a simulated MP selection event → RDF as ``oa:Annotation``/``db:ExpertFinding``
+with PROV-O provenance and **RDF-star** for the core statement, written via
+**SPARQL update** into a **named graph per user**.
+
+Why SPARQL-star update instead of rdflib serialization: rdflib's Turtle-star
+is version-dependent; Fuseki supports SPARQL-star natively (ADR-0002;
+CLAUDE.md "RDF-star trap"). ``selection_to_sparql`` therefore builds an
+``INSERT DATA { GRAPH <g> { … } }`` string directly, including the ``<< s p
+o >>`` statement.
+
+A named graph per user (``http://databridge.hka/graph/user/<slug>``) keeps
+the core TBox/ABox in the default graph cleanly separated; findings thus
+stay isolated, versionable and revocable.
 """
 
 from __future__ import annotations
@@ -30,23 +49,29 @@ from .config import INSTANCE, PREFIXES
 from .graphstore import GraphStore
 
 # Named-Graph-Schema pro Nutzer und Instanz-Basen für erzeugte Ressourcen.
+# EN: Named-graph schema per user and instance bases for generated resources.
 GRAPH_USER_BASE = "http://databridge.hka/graph/user/"
 _USER_BASE = f"{INSTANCE}user/"
 _SAMPLE_BASE = f"{INSTANCE}sample/"
 _ANNO_BASE = f"{INSTANCE}annotation/"
 
 # Präfixe, die in PREFIXES deklariert sind (alles andere mit ':' ist eine IRI).
+# EN: Prefixes declared in PREFIXES (everything else with ':' is an IRI).
 _KNOWN_PREFIXES = frozenset({"db", "ncit", "prov", "oa", "owl", "rdf", "rdfs", "xsd"})
 
 
 # --------------------------------------------------------------------------
 # Event-Modell
+# EN: Event model
 # --------------------------------------------------------------------------
 @dataclass
 class Hypothesis:
-    """Reclassification-Hypothese: Proben gehören von ``from_`` nach ``to``."""
+    """Reclassification-Hypothese: Proben gehören von ``from_`` nach ``to``.
 
-    from_: str  # NCIt-/DB-Konzept (CURIE oder IRI)
+    English: Reclassification hypothesis: samples belong from ``from_`` to ``to``.
+    """
+
+    from_: str  # NCIt-/DB-Konzept (CURIE oder IRI) / EN: NCIt/DB concept (CURIE or IRI)
     to: str
     note: str | None = None
     tag: str | None = None
@@ -54,7 +79,10 @@ class Hypothesis:
 
 @dataclass
 class SelectionEvent:
-    """Ein (simuliertes) MP-Selektions-Event, passend zu selection_event.json."""
+    """Ein (simuliertes) MP-Selektions-Event, passend zu selection_event.json.
+
+    English: A (simulated) MP selection event, matching selection_event.json.
+    """
 
     user: str
     samples: list[str]
@@ -92,13 +120,17 @@ class SelectionEvent:
 
 # --------------------------------------------------------------------------
 # IRI-/Literal-Hilfen
+# EN: IRI/literal helpers
 # --------------------------------------------------------------------------
 def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-") or "unbekannt"
 
 
 def _term(ref: str) -> str:
-    """SPARQL-Term für ein Konzept: CURIE mit bekanntem Präfix, sonst IRI."""
+    """SPARQL-Term für ein Konzept: CURIE mit bekanntem Präfix, sonst IRI.
+
+    English: SPARQL term for a concept: CURIE with known prefix, otherwise IRI.
+    """
     r = ref.strip()
     if r.startswith("<") and r.endswith(">"):
         return r
@@ -107,12 +139,16 @@ def _term(ref: str) -> str:
         return r
     if ":" in r:
         return f"<{r}>"
-    return f"<{r}>"  # blanker Bezeichner -> als (relative) IRI behandeln
+    return f"<{r}>"  # blanker Bezeichner -> als (relative) IRI behandeln / EN: plain identifier -> treated as a (relative) IRI
 
 
 def _sample_term(ref: str) -> str:
     """Term für eine Probe: volle IRI/CURIE unverändert, blanke Kennung ->
-    ``…/instance/sample/<slug>``."""
+    ``…/instance/sample/<slug>``.
+
+    English: Term for a sample: full IRI/CURIE unchanged, plain identifier
+    -> ``…/instance/sample/<slug>``.
+    """
     r = ref.strip()
     if r.startswith("<") and r.endswith(">"):
         return r
@@ -123,7 +159,10 @@ def _sample_term(ref: str) -> str:
 
 
 def graph_iri_for(user: str) -> str:
-    """Named-Graph-IRI für einen Nutzer."""
+    """Named-Graph-IRI für einen Nutzer.
+
+    English: Named-graph IRI for a user.
+    """
     return f"{GRAPH_USER_BASE}{_slug(user)}"
 
 
@@ -132,7 +171,10 @@ def _user_iri(user: str) -> str:
 
 
 def _lit(value: str) -> str:
-    """SPARQL-String-Literal (escaped, in Anführungszeichen)."""
+    """SPARQL-String-Literal (escaped, in Anführungszeichen).
+
+    English: SPARQL string literal (escaped, in quotes).
+    """
     escaped = (
         value.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -144,11 +186,13 @@ def _lit(value: str) -> str:
 
 def _decimal(value: float) -> str:
     # xsd:decimal-Literal ohne Exponent; ganze Werte mit .0 (nicht als int).
+    # EN: xsd:decimal literal without exponent; whole values with .0 (not as int).
     return f"{value:.10g}" if value != int(value) else f"{value:.1f}"
 
 
 # --------------------------------------------------------------------------
 # Event -> SPARQL-Update
+# EN: Event -> SPARQL update
 # --------------------------------------------------------------------------
 def selection_to_sparql(event: SelectionEvent) -> str:
     """Erzeugt das ``INSERT DATA``-Update für ein Selektions-Event.
@@ -157,6 +201,14 @@ def selection_to_sparql(event: SelectionEvent) -> str:
     ``oa:hasTarget`` je Probe, die ``db:hypothesis`` (Reclassification from→to)
     und je Probe eine RDF-star-Kern-Aussage
     ``<< sample db:reclassifiedAs to >> prov:wasDerivedFrom anno ; db:confidence c``.
+
+    English: Generates the ``INSERT DATA`` update for a selection event.
+
+    Contains the ``oa:Annotation``/``db:ExpertFinding`` with PROV-O
+    metadata, ``oa:hasTarget`` per sample, the ``db:hypothesis``
+    (reclassification from→to) and, per sample, an RDF-star core statement
+    ``<< sample db:reclassifiedAs to >> prov:wasDerivedFrom anno ;
+    db:confidence c``.
     """
     graph = graph_iri_for(event.user)
     anno = f"<{_ANNO_BASE}anno-{uuid.uuid4().hex[:12]}>"
@@ -166,6 +218,7 @@ def selection_to_sparql(event: SelectionEvent) -> str:
     samples = [_sample_term(s) for s in event.samples]
 
     # ExpertFinding-Block
+    # EN: ExpertFinding block
     lines = [
         f"{anno} a oa:Annotation , db:ExpertFinding ;",
         f"    prov:wasAttributedTo {_user_iri(event.user)} ;",
@@ -188,6 +241,7 @@ def selection_to_sparql(event: SelectionEvent) -> str:
     lines.append(f"    db:hypothesis [ {' ; '.join(hyp_parts)} ] .")
 
     # RDF-star-Kern-Aussagen (Provenienz/Konfidenz direkt an der Aussage)
+    # EN: RDF-star core statements (provenance/confidence directly on the statement)
     conf = _decimal(float(event.confidence)) if event.confidence is not None else "1.0"
     star = [
         f"    << {s} db:reclassifiedAs {to_term} >> "
@@ -205,9 +259,13 @@ def selection_to_sparql(event: SelectionEvent) -> str:
 
 # --------------------------------------------------------------------------
 # Schreiben / Lesen
+# EN: Writing / reading
 # --------------------------------------------------------------------------
 def write_feedback(store: GraphStore, event: SelectionEvent) -> str:
-    """Schreibt das Event in den Nutzer-Named-Graph. Gibt das Graph-IRI zurück."""
+    """Schreibt das Event in den Nutzer-Named-Graph. Gibt das Graph-IRI zurück.
+
+    English: Writes the event into the user's named graph. Returns the graph IRI.
+    """
     store.update(selection_to_sparql(event))
     return graph_iri_for(event.user)
 
@@ -216,6 +274,12 @@ def list_findings(store: GraphStore, user: str | None = None) -> list[dict[str, 
     """Liest gespeicherte ExpertFindings (mit Hypothese und Zielen) wieder aus.
 
     Ohne ``user`` über alle Nutzer-Graphen, sonst auf dessen Graph eingegrenzt.
+
+    English: Reads back stored ExpertFindings (with hypothesis and
+    targets).
+
+    Across all user graphs without ``user``, otherwise scoped to that
+    user's graph.
     """
     graph_filter = f"VALUES ?g {{ <{graph_iri_for(user)}> }}" if user else ""
     sparql = PREFIXES + f"""
@@ -261,7 +325,10 @@ def list_findings(store: GraphStore, user: str | None = None) -> list[dict[str, 
 
 
 def reclassifications(store: GraphStore, user: str | None = None) -> list[dict[str, Any]]:
-    """Liest die RDF-star-Kern-Aussagen (Probe → Ziel, mit Konfidenz/Provenienz)."""
+    """Liest die RDF-star-Kern-Aussagen (Probe → Ziel, mit Konfidenz/Provenienz).
+
+    English: Reads the RDF-star core statements (sample → target, with confidence/provenance).
+    """
     graph_filter = f"VALUES ?g {{ <{graph_iri_for(user)}> }}" if user else ""
     sparql = PREFIXES + f"""
     SELECT ?g ?sample ?target ?conf ?anno WHERE {{

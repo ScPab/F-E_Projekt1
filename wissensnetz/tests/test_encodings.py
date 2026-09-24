@@ -3,6 +3,14 @@
 Reine numpy-Funktionen, **kein Fuseki** nötig. Das Modul liegt im Prototyp
 (`prototype/mp_lite/encodings.py`) und wird per Dateipfad geladen — nicht via
 ``import encodings`` (das kollidiert mit Pythons stdlib-Paket ``encodings``).
+
+English: Task 6 — acceptance: encoding helpers for the multi-variable
+morphing.
+
+Pure numpy functions, **no Fuseki** needed. The module lives in the
+prototype (`prototype/mp_lite/encodings.py`) and is loaded by file path —
+not via ``import encodings`` (which collides with Python's stdlib
+``encodings`` package).
 """
 
 from __future__ import annotations
@@ -15,6 +23,9 @@ import pytest
 # numpy ist eine Prototyp-Abhängigkeit (mit bokeh installiert), keine Kern-
 # Abhängigkeit von ``wissensnetz`` — ohne numpy die Tests überspringen, damit die
 # Suite auch ohne Prototyp-Extras grün bleibt (wie die Fuseki-Skips).
+# EN: numpy is a prototype dependency (installed with bokeh), not a core
+# dependency of ``wissensnetz`` — skip the tests without numpy, so the
+# suite stays green even without the prototype extras (like the Fuseki skips).
 np = pytest.importorskip("numpy")
 
 _ENC_PATH = (
@@ -29,11 +40,11 @@ _spec.loader.exec_module(enc)
 def test_is_encodable_needs_two_distinct() -> None:
     assert enc.is_encodable(["a", "b"]) is True
     assert enc.is_encodable(["a", "a", "b"]) is True
-    # 0 oder 1 distinct Nicht-Null-Wert -> nicht morphbar
+    # 0 oder 1 distinct Nicht-Null-Wert -> nicht morphbar / EN: 0 or 1 distinct non-null value -> cannot morph
     assert enc.is_encodable([]) is False
     assert enc.is_encodable(["a", "a", "a"]) is False
     assert enc.is_encodable([None, "--", ""]) is False
-    assert enc.is_encodable(["a", "--", None]) is False  # nur 1 echter Wert
+    assert enc.is_encodable(["a", "--", None]) is False  # nur 1 echter Wert / EN: only 1 real value
 
 
 # --- circular_encoding ----------------------------------------------------
@@ -42,17 +53,17 @@ def test_circular_encoding_shape_and_origin_for_missing() -> None:
     pos = enc.circular_encoding(values)
     assert isinstance(pos, np.ndarray)
     assert pos.shape == (5, 2)
-    # fehlende Werte -> Ursprung
+    # fehlende Werte -> Ursprung / EN: missing values -> origin
     for j in (2, 3, 4):
         assert np.allclose(pos[j], [0.0, 0.0])
-    # vorhandene Werte -> nicht im Ursprung (auf dem Einheitskreis)
+    # vorhandene Werte -> nicht im Ursprung (auf dem Einheitskreis) / EN: present values -> not at the origin (on the unit circle)
     assert not np.allclose(pos[0], [0.0, 0.0])
     assert np.isclose(np.linalg.norm(pos[0]), 1.0)
 
 
 def test_circular_encoding_same_class_same_point() -> None:
     pos = enc.circular_encoding(["x", "y", "x"])
-    assert np.allclose(pos[0], pos[2])   # gleiche Klasse -> gleiche Position
+    assert np.allclose(pos[0], pos[2])   # gleiche Klasse -> gleiche Position / EN: same class -> same position
     assert not np.allclose(pos[0], pos[1])
 
 
@@ -71,20 +82,21 @@ def test_circular_encoding_empty_all_origin() -> None:
 def test_linear_encoding_vertical_axis_and_missing() -> None:
     pos = enc.linear_encoding([0.0, 10.0, None], dir="ver")
     assert pos.shape == (3, 2)
-    assert np.allclose(pos[:, 0], 0.0)          # x bleibt 0 bei "ver"
-    assert np.isclose(pos[0, 1], -1.0)          # Min -> -span
-    assert np.isclose(pos[1, 1], 1.0)           # Max -> +span
-    assert np.allclose(pos[2], [0.0, 0.0])      # fehlend -> Ursprung
+    assert np.allclose(pos[:, 0], 0.0)          # x bleibt 0 bei "ver" / EN: x stays 0 for "ver"
+    assert np.isclose(pos[0, 1], -1.0)          # Min -> -span / EN: min -> -span
+    assert np.isclose(pos[1, 1], 1.0)           # Max -> +span / EN: max -> +span
+    assert np.allclose(pos[2], [0.0, 0.0])      # fehlend -> Ursprung / EN: missing -> origin
 
 
 def test_linear_encoding_horizontal() -> None:
     pos = enc.linear_encoding([1.0, 3.0], dir="hor")
-    assert np.allclose(pos[:, 1], 0.0)          # y bleibt 0 bei "hor"
+    assert np.allclose(pos[:, 1], 0.0)          # y bleibt 0 bei "hor" / EN: y stays 0 for "hor"
     assert np.isclose(pos[0, 0], -1.0)
     assert np.isclose(pos[1, 0], 1.0)
 
 
 def test_linear_encoding_non_numeric_is_missing() -> None:
     # Nicht-konvertierbare Strings zählen wie fehlend (-> Ursprung).
+    # EN: Non-convertible strings count as missing (-> origin).
     pos = enc.linear_encoding(["low", "high"])
     assert np.allclose(pos, 0.0)

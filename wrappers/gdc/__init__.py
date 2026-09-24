@@ -1,4 +1,7 @@
-"""Wrapper-Modul für die GDC Developer API (Genomic Data Commons / TCGA)."""
+"""Wrapper-Modul für die GDC Developer API (Genomic Data Commons / TCGA).
+
+English: Wrapper module for the GDC Developer API (Genomic Data Commons / TCGA).
+"""
 
 from .cache import WrapperCache
 from .client import (

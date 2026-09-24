@@ -3,6 +3,12 @@
 Bewusst vereinfachte Request-Formen (Projekt-ID, Experimentstrategie,
 Access-Level, gewünschte Felder) statt des vollen GDC-`filters`-Schemas —
 die Übersetzung in einen validen GDC-Query übernimmt `gdc.client.build_filters`.
+
+English: Pydantic models for the mediator REST API around the GDC wrapper.
+
+Deliberately simplified request shapes (project ID, experimental strategy,
+access level, desired fields) instead of the full GDC `filters` schema — the
+translation into a valid GDC query is handled by `gdc.client.build_filters`.
 """
 
 from __future__ import annotations
@@ -15,7 +21,10 @@ StrOrList = Union[str, list[str]]
 
 
 class QueryRequest(BaseModel):
-    """Suchparameter für POST /query (Metadaten-Tier)."""
+    """Suchparameter für POST /query (Metadaten-Tier).
+
+    English: Search parameters for POST /query (metadata tier).
+    """
 
     endpoint: str = Field("files", description="GDC-Metadaten-Endpunkt: cases, files, projects, annotations")
     project_id: Optional[StrOrList] = Field(None, description='z. B. "TCGA-BRCA"')
@@ -29,7 +38,10 @@ class QueryRequest(BaseModel):
 
 
 class ManifestRequest(BaseModel):
-    """Suchparameter für POST /manifest (Bulk-Tier)."""
+    """Suchparameter für POST /manifest (Bulk-Tier).
+
+    English: Search parameters for POST /manifest (bulk tier).
+    """
 
     project_id: Optional[StrOrList] = None
     experimental_strategy: Optional[StrOrList] = None
@@ -38,7 +50,10 @@ class ManifestRequest(BaseModel):
 
 
 class GeoQueryRequest(BaseModel):
-    """Suchparameter für POST /geo/query (Metadaten-Tier, GEOWrapper.search)."""
+    """Suchparameter für POST /geo/query (Metadaten-Tier, GEOWrapper.search).
+
+    English: Search parameters for POST /geo/query (metadata tier, GEOWrapper.search).
+    """
 
     accession: Optional[str] = Field(None, description='GEO-Accession, z. B. "GSE68849"')
     organism: Optional[StrOrList] = Field(None, description='z. B. "Homo sapiens"')
@@ -51,7 +66,10 @@ class GeoQueryRequest(BaseModel):
 
 
 class EnaQueryRequest(BaseModel):
-    """Suchparameter für POST /ena/query (Metadaten-Tier, ENAWrapper.search)."""
+    """Suchparameter für POST /ena/query (Metadaten-Tier, ENAWrapper.search).
+
+    English: Search parameters for POST /ena/query (metadata tier, ENAWrapper.search).
+    """
 
     result: str = Field("read_run", description="ENA-Ergebnistyp, z. B. read_run, study, sample")
     study_accession: Optional[StrOrList] = Field(None, description='z. B. "PRJEB1234"')
@@ -66,7 +84,12 @@ class EnaQueryRequest(BaseModel):
 
 class CBioMolecularDataRequest(BaseModel):
     """Suchparameter für POST /cbioportal/molecular-data/{molecular_profile_id}
-    (Bulk-Tier-Äquivalent, CBioPortalWrapper.get_molecular_data)."""
+    (Bulk-Tier-Äquivalent, CBioPortalWrapper.get_molecular_data).
+
+    English: Search parameters for POST
+    /cbioportal/molecular-data/{molecular_profile_id} (bulk-tier equivalent,
+    CBioPortalWrapper.get_molecular_data).
+    """
 
     sample_list_id: str = Field(..., description="ID der Sample-Liste (siehe GET /cbioportal/sample-lists/{study_id})")
     entrez_gene_ids: list[int] = Field(..., description="Entrez-Gen-IDs, für die Werte abgerufen werden sollen")
@@ -85,6 +108,19 @@ class TransformRequest(BaseModel):
     Für jede Quelle gilt: entweder werden rohe Treffer übergeben (z. B. aus
     einer vorherigen POST /query- bzw. /geo|ena|cbioportal/...-Antwort),
     oder sie werden live über den jeweiligen Wrapper geholt.
+
+    English: Request for POST /transform (source JSON -> RDF/OWL, see
+    app/semantic/mapping*.py).
+
+    `source` determines which mapping module and which live-fetch parameters
+    apply — the request fields are deliberately named differently per source
+    (`cases` for GDC, `organism` for GEO, ...) because the sources are
+    structurally too different to hide behind a shared name (see
+    docs/adding_new_sources.md).
+
+    For every source: either raw hits are passed in (e.g. from a previous
+    POST /query or /geo|ena|cbioportal/... response), or they are fetched
+    live via the respective wrapper.
     """
 
     source: str = Field("gdc", description="'gdc', 'geo', 'ena' oder 'cbioportal'.")
@@ -148,6 +184,12 @@ class SingleSelection(BaseModel):
     Krebs/Var/Obj/Datenquelle). Laut Entscheidung 7.2 (siehe SelectionRequest)
     ist jede Ebene eine eigenständige, gleichrangige Auswahl — keine
     Verfeinerung einer übergeordneten Auswahl.
+
+    English: A single selection level from the UI panel (see
+    recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, section 1, points
+    1-3: cancer/variable/objective/data source). Per decision 7.2 (see
+    SelectionRequest), every level is an independent, equally-ranked
+    selection — not a refinement of a parent selection.
     """
 
     source: str = Field(
@@ -185,6 +227,18 @@ class SelectionRequest(BaseModel):
     Auswahlen zum Vergleich — keine UND-verknüpfte Verfeinerung derselben Auswahl.
     Jede Ebene bekommt entsprechend ihr eigenes Proben-Set und ihre eigene
     Serialisierung, nicht eine gemeinsam geschnittene Teilmenge.
+
+    English: Mirror of the UI selection JSON
+    (recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, section 1, point 6:
+    "The selection becomes a JSON. That is the search order and hence the
+    contract."). Basis for POST /selection/preview and POST
+    /selection/generate (M1/M2).
+
+    `levels` corresponds to the stacked panel copies ("another level", point
+    4). **Decision 7.5 (implementation plan, section 7.2):** PARALLEL,
+    equally-ranked selections for comparison — not an AND-combined
+    refinement of the same selection. Each level accordingly gets its own
+    sample set and its own serialization, not a jointly intersected subset.
     """
 
     levels: list[SingleSelection] = Field(
@@ -214,6 +268,13 @@ class SelectionLevelResult(BaseModel):
     Eine Ebene kann unabhängig von den anderen fehlschlagen (Entscheidung 7.2:
     parallele, gleichrangige Auswahlen) — `status="error"`/`error` statt eines
     Abbruchs der gesamten Anfrage.
+
+    English: Result of ONE selection level within a preview/generate
+    response.
+
+    A level can fail independently of the others (decision 7.2: parallel,
+    equally-ranked selections) — `status="error"`/`error` instead of
+    aborting the whole request.
     """
 
     selection: SingleSelection
@@ -238,13 +299,20 @@ class SelectionLevelResult(BaseModel):
 
 
 class SelectionPreviewResponse(BaseModel):
-    """Antwort von POST /selection/preview (billig — Entscheidung 7.3: geteilter Abruf ohne Matrizen)."""
+    """Antwort von POST /selection/preview (billig — Entscheidung 7.3: geteilter Abruf ohne Matrizen).
+
+    English: Response of POST /selection/preview (cheap — decision 7.3: shared fetch without matrices).
+    """
 
     levels: list[SelectionLevelResult]
 
 
 class SelectionGenerateResponse(BaseModel):
-    """Antwort von POST /selection/generate (teuer — schreibt zusätzlich .h5ad je Ebene, sobald M3/M6 stehen)."""
+    """Antwort von POST /selection/generate (teuer — schreibt zusätzlich .h5ad je Ebene, sobald M3/M6 stehen).
+
+    English: Response of POST /selection/generate (expensive — additionally
+    writes a .h5ad per level, once M3/M6 are in place).
+    """
 
     levels: list[SelectionLevelResult]
 
@@ -259,6 +327,16 @@ class AnndataExportRequest(BaseModel):
     einen funktionierenden `gdc-client` im Container voraus (siehe
     GDCWrapper.download_via_gdc_client) — ohne das liefert der Endpoint
     einen klaren 503-Fehler statt einer unvollständigen/erfundenen Matrix.
+
+    English: Request for POST /export/anndata (GDC expression data ->
+    anndata/.h5ad, part 3 of wissensnetz/HANDOFF_anndata.md).
+
+    Builds an `anndata.AnnData` container from GDC expression raw files
+    (bulk tier of GDCWrapper) + the clinical Oviedo fields from the
+    wissensnetz (`enrichment.all_cases`) and writes it as `.h5ad`. Requires a
+    working `gdc-client` in the container (see
+    GDCWrapper.download_via_gdc_client) — without it, the endpoint returns a
+    clear 503 error instead of an incomplete/fabricated matrix.
     """
 
     project_id: StrOrList = Field(..., description='z. B. "TCGA-BRCA"')

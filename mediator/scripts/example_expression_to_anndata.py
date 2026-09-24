@@ -19,6 +19,29 @@ eine spätere MP-lite-Integration.
 Aufruf (aus dem Verzeichnis mediator/, mit installiertem anndata/pandas/numpy,
 optional scikit-learn für die tSNE-obsm-Spalte):
     python scripts/example_expression_to_anndata.py
+
+English: Example script: TCGA-BRCA sample expression -> anndata/.h5ad, end
+to end without a running mediator service (analogous to
+scripts/example_gdc_to_rdf.py).
+
+Uses the same assembly logic as POST /export/anndata
+(app/semantic/expression.py), reads the sample expression data from
+sample_data/expression/*.rna_seq.gene_counts.tsv (format verified 1:1
+against a real RNA-Seq STAR gene-counts file loaded live from the GDC API —
+the values themselves are made up, no real patient data, analogous to
+sample_data/cases_brca_sample.json) as well as the clinical `obs` fields
+from sample_data/cases_brca_sample.json (stands in here for
+`enrichment.all_cases()`, since this script deliberately works without a
+running Fuseki — see wissensnetz/HANDOFF_anndata.md, section 3b).
+
+Writes the result to sample_data/tcga_brca_sample.h5ad — a frozen reference
+fixture (part 3 of the handoff, "Together: a reference .h5ad for TCGA-BRCA
+(small) as a fixture, analogous to cases_brca_sample.*"), basis for a later
+MP-lite integration.
+
+Invocation (from the mediator/ directory, with anndata/pandas/numpy
+installed, optionally scikit-learn for the tSNE obsm column):
+    python scripts/example_expression_to_anndata.py
 """
 
 from __future__ import annotations
@@ -28,7 +51,7 @@ import sys
 from pathlib import Path
 
 MEDIATOR_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(MEDIATOR_ROOT))  # macht das app-Package importierbar, ohne den Mediator zu starten
+sys.path.insert(0, str(MEDIATOR_ROOT))  # macht das app-Package importierbar, ohne den Mediator zu starten / EN: makes the app package importable without starting the mediator
 
 from app.semantic import expression  # noqa: E402
 
@@ -40,12 +63,20 @@ OUTPUT_PATH = MEDIATOR_ROOT / "sample_data" / "tcga_brca_sample.h5ad"
 # obs-Granularität "pro Sample" (siehe expression.build_obs-Docstring), hier
 # auf ein repräsentatives Sample je Case beschränkt, weil nur dafür
 # Beispiel-Expressionsdateien vorliegen.
+# EN: Only the "Primary Tumor" sample per case (see
+# sample_data/expression/*.tsv) — obs granularity "per sample" (see the
+# expression.build_obs docstring), here restricted to one representative
+# sample per case because sample expression files only exist for that.
 PRIMARY_SAMPLE_SUFFIX = "-01"
 
 
 def _case_context_row(case: dict) -> dict:
     """Flacht ein cases_brca_sample.json-Case auf dieselbe Dict-Form ab, die
-    `wissensnetz.enrichment.all_cases()` liefert (siehe expression.build_obs)."""
+    `wissensnetz.enrichment.all_cases()` liefert (siehe expression.build_obs).
+
+    English: Flattens a cases_brca_sample.json case into the same dict shape
+    that `wissensnetz.enrichment.all_cases()` delivers (see expression.build_obs).
+    """
     demographic = case.get("demographic") or {}
     diagnosis = (case.get("diagnoses") or [{}])[0]
     return {

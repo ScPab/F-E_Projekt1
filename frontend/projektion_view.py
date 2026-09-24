@@ -13,6 +13,24 @@ Zwei Dinge, die pyqtgraph von Haus aus anders macht und die hier geradegezogen
 werden: es ist dunkel (haette als schwarzer Block in einer hellen Oberflaeche
 gesessen) und es verzerrt die Achsen frei (die Kreis-Encodings waeren zu
 Ellipsen geworden).
+
+English: The morphing projection as a Qt view — map on the left, sliders on
+the right.
+
+The model is Oviedo's ``demo.py`` in the version that MP-Lite mirrors: a
+scatter plot titled ``Cancer map``, next to it **one slider per variable**,
+and the point position is the softmax-weighted sum of the encodings.
+Computation happens in :mod:`morph`, here it is only drawn.
+
+``pyqtgraph`` instead of matplotlib: dragging several sliders resets
+thousands of points, and matplotlib gets sluggish doing that. No
+QtWebEngine, no Bokeh — the view is a Qt widget, not an embedded browser
+(ADR-0004).
+
+Two things pyqtgraph does differently out of the box and that are
+straightened out here: it is dark (would have sat as a black block in a
+light UI) and it distorts the axes freely (the circular encodings would
+have become ellipses).
 """
 
 from __future__ import annotations
@@ -41,6 +59,7 @@ import morph
 import theme
 
 # Der Regler arbeitet in ganzen Schritten; 0..100 entspricht 0,00..1,00.
+# EN: The slider works in whole steps; 0..100 corresponds to 0.00..1.00.
 _SCHRITTE = 100
 
 
@@ -54,9 +73,19 @@ class _AuswahlBox(pg.ViewBox):
 
     Ein Freihand-Lasso waere Handarbeit an Polygon-Tests und bleibt draussen,
     bis sich zeigt, dass es fehlt.
+
+    English: A ``ViewBox`` whose left-drag is a **selection** rectangle.
+
+    pyqtgraph already brings the rubber band (``updateScaleBox``), but
+    normally uses it for zooming in. Here the same frame is drawn and the
+    area is reported at the end. Right-click and wheel remain unchanged, so
+    the image can still be panned and zoomed.
+
+    A freehand lasso would be manual work on polygon tests and is left out
+    until it turns out to be missing.
     """
 
-    rechteck_gezogen = Signal(object)      # QRectF in Datenkoordinaten
+    rechteck_gezogen = Signal(object)      # QRectF in Datenkoordinaten / EN: QRectF in data coordinates
 
     def mouseDragEvent(self, ev, axis=None) -> None:  # noqa: D102, N802
         if ev.button() != Qt.MouseButton.LeftButton:
@@ -78,6 +107,14 @@ class _Regler(QWidget):
     Nicht nutzbare Variablen bleiben **sichtbar** und an ihrem Platz, nur
     deaktiviert und mit dem Grund im Tooltip — dieselbe Regel wie bei ENA und
     GEO im Auswahlpanel: ehrliche Luecke statt unsichtbarer Grenze.
+
+    English: A slider with the name on the left, the value on the right and
+    the handle below.
+
+    Variables that cannot be used remain **visible** and in place, only
+    disabled and with the reason in the tooltip — the same rule as for ENA
+    and GEO in the selection panel: an honest gap instead of an invisible
+    limit.
     """
 
     wert_geaendert = Signal()
@@ -118,6 +155,8 @@ class _Regler(QWidget):
     def _nachziehen(self) -> None:
         # Der Zahlenwert neben dem Regler: ohne ihn weiss man nach dem Ziehen
         # nicht, wo man steht.
+        # EN: The numeric value next to the slider: without it, one does not
+        # know where one stands after dragging.
         self._wert.setText(f"{self.wert():.2f}")
         self.wert_geaendert.emit()
 
@@ -131,11 +170,19 @@ class ProjektionPanel(QWidget):
     Die Ansicht haelt ein :class:`morph.Morphmodell` und zeichnet es; geladen
     wird die Datei im Worker-Thread, deshalb kommt das Modell von aussen ueber
     :meth:`zeige_modell`.
+
+    English: Map, sliders and the paths to the file.
+
+    The view holds a :class:`morph.Morphmodell` and draws it; the file is
+    loaded in the worker thread, so the model comes in from outside via
+    :meth:`zeige_modell`.
     """
 
     # Eine Datei soll geladen werden (Pfad) — das Fenster startet den Worker.
+    # EN: A file is to be loaded (path) — the window starts the worker.
     datei_gewuenscht = Signal(str)
     # Eine Probe wurde angeklickt (submitter_id) bzw. ein Rechteck aufgezogen.
+    # EN: A sample was clicked (submitter_id) or a rectangle was dragged.
     probe_geklickt = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -169,6 +216,8 @@ class ProjektionPanel(QWidget):
 
         # pyqtgraph ist von Haus aus dunkel; Flaeche und Achsen hier auf die
         # helle Oberflaeche ziehen, sonst sitzt ein schwarzer Block im Fenster.
+        # EN: pyqtgraph is dark out of the box; pull the surface and axes to
+        # the light UI here, otherwise a black block sits in the window.
         pg.setConfigOptions(antialias=True)
         self._box = _AuswahlBox()
         self._box.rechteck_gezogen.connect(self._rechteck)
@@ -177,14 +226,19 @@ class ProjektionPanel(QWidget):
         # X- und Y-Achse mit Werten, dazu ein Gitter — wie in der Vorlage. Die
         # Zahlen sind nach dem Morphen keine Messgroessen, sie machen aber
         # Abstaende und Lage vergleichbar, wenn man die Karte verschiebt.
+        # EN: X and Y axis with values, plus a grid — as in the template.
+        # After morphing, the numbers are not measured quantities, but they
+        # make distances and position comparable when the map is moved.
         for achse in ("left", "bottom"):
             self._plot.getAxis(achse).setPen(pg.mkPen(theme.AXIS))
             self._plot.getAxis(achse).setTextPen(pg.mkPen(theme.AXIS))
         self._plot.showGrid(x=True, y=True, alpha=theme.GRID_ALPHA)
         # Sonst verzerren die Kreis-Encodings zu Ellipsen.
+        # EN: Otherwise the circular encodings distort into ellipses.
         self._plot.setAspectLocked(True)
         self._plot.setMenuEnabled(False)
         # Die Karte soll auch bei 900 x 600 nicht zur Briefmarke werden.
+        # EN: The map should not shrink to a stamp even at 900 x 600.
         self._plot.setMinimumHeight(theme.MAP_MIN_HEIGHT)
 
         self._punkte = pg.ScatterPlotItem(size=theme.SCATTER_POINT_SIZE,
@@ -193,10 +247,15 @@ class ProjektionPanel(QWidget):
         self._plot.addItem(self._punkte)
         # Klick ins Leere hebt die Auswahl auf. Der Punkt-Klick kommt zuerst und
         # setzt eine Marke, an der dieser Handler erkennt, dass er nichts tun soll.
+        # EN: Clicking empty space clears the selection. The point click
+        # comes first and sets a marker by which this handler recognizes
+        # that it should do nothing.
         self._klick_auf_punkt = False
         self._plot.scene().sigMouseClicked.connect(self._klick_daneben)
 
         # Meldung statt Karte: leerer Zustand, Ladehinweis, fehlendes Layout.
+        # EN: Message instead of map: empty state, loading hint, missing
+        # layout.
         self._hinweis = QLabel("Keine Datei geladen.\nUeber `Datei oeffnen …` eine "
                                ".h5ad waehlen.")
         self._hinweis.setObjectName(theme.OBJ_PROJ_HINT)
@@ -210,6 +269,8 @@ class ProjektionPanel(QWidget):
 
         # Anzahl der ausgewaehlten Proben unter der Karte — neben der
         # Schaltflaeche war sie in der schmalen Spalte abgeschnitten.
+        # EN: Number of selected samples below the map — next to the button
+        # it was cut off in the narrow column.
         self._auswahl_label = QLabel("")
         self._auswahl_label.setObjectName(theme.OBJ_SLIDER_VALUE)
         layout.addWidget(self._auswahl_label)
@@ -227,6 +288,13 @@ class ProjektionPanel(QWidget):
         Eine Zeile je Kohorte statt einer umbrechenden Zeile unter der Karte:
         so bleibt die Zuordnung Farbe -> Kuerzel lesbar, und die Karte behaelt
         ihre Hoehe. Bei 32 Kohorten rollt die Spalte.
+
+        English: The cohort legend to the right of the map, as in the
+        template.
+
+        One line per cohort instead of a wrapping line below the map: this
+        way the color -> code mapping stays readable, and the map keeps its
+        height. With 32 cohorts, the column scrolls.
         """
         self._legende = QLabel("")
         self._legende.setObjectName(theme.OBJ_SLIDER_VALUE)
@@ -247,6 +315,7 @@ class ProjektionPanel(QWidget):
 
     def _baue_reglerspalte(self) -> QWidget:
         # 15 Regler passen bei 600 Pixel Fensterhoehe nicht alle hinein.
+        # EN: 15 sliders do not all fit at 600 pixels of window height.
         self._reglerbereich = QScrollArea()
         self._reglerbereich.setWidgetResizable(True)
         self._reglerbereich.setFixedWidth(theme.SLIDER_COLUMN_WIDTH)
@@ -266,7 +335,10 @@ class ProjektionPanel(QWidget):
 
     # -- Datei -------------------------------------------------------------
     def _waehle_datei(self) -> None:
-        """Dateidialog; Startordner wie beim Speichern eines ``.h5ad``."""
+        """Dateidialog; Startordner wie beim Speichern eines ``.h5ad``.
+
+        English: File dialog; starting folder as when saving an ``.h5ad``.
+        """
         start = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
         pfad, _ = QFileDialog.getOpenFileName(
             self, "AnnData oeffnen", str(start), "AnnData (*.h5ad);;Alle Dateien (*)"

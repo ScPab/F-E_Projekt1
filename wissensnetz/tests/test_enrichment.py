@@ -5,6 +5,15 @@ Zwei Testarten:
 * **Hierarchie** gegen eine **isolierte** Mini-Ontologie in einem eigenen Named
   Graph (im `finally` per `DROP GRAPH` verworfen) — so ist der
   `rdfs:subClassOf*`-Pfad bewiesen, ohne von (nicht geladenem) NCIt abzuhängen.
+
+English: Task 3 — acceptance: SPARQL enrichment (reading).
+
+Two kinds of tests:
+* **Context** against the real sample data (`loaded_store`, project
+  TCGA-BRCA).
+* **Hierarchy** against an **isolated** mini ontology in its own named
+  graph (discarded via `DROP GRAPH` in `finally`) — this proves the
+  `rdfs:subClassOf*` path without depending on (unloaded) NCIt.
 """
 
 from __future__ import annotations
@@ -15,6 +24,7 @@ from wissensnetz import enrichment as e
 from wissensnetz.graphstore import GraphStore
 
 # Mini-Klassenhierarchie: B ⊑ A ⊑ db:Disease (alles im Test-Named-Graph).
+# EN: Mini class hierarchy: B ⊑ A ⊑ db:Disease (all in the test named graph).
 HIER_GRAPH = "urn:wissensnetz:test:hierarchy"
 HIER_A = "urn:test:hier#A"
 HIER_B = "urn:test:hier#B"
@@ -28,6 +38,7 @@ t:B rdfs:subClassOf t:A .
 
 
 # --- Kontext (Echtdaten) --------------------------------------------------
+# EN: --- Context (real data) ---
 def test_case_context_by_submitter_id(loaded_store: GraphStore) -> None:
     ctx = e.case_context(loaded_store, "TCGA-A1-A0SB")
     assert ctx["project_id"] == "TCGA-BRCA"
@@ -40,6 +51,9 @@ def test_case_context_by_submitter_id(loaded_store: GraphStore) -> None:
     # Alignment-Tabelle enthält seit der Mediator-Fixture-Aktualisierung einen
     # Treffer für "Infiltrating duct carcinoma, NOS" (siehe
     # ontology/alignment/ncit_primary_diagnosis.json).
+    # EN: Since the mediator fixture update, the alignment table contains a
+    # hit for "Infiltrating duct carcinoma, NOS" (see
+    # ontology/alignment/ncit_primary_diagnosis.json).
     assert diag["aligned_concept"] == "http://purl.obolibrary.org/obo/NCIT_C4194"
 
 
@@ -47,19 +61,25 @@ def test_case_context_has_oviedo_fields(loaded_store: GraphStore) -> None:
     # Aufgabe 5: case_context liefert die neuen Oviedo-MP-Felder als Keys, auch
     # wenn Mediator/Wrapper sie noch nicht befüllen (Werte dürfen None sein).
     # Keine Exception, bestehende Felder bleiben intakt.
+    # EN: Task 5: case_context returns the new Oviedo-MP fields as keys,
+    # even if the mediator/wrapper don't populate them yet (values may be
+    # None). No exception, existing fields stay intact.
     ctx = e.case_context(loaded_store, "TCGA-A1-A0SB")
     for key in ("race", "ethnicity", "vital_status"):
-        assert key in ctx  # Top-Ebene (Demographic)
+        assert key in ctx  # Top-Ebene (Demographic) / EN: top level (demographic)
     diag = ctx["diagnoses"][0]
     for key in ("tumor_stage", "morphology", "site_of_resection_or_biopsy",
                 "has_metastasis"):
-        assert key in diag  # pro Diagnose-Eintrag
+        assert key in diag  # pro Diagnose-Eintrag / EN: per diagnosis entry
 
 
 def test_all_cases_contains_fixture_cases(loaded_store: GraphStore) -> None:
     # Aufgabe 7: Sammel-Leseabfrage liefert je Fall genau einen Eintrag mit den
     # erwarteten Keys; die BRCA-Fixture-Fälle sind enthalten. (Der Store kann
     # weitere Fälle enthalten — daher keine exakte Gesamtzahl prüfen.)
+    # EN: Task 7: the bulk read query returns exactly one entry per case
+    # with the expected keys; the BRCA fixture cases are included. (The
+    # store may contain further cases — hence no exact total count is checked.)
     cases = e.all_cases(loaded_store)
     assert isinstance(cases, list) and cases
     by_sid = {c["submitter_id"]: c for c in cases if c.get("submitter_id")}
@@ -69,10 +89,12 @@ def test_all_cases_contains_fixture_cases(loaded_store: GraphStore) -> None:
     assert brca["sex_at_birth"] == "female"
     assert brca["primary_diagnosis"] == "Infiltrating duct carcinoma, NOS"
     # Neue Aufgabe-5-Felder als Keys vorhanden (Werte dürfen None sein).
+    # EN: New task-5 fields present as keys (values may be None).
     for key in ("race", "ethnicity", "vital_status", "tumor_stage", "morphology",
                 "site_of_resection_or_biopsy", "has_metastasis"):
         assert key in brca
     # ein Eintrag je Fall (keine Duplikate durch mehrere Diagnosen)
+    # EN: one entry per case (no duplicates from multiple diagnoses)
     sids = [c["submitter_id"] for c in cases if c.get("submitter_id")]
     assert len(sids) == len(set(sids))
 
@@ -83,11 +105,18 @@ def test_all_cases_limit(loaded_store: GraphStore) -> None:
 
 
 # --- Sample/type (Aufgabe 8) ----------------------------------------------
+# EN: --- Sample/type (task 8) ---
 # Hinweis: case_context/all_cases fragen den DEFAULT-Graph ab (kein
 # union-default-graph, s. UNION-Muster in test_graphstore). Ein eigener Named
 # Graph wäre für diese Funktionen unsichtbar — daher wird der Test-Fall in den
 # Default-Graph geladen und im finally per gezieltem DELETE wieder entfernt
 # (Isolation wie bei DROP GRAPH, nur für Default-Graph-Tripel).
+# EN: Note: case_context/all_cases query the DEFAULT graph (no
+# union-default-graph, see the UNION pattern in test_graphstore). A
+# separate named graph would be invisible to these functions — hence the
+# test case is loaded into the default graph and removed again in finally
+# via a targeted DELETE (isolation like DROP GRAPH, just for default-graph
+# triples).
 _SMP_CASE = "urn:test:sample#c1"
 _SMP_SAMPLE = "urn:test:sample#s1"
 _SMP_TTL = """
@@ -100,7 +129,7 @@ ex:s1 a db:Sample ; db:sampleType "Primary Tumor" .
 
 @pytest.fixture()
 def sample_store(loaded_store: GraphStore) -> GraphStore:
-    loaded_store.load_turtle(_SMP_TTL)  # Default-Graph
+    loaded_store.load_turtle(_SMP_TTL)  # Default-Graph / EN: default graph
     try:
         yield loaded_store
     finally:
@@ -124,6 +153,11 @@ def test_sample_type_from_fixture(loaded_store: GraphStore) -> None:
     # TCGA-A1-A0SD hat genau ein Sample -> deterministischer Wert; TCGA-A1-A0SB
     # hat zwei Samples (Primary Tumor + Solid Tissue Normal), daher hier nur
     # gegen den Fall mit genau einem Sample geprüft.
+    # EN: Since the mediator fixture update (part 2, samples.sample_type ->
+    # db:hasSample/db:sampleType), the BRCA fixture delivers real sample
+    # types. TCGA-A1-A0SD has exactly one sample -> a deterministic value;
+    # TCGA-A1-A0SB has two samples (Primary Tumor + Solid Tissue Normal),
+    # so only the case with exactly one sample is checked here.
     ctx = e.case_context(loaded_store, "TCGA-A1-A0SD")
     assert ctx["sample_type"] == "Primary Tumor"
     brca = next(c for c in e.all_cases(loaded_store) if c.get("submitter_id") == "TCGA-A1-A0SD")
@@ -156,6 +190,7 @@ def test_diagnosis_context_unknown_returns_empty(loaded_store: GraphStore) -> No
 
 
 # --- Hierarchie (isolierte Named-Graph-Fixture) ---------------------------
+# EN: --- Hierarchy (isolated named-graph fixture) ---
 @pytest.fixture()
 def hierarchy_store(store: GraphStore) -> GraphStore:
     store.load_turtle(HIER_TTL, graph=HIER_GRAPH)
@@ -167,8 +202,8 @@ def hierarchy_store(store: GraphStore) -> GraphStore:
 
 def test_subclasses_transitive(hierarchy_store: GraphStore) -> None:
     result = e.subclasses(hierarchy_store, "db:Disease")
-    assert HIER_A in result  # direkt
-    assert HIER_B in result  # transitiv (B ⊑ A ⊑ Disease)
+    assert HIER_A in result  # direkt / EN: direct
+    assert HIER_B in result  # transitiv (B ⊑ A ⊑ Disease) / EN: transitive (B ⊑ A ⊑ Disease)
 
 
 def test_subclasses_exclude_self(hierarchy_store: GraphStore) -> None:
@@ -191,6 +226,7 @@ def test_superclasses_exclude_self(hierarchy_store: GraphStore) -> None:
 
 def test_subclasses_top_level_class_has_only_self(loaded_store: GraphStore) -> None:
     # db:Case ist in der TBox top-level: subclasses == nur die Klasse selbst.
+    # EN: db:Case is top-level in the TBox: subclasses == only the class itself.
     assert e.subclasses(loaded_store, "db:Case") == ["http://databridge.hka/onto#Case"]
     assert e.subclasses(loaded_store, "db:Case", include_self=False) == []
 
@@ -198,5 +234,7 @@ def test_subclasses_top_level_class_has_only_self(loaded_store: GraphStore) -> N
 def test_hierarchy_excludes_restriction_bnodes(loaded_store: GraphStore) -> None:
     # db:Diagnosis rdfs:subClassOf [ owl:Restriction … ] in der TBox — der
     # anonyme Restriction-Blank-Node darf NICHT als Oberklasse erscheinen.
+    # EN: db:Diagnosis rdfs:subClassOf [ owl:Restriction … ] in the TBox —
+    # the anonymous restriction blank node must NOT appear as a superclass.
     supers = e.superclasses(loaded_store, "db:Diagnosis")
     assert supers == ["http://databridge.hka/onto#Diagnosis"]

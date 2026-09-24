@@ -7,6 +7,16 @@ Aufruf im GUI-Thread, wuerde das Fenster einfrieren und abgestuerzt wirken.
 Der Worker kennt nur ``mediator_client`` und gibt dessen :class:`Result`
 unveraendert per Signal in den GUI-Thread zurueck. Er entscheidet nichts und
 formatiert nichts — das gehoert ins Fenster.
+
+English: QThread worker for the mediator calls.
+
+**Threading is mandatory, not polish** (ADR-0004, "To bear in mind"):
+``/selection/generate`` downloads raw data and takes minutes. If the
+call ran on the GUI thread, the window would freeze and look crashed.
+
+The worker only knows ``mediator_client`` and passes its :class:`Result`
+back into the GUI thread unchanged via signal. It decides nothing and
+formats nothing — that belongs in the window.
 """
 
 from __future__ import annotations
@@ -24,6 +34,12 @@ class SelectionWorker(QObject):
     Lebt in einem eigenen ``QThread``; ``run`` wird ueber dessen
     ``started``-Signal angestossen, damit der Aufruf wirklich dort laeuft und
     nicht im GUI-Thread.
+
+    English: Executes **one** mediator call and reports the result.
+
+    Lives in its own ``QThread``; ``run`` is triggered via its
+    ``started`` signal, so the call really runs there and not on the GUI
+    thread.
     """
 
     finished = Signal(object, str, object)  # (Result, mode, diff | None)
@@ -37,6 +53,11 @@ class SelectionWorker(QObject):
         # ruft sie auf und weiss nicht, was sie tun — damit bleibt der Grundsatz
         # oben in Kraft: er entscheidet nichts und kennt den Store nicht.
         # ``store_reader`` wird hier ausdruecklich NICHT importiert.
+        # EN: Two parameterless callbacks that the window passes in. The
+        # worker calls them without knowing what they do — this keeps
+        # the principle above intact: it decides nothing and knows
+        # nothing about the store. ``store_reader`` is deliberately NOT
+        # imported here.
         self._vorher = vorher
         self._nachher = nachher
 
@@ -44,6 +65,10 @@ class SelectionWorker(QObject):
         # Abzug A **vor** dem Aufruf. Nebenlaeufig geholt koennte er bereits
         # geladene Daten enthalten und der Unterschied fiele zu klein aus; im
         # GUI-Thread wuerde das Fenster genau im Moment des Klicks einfrieren.
+        # EN: Snapshot A **before** the call. If fetched concurrently it
+        # could already contain loaded data and the diff would come out
+        # too small; on the GUI thread the window would freeze exactly
+        # at the moment of the click.
         self._rufe(self._vorher)
 
         if self._mode == "generate":
@@ -53,6 +78,8 @@ class SelectionWorker(QObject):
 
         # Was ``nachher`` zurueckgibt, reicht der Worker unbesehen weiter — was
         # dort verglichen wird, geht ihn nichts an.
+        # EN: Whatever ``nachher`` returns, the worker passes on
+        # unexamined — what is compared there is none of its business.
         self.finished.emit(result, self._mode, self._rufe(self._nachher))
 
     @staticmethod
@@ -60,6 +87,11 @@ class SelectionWorker(QObject):
         """Einen Rueckruf ausfuehren; scheitert er, ist das Ergebnis ``None``.
 
         Ein nicht erreichbarer Store darf einen Auftrag nie verhindern.
+
+        English: Executes a callback; if it fails, the result is
+        ``None``.
+
+        An unreachable store must never block a request.
         """
         if rueckruf is None:
             return None
@@ -79,6 +111,15 @@ def start_call(payload: dict[str, Any], mode: str, on_finished, *,
     laeuft noch VOR diesem Zeitpunkt — dort also nicht freigeben (siehe
     ``MainWindow._release_thread``). Thread und Worker raeumen sich danach
     selbst ab (``quit``/``deleteLater``).
+
+    English: Starts the worker on a new thread and returns both.
+
+    The caller must hold on to the return value **until the thread has
+    sent its ``finished`` signal**: if the last Python reference to a
+    still-running QThread is dropped, Qt hard-kills the process.
+    ``on_finished`` still runs BEFORE that point — so do not release it
+    there (see ``MainWindow._release_thread``). Thread and worker clean
+    themselves up afterward (``quit``/``deleteLater``).
     """
     thread = QThread()
     worker = SelectionWorker(payload, mode, vorher=vorher, nachher=nachher)
@@ -103,6 +144,15 @@ class DownloadWorker(QObject):
     in dessen Signatur. Grund fuer den eigenen Thread ist derselbe wie beim
     Generieren: die Datei kann gross sein, das Schreiben darf den GUI-Thread
     nicht blockieren.
+
+    English: Downloads **one** file from the mediator and reports the
+    result.
+
+    A separate worker instead of reusing :class:`SelectionWorker`: a
+    download needs ``download_url``/``dest_path`` instead of a selection
+    request, and returns no ``mode`` — neither fits its signature. The
+    reason for a dedicated thread is the same as for generating: the
+    file can be large, and writing it must not block the GUI thread.
     """
 
     finished = Signal(object)  # mediator_client.Result
@@ -119,7 +169,11 @@ class DownloadWorker(QObject):
 
 def start_download(download_url: str, dest_path: str, on_finished) -> tuple[QThread, DownloadWorker]:
     """Wie :func:`start_call`, aber fuer einen Datei-Download (siehe dort fuer
-    die Regeln zum Freigeben der Rueckgabe)."""
+    die Regeln zum Freigeben der Rueckgabe).
+
+    English: Like :func:`start_call`, but for a file download (see there
+    for the rules on releasing the return value).
+    """
     thread = QThread()
     dl_worker = DownloadWorker(download_url, dest_path)
     dl_worker.moveToThread(thread)
@@ -145,6 +199,17 @@ class H5adWorker(QObject):
     Der Worker kennt ``morph`` und sonst nichts von der Oberflaeche; was mit dem
     Modell geschieht, entscheidet das Fenster. Fuer die Regeln zum Festhalten
     der Thread-Referenz siehe :func:`start_call`.
+
+    English: Loads **one** ``.h5ad`` and builds the morph model from it.
+
+    A separate worker for the same reason as :class:`DownloadWorker`:
+    reading ``wissensnetz/data/pancancer.h5ad`` (44 MB) plus tSNE scaling
+    takes several seconds; on the GUI thread the window would freeze
+    right when the researcher has just chosen a file.
+
+    The worker knows ``morph`` and nothing else about the UI; what
+    happens with the model is decided by the window. For the rules on
+    holding the thread reference, see :func:`start_call`.
     """
 
     finished = Signal(object, str)  # (Morphmodell | None, Fehlertext)
@@ -162,7 +227,11 @@ class H5adWorker(QObject):
 
 def start_h5ad(pfad: str, on_finished) -> tuple[QThread, H5adWorker]:
     """Wie :func:`start_call`, aber fuer das Laden einer ``.h5ad`` (siehe dort
-    fuer die Regeln zum Freigeben der Rueckgabe)."""
+    fuer die Regeln zum Freigeben der Rueckgabe).
+
+    English: Like :func:`start_call`, but for loading a ``.h5ad`` (see
+    there for the rules on releasing the return value).
+    """
     thread = QThread()
     h5_worker = H5adWorker(pfad)
     h5_worker.moveToThread(thread)
@@ -184,6 +253,14 @@ class KontextWorker(QObject):
     langsam antwortet oder gar nicht laeuft. Der Worker bekommt eine fertige
     Funktion und ruft sie nur auf — er kennt den Store so wenig wie
     :class:`SelectionWorker`.
+
+    English: Fetches the context of **one** sample from the knowledge
+    graph.
+
+    A separate thread so that a click on the map does not hang if Fuseki
+    responds slowly or is not running at all. The worker is given a
+    ready-made function and only calls it — it knows as little about the
+    store as :class:`SelectionWorker`.
     """
 
     finished = Signal(str, object, str)  # (schluessel, kontext | None, Fehlertext)
@@ -202,7 +279,11 @@ class KontextWorker(QObject):
 
 def start_kontext(schluessel: str, holen, on_finished) -> tuple[QThread, KontextWorker]:
     """Wie :func:`start_call`, aber fuer eine Kontextabfrage (siehe dort fuer
-    die Regeln zum Freigeben der Rueckgabe)."""
+    die Regeln zum Freigeben der Rueckgabe).
+
+    English: Like :func:`start_call`, but for a context lookup (see
+    there for the rules on releasing the return value).
+    """
     thread = QThread()
     kontext_worker = KontextWorker(schluessel, holen)
     kontext_worker.moveToThread(thread)

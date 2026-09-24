@@ -36,6 +36,43 @@ oder Ontologie-Anbindung andocken würde.
 Hinweis zur NCBI-Nutzungsrichtlinie: automatisierte Zugriffe sollen laut
 NCBI `tool`- und `email`-Parameter mitschicken und sind ohne `api_key` auf
 3 Anfragen/Sekunde begrenzt (siehe Docstring von `GEOWrapper.__init__`).
+
+English: Wrapper for the GEO (Gene Expression Omnibus) API — NCBI
+E-utilities.
+
+In the spirit of the mediator-wrapper pattern, this module encapsulates all
+access to one concrete data source (here: GEO via the NCBI E-utilities,
+https://www.ncbi.nlm.nih.gov/books/NBK25497/) and delivers data in a
+normalized intermediate form expected by the mediator. The transformation to
+anndata/.h5ad is deliberately NOT part of this wrapper — that is a separate,
+later step on the mediator side (see `wrappers/gdc/client.py` for the same
+principle in the first wrapper).
+
+Two-tier access pattern, analogous to the GDC wrapper, but with different
+API mechanics:
+  - Metadata tier (`query`, `search`, `get_schema`): GEO has no single JSON
+    search endpoint like GDC, but a two-step pattern: `esearch` returns a
+    paginated list of internal UIDs for a search term, `esummary` then
+    returns the actual metadata (DocumentSummary per UID). Both steps are
+    bundled here in `query()`. For field-name/schema introspection there is
+    `einfo` (instead of `_mapping` for GDC).
+  - Bulk tier (`get_ftp_link`, `download_supplementary_files`): GEO has no
+    manifest endpoint and no external bulk-download tool like `gdc-client`
+    — instead, `esummary` already delivers a direct FTP directory link
+    (`ftplink`) per hit, which can be fetched via HTTP GET.
+
+ONTOLOGY/MAPPING LAYER (later expansion stage, analogous to the GDC
+wrapper): `get_schema()` supplies the raw field tags of the GEO/NCBI API
+(e.g. "ORGN", "ACCN", "ETYP"). This list is the basis against which future
+field mappings (GEO field -> internal DataBridge schema/ontology term) are
+defined. `query`/`search` currently still return results with the original
+NCBI field names (`results`) — the translation into a unified internal
+schema is the place where a mapping table or ontology connection would dock
+in.
+
+Note on the NCBI usage policy: per NCBI, automated access should include
+`tool` and `email` parameters and is limited to 3 requests/second without an
+`api_key` (see the docstring of `GEOWrapper.__init__`).
 """
 
 from __future__ import annotations
@@ -55,6 +92,9 @@ DEFAULT_TIMEOUT = 30
 # Entrez-Datenbank für GEO-Metadaten (Series/DataSets/Samples/Platforms).
 # Andere Entrez-Datenbanken (z. B. "pubmed") sind bewusst außerhalb des
 # Testfalls dieses Wrappers.
+# EN: Entrez database for GEO metadata (series/datasets/samples/platforms).
+# Other Entrez databases (e.g. "pubmed") are deliberately outside this
+# wrapper's test case.
 GEO_DB = "gds"
 
 StrOrList = Union[str, Iterable[str]]
@@ -83,6 +123,25 @@ def build_search_term(
     zu `extra` bei `build_filters()` im GDC-Wrapper.
 
     Beispiel (Testfall Serien-Metadaten, Mensch):
+        build_search_term(organism="Homo sapiens", entry_type="gse")
+        -> 'Homo sapiens[ORGN] AND gse[ETYP]'
+
+    English: Builds an NCBI Entrez search term (`term`) for the GEO database
+    (`gds`) from simplified search parameters.
+
+    Deliberately covers only the field tags needed for the prototype (full
+    list via `GEOWrapper.get_schema()` or `einfo.fcgi?db=gds`):
+      - ACCN  – GEO accession (e.g. "GSE68849")
+      - ORGN  – organism (e.g. "Homo sapiens")
+      - ETYP  – entry type: gse (series), gds (curated dataset), gpl
+                (platform), gsm (sample). Default value "gse", analogous to
+                the GDC wrapper's default `access="open"` (a sensible
+                default instead of all entry types mixed together).
+    Further conditions can be added via `extra` (a list of raw Entrez term
+    fragments) without changing this function — analogous to `extra` in
+    `build_filters()` in the GDC wrapper.
+
+    Example (test case series metadata, human):
         build_search_term(organism="Homo sapiens", entry_type="gse")
         -> 'Homo sapiens[ORGN] AND gse[ETYP]'
     """
@@ -123,6 +182,21 @@ class GEOWrapper:
     `api_key` auf 3 Anfragen/Sekunde (siehe
     https://www.ncbi.nlm.nih.gov/books/NBK25497/). `api_key` fällt ohne
     Angabe auf die Umgebungsvariable `GEO_API_KEY` zurück, falls gesetzt.
+
+    English: Encapsulates access to GEO (Gene Expression Omnibus) for the
+    mediator.
+
+    Base URL per the NCBI E-utilities documentation:
+    https://eutils.ncbi.nlm.nih.gov/entrez/eutils (configurable via the
+    constructor parameter `base_url` — analogous to the GDC wrapper, an
+    environment variable `GEO_API_BASE_URL` would be the next step once the
+    mediator connects this wrapper, see README.md).
+
+    `tool`/`email`/`api_key`: NCBI asks automated callers to identify
+    themselves via `tool` and `email`, and limits access without an
+    `api_key` to 3 requests/second (see
+    https://www.ncbi.nlm.nih.gov/books/NBK25497/). `api_key` falls back to
+    the `GEO_API_KEY` environment variable if not given and set.
     """
 
     def __init__(
@@ -146,6 +220,10 @@ class GEOWrapper:
     def _base_params(self, params: dict) -> dict:
         """Ergänzt gemeinsame E-utilities-Parameter (Tool-/E-Mail-Kennung,
         optionaler API-Key) um jeden Request, wie von NCBI empfohlen.
+
+        English: Adds common E-utilities parameters (tool/email
+        identification, optional API key) to every request, as recommended
+        by NCBI.
         """
         merged = dict(params)
         if self.tool:
@@ -181,6 +259,18 @@ class GEOWrapper:
 
         Die Suchterm-Spezifikation selbst wird als Tier-1-Cache-Eintrag
         ("Recipe") abgelegt, wie im GDC-Wrapper.
+
+        English: Runs a paginated search against an Entrez database (default:
+        `gds`).
+
+        Two-step pattern per the NCBI E-utilities documentation: `esearch`
+        returns a list of internal UIDs for `term` (paginated via
+        `retstart`/`retmax`, named `from_`/`size` here — analogous to the
+        GDC wrapper), `esummary` then returns the DocumentSummaries. Both
+        steps are bundled here (a single endpoint call is enough for GDC).
+
+        The search-term specification itself is stored as a tier-1 cache
+        entry ("recipe"), as in the GDC wrapper.
         """
         recipe = {"term": term, "db": db, "size": size, "from": from_, "sort": sort}
         recipe_key = self.cache.recipes.key_for(recipe)
@@ -228,6 +318,10 @@ class GEOWrapper:
             # "gdstype", "entrytype", "ftplink") — Übersetzung ins interne
             # Schema ist Aufgabe der späteren Ontologie-/Mapping-Schicht,
             # analog zum GDC-Wrapper (siehe Modul-Docstring).
+            # EN: Original NCBI field names unchanged (e.g. "accession",
+            # "gdstype", "entrytype", "ftplink") — translation into the
+            # internal schema is the job of the later ontology/mapping
+            # layer, analogous to the GDC wrapper (see module docstring).
             "results": results,
         }
 
@@ -248,6 +342,15 @@ class GEOWrapper:
         `GDCWrapper.search()`s Standard `access="open"`.
 
         Beispiel: search(organism="Homo sapiens", entry_type="gse")
+
+        English: Convenience function analogous to `GDCWrapper.search()`:
+        builds a search term from simplified parameters (accession,
+        organism, entry type) and calls `query()`. Default
+        `entry_type="gse"` (series) as the most sensible default for series
+        metadata, analogous to `GDCWrapper.search()`'s default
+        `access="open"`.
+
+        Example: search(organism="Homo sapiens", entry_type="gse")
         """
         term = build_search_term(accession=accession, organism=organism, entry_type=entry_type)
         return self.query(term=term, db=db, size=size, from_=from_)
@@ -261,6 +364,14 @@ class GEOWrapper:
         Feldliste ist die Grundlage, gegen die künftige Feld-Mappings
         (GEO-Feld-Tag -> internes DataBridge-Schema/Ontologie-Begriff)
         definiert werden.
+
+        English: Fetches `einfo` for an Entrez database and returns the
+        available search field tags sorted as a list (e.g. "ACCN", "ETYP",
+        "ORGN").
+
+        Analogous to `GDCWrapper.get_schema()` (`_mapping` there): this
+        field list is the basis against which future field mappings (GEO
+        field tag -> internal DataBridge schema/ontology term) are defined.
         """
         params = self._base_params({"db": db, "retmode": "json"})
         response = self.session.get(f"{self.base_url}/einfo.fcgi", params=params, timeout=self.timeout)
@@ -268,6 +379,8 @@ class GEOWrapper:
         payload = response.json()
         # `dbinfo` ist laut NCBI-Antwort eine Liste (auch bei genau einer
         # angefragten Datenbank), keine einzelne Objekt-Struktur.
+        # EN: Per the NCBI response, `dbinfo` is a list (even for exactly
+        # one requested database), not a single object structure.
         dbinfo_list = payload.get("einforesult", {}).get("dbinfo", [])
         fields = dbinfo_list[0].get("fieldlist", []) if dbinfo_list else []
         return sorted(field["name"] for field in fields if "name" in field)
@@ -285,6 +398,15 @@ class GEOWrapper:
         (`/files?return_type=manifest`); stattdessen liefert `esummary` das
         FTP-Zielverzeichnis direkt mit. Diese Methode kapselt den dafür
         nötigen Umweg über eine Ein-Treffer-Suche nach der Accession.
+
+        English: Returns the FTP directory link for a GEO accession
+        (series-matrix and supplementary files), from the `ftplink` field of
+        the `esummary` DocumentSummary.
+
+        GEO has no standalone manifest endpoint like GDC
+        (`/files?return_type=manifest`); instead, `esummary` delivers the
+        FTP target directory directly. This method encapsulates the
+        necessary detour via a single-hit search for the accession.
         """
         result = self.search(accession=accession, entry_type=None, size=1)
         hits = result["results"]
@@ -327,6 +449,31 @@ class GEOWrapper:
         siehe cache.py) und sollten nach Verarbeitung via `purge()` wieder
         entfernt werden — wie im GDC-Wrapper nur als Hinweis, der eigentliche
         Zielpfad wird vom Aufrufer vorgegeben.
+
+        English: Downloads files from a GEO series FTP directory directly
+        via HTTP.
+
+        Unlike the GDC wrapper (`download_via_gdc_client`, external
+        `gdc-client` tool via subprocess), there is no comparable external
+        bulk-download tool for GEO — the `ftplink` address delivered by
+        `esummary` is a regular directory path also fetchable via HTTPS.
+
+        The `ftplink` base directory itself contains (verified live against
+        `ftp.ncbi.nlm.nih.gov`) no files but subfolders — `matrix/`
+        (series matrix), `miniml/`, `soft/` and `suppl/` (the actual
+        supplementary files, e.g. raw data as `.tar`/`.txt.gz`). `subdir`
+        selects this subfolder, default `"suppl"`.
+
+        Without `filenames`, the subdirectory is fetched as an HTML listing
+        and the contained file names are extracted via simple link detection
+        (no additional HTML-parser dependency — `wrappers/pyproject.toml`
+        deliberately lists only `requests`). Absolute links (e.g. the NCBI
+        footer link) and the parent-directory entry are excluded from this.
+
+        Raw data conceptually belongs in the tier-3 cache (`self.cache.raw`,
+        see cache.py) and should be removed again after processing via
+        `purge()` — as in the GDC wrapper, only a hint here, the actual
+        target path is supplied by the caller.
         """
         ftp_link = self.get_ftp_link(accession)
         if not ftp_link:
@@ -366,6 +513,12 @@ class GEOWrapper:
         Wrapper liefert strukturierte Metadaten/Rohdaten-Referenzen, die
         Transformation nach anndata ist ein separater Mediator-seitiger
         Schritt.
+
+        English: Converts a GEO response into the target format anndata/.h5ad.
+
+        Deliberately not part of this wrapper (see module docstring) — the
+        wrapper delivers structured metadata/raw-data references, the
+        transformation to anndata is a separate mediator-side step.
         """
         raise NotImplementedError(
             "Transformation nach anndata ist bewusst kein Teil des Wrappers, "

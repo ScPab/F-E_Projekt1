@@ -7,6 +7,17 @@ Repo-Root). Innerhalb von Docker Compose zeigt ``GRAPH_DB_URL`` auf
 Komponentengrenze: Dieses Paket spricht ausschließlich per HTTP/SPARQL gegen
 den ``graph-db``-Service (Apache Jena Fuseki). Es importiert keinen Code aus
 ``mediator/`` oder ``wrappers/``.
+
+English: Configuration of the wissensnetz client (Fuseki connection +
+namespaces).
+
+Everything is read from environment variables (pattern like
+``.env.example`` in the repo root). Inside Docker Compose, ``GRAPH_DB_URL``
+points to ``http://graph-db:3030`` (service name), outside to ``localhost``.
+
+Component boundary: this package talks exclusively via HTTP/SPARQL to the
+``graph-db`` service (Apache Jena Fuseki). It imports no code from
+``mediator/`` or ``wrappers/``.
 """
 
 from __future__ import annotations
@@ -15,6 +26,7 @@ import os
 from dataclasses import dataclass
 
 # --- Namespaces (identisch zur TBox databridge-core.ttl / Mediator-Mapping) ---
+# EN: --- Namespaces (identical to the TBox databridge-core.ttl / mediator mapping) ---
 DB = "http://databridge.hka/onto#"
 INSTANCE = "http://databridge.hka/instance/"
 NCIT = "http://purl.obolibrary.org/obo/NCIT_"
@@ -22,6 +34,7 @@ PROV = "http://www.w3.org/ns/prov#"
 OA = "http://www.w3.org/ns/oa#"
 
 # Für SPARQL-Abfragen wiederverwendbarer PREFIX-Block.
+# EN: Reusable PREFIX block for SPARQL queries.
 PREFIXES = f"""\
 PREFIX db:   <{DB}>
 PREFIX ncit: <{NCIT}>
@@ -35,7 +48,10 @@ PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
 
 
 def _default_base_url() -> str:
-    """Basis-URL aus ``GRAPH_DB_URL`` oder aus Host/Port zusammengesetzt."""
+    """Basis-URL aus ``GRAPH_DB_URL`` oder aus Host/Port zusammengesetzt.
+
+    English: Base URL from ``GRAPH_DB_URL`` or assembled from host/port.
+    """
     explicit = os.environ.get("GRAPH_DB_URL")
     if explicit:
         return explicit.rstrip("/")
@@ -46,7 +62,10 @@ def _default_base_url() -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    """Verbindungsparameter für den Fuseki-Store."""
+    """Verbindungsparameter für den Fuseki-Store.
+
+    English: Connection parameters for the Fuseki store.
+    """
 
     base_url: str
     dataset: str
@@ -63,6 +82,7 @@ class Settings:
         )
 
     # --- abgeleitete Endpunkt-URLs (Fuseki-Konvention) ---
+    # EN: --- derived endpoint URLs (Fuseki convention) ---
     @property
     def query_url(self) -> str:
         return f"{self.base_url}/{self.dataset}/query"
@@ -73,7 +93,10 @@ class Settings:
 
     @property
     def gsp_url(self) -> str:
-        """Graph Store Protocol-Endpunkt (Laden von Turtle)."""
+        """Graph Store Protocol-Endpunkt (Laden von Turtle).
+
+        English: Graph Store Protocol endpoint (loading Turtle).
+        """
         return f"{self.base_url}/{self.dataset}/data"
 
     @property

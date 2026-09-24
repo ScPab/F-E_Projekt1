@@ -25,6 +25,35 @@ revidieren, siehe jeweilige Funktions-Docstrings):
      ein Subset lässt sich über die Aufrufer-Ebene (Mediator-Endpoint)
      einschränken.
   4. Übergabeweg: siehe `POST /export/anndata` in app/main.py (Download-Endpoint).
+
+English: GDC expression files -> anndata/.h5ad (part 3, see
+wissensnetz/HANDOFF_anndata.md).
+
+Implements the mediator-side step that all wrapper docstrings refer to
+(`Wrapper.to_anndata()` is deliberately `NotImplementedError` there): the
+wrapper (Julian) obtains raw GDC quantification files (RNA-Seq STAR gene
+counts or miRNA-Seq quantification) + sample/case mapping, the wissensnetz
+(Marcel) supplies the clinical `obs` metadata via `enrichment.all_cases()`.
+This module builds the `anndata.AnnData` container (X/obs/var/obsm) from
+that and serializes it to `.h5ad`.
+
+Architecture decision (see HANDOFF_anndata.md, section 0): expression does
+NOT go into the wissensnetz as RDF triples, but as a matrix in the `.h5ad`
+container — the wissensnetz only supplies the semantic metadata used to
+enrich `obs`.
+
+Open points from the handoff (section 5), here with a documented default
+decision made for the first cut (the team can revise this, see the
+respective function docstrings):
+  1. obs granularity: **per sample** (not per case) — expression is measured
+     per aliquot/sample, see `build_obs`.
+  2. tSNE (`obsm`): optionally computed by the mediator itself
+     (`compute_tsne`, deliberately conservative default, see there),
+     otherwise the export only supplies X/obs/var and Oviedo/Scanpy compute
+     it themselves.
+  3. Gene scope: no default filter — all genes from the supplied files; a
+     subset can be restricted at the caller level (mediator endpoint).
+  4. Delivery method: see `POST /export/anndata` in app/main.py (download endpoint).
 """
 
 from __future__ import annotations
@@ -40,6 +69,8 @@ from wissensnetz.cohorts import cancer_code
 
 # obs-Spalten aus dem Wissensnetz (siehe HANDOFF_anndata.md, Abschnitt 3b,
 # obs-Spalten-Mapping-Tabelle) -> Key im case_context()/all_cases()-Dict.
+# EN: obs columns from the wissensnetz (see HANDOFF_anndata.md, section 3b,
+# obs column mapping table) -> key in the case_context()/all_cases() dict.
 _OBS_CASE_FIELDS: tuple[tuple[str, str], ...] = (
     ("submitter_id", "submitter_id"),
     ("project_id", "project_id"),
@@ -57,7 +88,10 @@ _OBS_CASE_FIELDS: tuple[tuple[str, str], ...] = (
 
 
 class ExpressionAssemblyError(ValueError):
-    """Rohdaten/Metadaten reichen nicht aus, um eine Matrix zusammenzubauen."""
+    """Rohdaten/Metadaten reichen nicht aus, um eine Matrix zusammenzubauen.
+
+    English: Raw data/metadata is insufficient to assemble a matrix.
+    """
 
 
 def parse_gdc_quantification_file(
@@ -85,6 +119,25 @@ def parse_gdc_quantification_file(
 
     Gibt ``{id: {"value": float, "label": str | None}}`` zurück (Reihenfolge
     wie in der Datei).
+
+    English: Reads a single GDC quantification file (TSV, possibly `.gz`).
+
+    Covers both RNA-Seq gene counts (`id_column="gene_id"`,
+    `value_column="tpm_unstranded"`, `label_column="gene_name"`) and
+    miRNA-Seq quantification (`id_column="miRNA_ID"`,
+    `value_column="reads_per_million_miRNA_mapped"`), without hardcoding the
+    format.
+
+    GDC STAR gene-counts files contain four summary rows (`N_unmapped`,
+    `N_multimapping`, `N_noFeature`, `N_ambiguous`) BEFORE the actual gene
+    rows, whose TPM/FPKM columns are empty. Instead of hardcoding an ID
+    prefix rule (e.g. "ENSG"), filtering is done generically via
+    `value_column`: rows that cannot be converted to a number there are
+    dropped. This works unchanged for miRNA files too, which have no such
+    summary rows.
+
+    Returns ``{id: {"value": float, "label": str | None}}`` (order as in the
+    file).
     """
     p = Path(path)
     compression = "gzip" if p.suffix == ".gz" else None
@@ -132,6 +185,23 @@ def assemble_matrix(
     Gibt ``(X, sample_ids, gene_ids, gene_labels)`` zurück; ``gene_labels``
     ist ``{gene_id: label}`` für die Gene, für die ein `label_column`-Wert
     gefunden wurde (Grundlage für `build_var`).
+
+    English: Builds the expression matrix ``X`` (samples x genes/miRNA) from
+    multiple quantification files.
+
+    ``sample_files``: ``{sample_id: file_path}`` — one file per sample (see
+    module docstring, sample↔case mapping comes from the wrapper/caller).
+    ``gene_ids``: optional whitelist (restrict gene scope, see open point 3
+    in the HANDOFF); without one, the union of all IDs occurring in the
+    files (sorted, for a deterministic column order).
+
+    If an ID is missing in an individual sample (e.g. because a file carries
+    a different gene set), ``0.0`` is inserted — anndata expects a dense
+    matrix without gaps.
+
+    Returns ``(X, sample_ids, gene_ids, gene_labels)``; ``gene_labels`` is
+    ``{gene_id: label}`` for the genes for which a `label_column` value was
+    found (basis for `build_var`).
     """
     if not sample_files:
         raise ExpressionAssemblyError("Keine Expressions-Dateien übergeben — keine Probe zum Zusammenbauen.")
@@ -179,6 +249,15 @@ def assemble_matrix_from_values(
 
     ``values``: ``{sample_id: {feature_id: wert}}``. Fehlt ein Feature für
     eine Probe, wird ``0.0`` eingesetzt (wie bei `assemble_matrix`).
+
+    English: Builds a dense matrix from already-prepared values (no file
+    parsing) — counterpart to `assemble_matrix()` for sources that (unlike
+    GDC) already deliver finished numeric values, e.g. cBioPortal's
+    `get_molecular_data()` or a generically parsed GEO supplementary value
+    (see app/main.py, back-mediator M9).
+
+    ``values``: ``{sample_id: {feature_id: value}}``. If a feature is
+    missing for a sample, ``0.0`` is inserted (as in `assemble_matrix`).
     """
     sample_ids = list(values.keys())
     X = np.zeros((len(sample_ids), len(feature_ids)), dtype=np.float32)
@@ -211,6 +290,24 @@ def build_obs(
     wie es ``{c["submitter_id"]: c for c in enrichment.all_cases(store)}``
     liefert. Fehlt ein Case (z. B. noch nicht im Graphen), bleiben dessen
     Spalten für die betroffene Probe ``None`` statt eines Fehlers.
+
+    English: Builds `obs` (row metadata per sample) from the wissensnetz
+    case context.
+
+    obs index = **sample** (``sample_id``), not case (open point 1 in the
+    HANDOFF, decided here: expression is measured per aliquot/sample). The
+    clinical fields are stored per case in the wissensnetz and are
+    duplicated onto every associated sample via ``sample_case_map``
+    (``sample_id -> submitter_id``, built by the caller from the GDC files
+    search) — if a case has multiple samples, they carry identical clinical
+    values, until the wissensnetz supplies a sample-granular query (see
+    HANDOFF_anndata.md, section 3c).
+
+    ``cases_by_submitter``: ``{submitter_id: case_context-like dict}``, as
+    delivered by ``{c["submitter_id"]: c for c in
+    enrichment.all_cases(store)}``. If a case is missing (e.g. not yet in
+    the graph), its columns stay ``None`` for the affected sample instead of
+    an error.
     """
     sample_types = sample_types or {}
     gdc_project_by_sample = gdc_project_by_sample or {}
@@ -225,6 +322,11 @@ def build_obs(
         # JEDE Probe nach Kohorte gefaerbt werden kann (siehe
         # wissensnetz/HANDOFF_obs_fallback.md). Reichere Klinikfelder bleiben nur
         # dort gefuellt, wo der Case im Graphen ist.
+        # EN: Fallback to the GDC files query if the case is not (yet) in
+        # the wissensnetz: project_id/cancer (and submitter_id) from GDC, so
+        # EVERY sample can be colored by cohort (see
+        # wissensnetz/HANDOFF_obs_fallback.md). Richer clinical fields stay
+        # populated only where the case is in the graph.
         if not row.get("project_id"):
             row["project_id"] = gdc_project_by_sample.get(sample_id)
         if not row.get("submitter_id"):
@@ -239,6 +341,12 @@ def build_obs(
     # Graphen -> ``None``. Fehlende Werte in String-Spalten zu "" normalisieren
     # (MP-lite behandelt "" ohnehin als fehlend); numerische Spalten (z. B.
     # age_at_diagnosis) bleiben unangetastet.
+    # EN: anndata/h5py cannot write object columns containing ``None`` as a
+    # vlen string (TypeError: Can't implicitly convert non-string objects to
+    # strings). For real GDC samples, individual clinical fields are missing
+    # or the case is not (yet) in the graph -> ``None``. Normalize missing
+    # values in string columns to "" (MP-lite treats "" as missing anyway);
+    # numeric columns (e.g. age_at_diagnosis) are left untouched.
     for col in obs.columns:
         if obs[col].dtype == object:
             obs[col] = obs[col].where(obs[col].notna(), "").astype(str)
@@ -253,6 +361,14 @@ def build_var(gene_ids: list[str], gene_labels: Optional[dict[str, str]] = None)
     fehlende Labels bleiben ``None``. Semantische Anreicherung (Gen -> GO)
     aus dem Wissensnetz ist laut HANDOFF optional/später und hier bewusst
     nicht Teil dieser ersten Ausbaustufe.
+
+    English: Builds `var` (column metadata per gene/miRNA).
+
+    ``gene_labels`` (optional, from `assemble_matrix`) fills a `symbol`
+    column (e.g. gene symbol from `gene_name`) where available; missing
+    labels stay ``None``. Semantic enrichment (gene -> GO) from the
+    wissensnetz is optional/later per the HANDOFF and deliberately not part
+    of this first iteration.
     """
     gene_labels = gene_labels or {}
     var = pd.DataFrame(
@@ -264,6 +380,11 @@ def build_var(gene_ids: list[str], gene_labels: Optional[dict[str, str]] = None)
     # objects to strings) — trifft z. B. jede Quelle ohne `gene_labels` (siehe
     # app/main.py, GEO-Best-Effort-Export). Gleiche Normalisierung wie in
     # `build_obs` (dort mit ausführlicherem Kommentar).
+    # EN: anndata/h5py cannot write an object column made up entirely of
+    # ``None`` as a vlen string (TypeError: Can't implicitly convert
+    # non-string objects to strings) — affects e.g. any source without
+    # `gene_labels` (see app/main.py, GEO best-effort export). Same
+    # normalization as in `build_obs` (with a more detailed comment there).
     if var["symbol"].dtype == object:
         var["symbol"] = var["symbol"].where(var["symbol"].notna(), "").astype(str)
     return var
@@ -278,6 +399,16 @@ def compute_tsne(X: np.ndarray, *, n_components: int = 2, random_state: int = 0)
     sklearn-Mindest-Perplexity von 5 sinnvoll nutzbar) wird ``None``
     zurückgegeben statt eines Fehlers — der Aufrufer liefert dann `X`/`obs`/
     `var` ohne `obsm` (siehe Modul-Docstring, Punkt 2, zweite Alternative).
+
+    English: Optional 2D tSNE projection (base encoding `E[0]`/`E[1]` for
+    MP-lite, see HANDOFF_anndata.md open point 2 — "Who computes the
+    tSNE?").
+
+    Requires `scikit-learn` (see mediator/environment.yml). tSNE needs
+    `perplexity < n_samples`; with too few samples (<= 3, smaller than
+    sklearn's minimum usable perplexity of 5), ``None`` is returned instead
+    of an error — the caller then supplies `X`/`obs`/`var` without `obsm`
+    (see module docstring, point 2, second alternative).
     """
     n_samples = X.shape[0]
     if n_samples <= 3:
@@ -289,6 +420,8 @@ def compute_tsne(X: np.ndarray, *, n_components: int = 2, random_state: int = 0)
 
     # sklearn verlangt perplexity < n_samples; bei kleinen Stichproben (z. B.
     # Fixtures) auf n_samples - 1 begrenzen statt einen ValueError zu riskieren.
+    # EN: sklearn requires perplexity < n_samples; for small samples (e.g.
+    # fixtures), cap at n_samples - 1 instead of risking a ValueError.
     perplexity = min(30.0, max(5.0, (n_samples - 1) / 3), n_samples - 1)
     tsne = TSNE(n_components=n_components, random_state=random_state, perplexity=perplexity, init="pca")
     return tsne.fit_transform(X)
@@ -301,7 +434,10 @@ def build_anndata(
     *,
     obsm: Optional[dict[str, np.ndarray]] = None,
 ) -> AnnData:
-    """Baut den `anndata.AnnData`-Container aus X/obs/var(/obsm)."""
+    """Baut den `anndata.AnnData`-Container aus X/obs/var(/obsm).
+
+    English: Builds the `anndata.AnnData` container from X/obs/var(/obsm).
+    """
     adata = AnnData(X=X, obs=obs, var=var)
     if obsm:
         for key, value in obsm.items():
@@ -310,7 +446,10 @@ def build_anndata(
 
 
 def write_h5ad(adata: AnnData, path: str | Path) -> Path:
-    """Serialisiert den AnnData-Container nach `.h5ad` (HDF5, von Scanpy nativ lesbar)."""
+    """Serialisiert den AnnData-Container nach `.h5ad` (HDF5, von Scanpy nativ lesbar).
+
+    English: Serializes the AnnData container to `.h5ad` (HDF5, natively readable by Scanpy).
+    """
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     adata.write_h5ad(out_path)

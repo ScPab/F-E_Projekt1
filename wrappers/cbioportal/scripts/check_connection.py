@@ -15,6 +15,24 @@ Nutzt CBIOPORTAL_API_BASE_URL aus der Umgebung, falls gesetzt, sonst den
 öffentlichen Standard https://www.cbioportal.org/api.
 
 Exit-Code 0 bei Erfolg, 1 bei Fehler (z. B. für CI/Cron nutzbar).
+
+English: Smoke test: checks whether the cBioPortal wrapper can actually
+talk to the real cBioPortal API.
+
+Not a unit test (no mocking, real network request) — deliberately a simple,
+standalone script for the quick manual/CI check "does the connection to
+cBioPortal currently work", analogous to
+wrappers/gdc/scripts/check_connection.py. Checks study search
+(list_studies), schema introspection (get_schema) and a small molecular-data
+fetch (get_molecular_data) in sequence, see wrappers/cbioportal/client.py.
+
+Invocation:
+    python wrappers/cbioportal/scripts/check_connection.py
+
+Uses CBIOPORTAL_API_BASE_URL from the environment if set, otherwise the
+public default https://www.cbioportal.org/api.
+
+Exit code 0 on success, 1 on error (e.g. usable for CI/cron).
 """
 
 from __future__ import annotations
@@ -25,6 +43,8 @@ from pathlib import Path
 
 # Läuft auch ohne vorherige `pip install -e ./wrappers` — wrappers/ wird
 # direkt auf den Pfad gelegt, damit `import cbioportal` funktioniert.
+# EN: Also runs without a prior `pip install -e ./wrappers` — wrappers/ is
+# put directly on the path so `import cbioportal` works.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from cbioportal import CBioPortalWrapper  # noqa: E402
@@ -32,6 +52,8 @@ from requests import RequestException  # noqa: E402
 
 # Öffentlich zugängliche TCGA-Beispielstudie, passend zum Testfall
 # TCGA-BRCA/TCGA-ACC der anderen Wrapper.
+# EN: Publicly accessible TCGA example study, matching the test case
+# TCGA-BRCA/TCGA-ACC of the other wrappers.
 SAMPLE_STUDY_ID = "acc_tcga"
 
 

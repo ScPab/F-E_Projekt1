@@ -5,6 +5,14 @@ gegen einen **persistenten** Store robust bleiben (andere Daten im Store — z. 
 aus früheren Läufen oder anderen Projekten — verfälschen die Ergebnismenge dann
 nicht). Das entspricht auch dem realen Zugriff: man fragt seine Teilmenge ab,
 nicht den gesamten Store.
+
+English: Task 2 — acceptance: load the sample ABox and read the expected
+cases/diagnoses.
+
+The queries are deliberately scoped to the ``TCGA-BRCA`` project, so they
+stay robust against a **persistent** store (other data in the store — e.g.
+from earlier runs or other projects — then does not skew the result set).
+This also matches real access: you query your subset, not the whole store.
 """
 
 from __future__ import annotations
@@ -50,6 +58,7 @@ def test_diagnosis_labels(loaded_store: GraphStore) -> None:
 
 def test_case_diagnosis_join(loaded_store: GraphStore) -> None:
     # Fall -> Diagnose -> Label über die ObjectProperty db:hasDiagnosis.
+    # EN: Case -> diagnosis -> label via the object property db:hasDiagnosis.
     rows = loaded_store.query(
         PREFIXES
         + f"""
@@ -68,6 +77,8 @@ def test_case_diagnosis_join(loaded_store: GraphStore) -> None:
 def test_load_turtle_into_named_graph(store: GraphStore) -> None:
     # Isoliert in einem eigenen Named Graph laden und danach wieder verwerfen,
     # damit der Test den restlichen Store nicht verunreinigt (Test-Isolation).
+    # EN: Load isolated into its own named graph and discard it again
+    # afterward, so the test does not pollute the rest of the store (test isolation).
     graph = "urn:wissensnetz:test:load-from-text"
     try:
         store.load_turtle(

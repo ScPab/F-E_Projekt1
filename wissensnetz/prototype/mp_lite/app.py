@@ -34,6 +34,46 @@ Voraussetzungen & Start: siehe ../README.md
 SPÄTER (Zielweg): dieselben Hooks gegen die echte MP-Web-Version. Diese App ist
 bewusst getrennt gehalten; sie importiert nur ``wissensnetz`` und fasst weder
 ``mediator/``/``wrappers/`` noch die eingebettete Oviedo-``demo.py`` an.
+
+English: MP-lite — prototype: a Morphing-Projections-like visualization,
+coupled directly to the wissensnetz (Bokeh server, in-process).
+
+Purpose: to demonstrate the closed loop MP ↔ wissensnetz without having to
+revive Oviedo's (2020s) original ``demo.py``. Faithful to the MP concept in
+miniature: a scatter plot with box/lasso select and — as in the original —
+**one slider per variable**. The final position is the softmax-weighted sum
+of the encodings (Σ a_i·E[i], a = softmax(10·slider)); the callback runs
+client-side (CustomJS). Base views "genes"/"miRNA", single-marker sliders
+(e.g. CA9/SAA1) and, where encodable, circular encodings of the clinical
+variables (task 5). If an expression ``.h5ad`` is present (task 9),
+"genes" is fed from the real tSNE (``obsm``) and the markers linearly from
+``X``; otherwise the base views stay synthetic. Variables without data
+appear as disabled sliders (an honest data gap, see HANDOFF.md).
+
+Layout matched exactly to Oviedo's ``demo.py`` (task 11): the plot on the
+left with title "Cancer map", toolbar on top and the cohort legend on the
+right INSIDE the plot; next to it on the right, Oviedo's 15 sliders (fixed
+order/naming), data-driven active/disabled; status, context ② and feedback
+channel ③ compactly BELOW the plot.
+
+Coupling to the wissensnetz (package ``wissensnetz``, in-process — no REST
+needed):
+  ② Enrichment:      selecting a sample → ``enrichment.case_context()``
+                     → context (project, diagnosis, …) in the side panel.
+  ③ Feedback channel: selection + hypothesis → ``feedback.write_feedback()``
+                     → named graph per user; ``list_findings()`` displays them.
+
+Prerequisites & start: see ../README.md
+  docker compose up -d graph-db
+  pip install -e "./wissensnetz[prototype]"   # bokeh, numpy, anndata
+  wissensnetz init  &&  wissensnetz load wissensnetz/data/sample/cases_brca_sample.ttl
+  bokeh serve --show wissensnetz/prototype/mp_lite/app.py
+  # Data source configurable: ENV DATABRIDGE_H5AD (path), DATABRIDGE_MARKERS (CA9,SAA1)
+
+LATER (target path): the same hooks against the real MP web version. This
+app is deliberately kept separate; it only imports ``wissensnetz`` and
+touches neither ``mediator/``/``wrappers/`` nor the embedded Oviedo
+``demo.py``.
 """
 
 from __future__ import annotations
@@ -63,6 +103,9 @@ from wissensnetz.cohorts import OVIEDO_COHORTS, cancer_code
 # encodings.py liegt neben dieser Datei und wird per Dateipfad geladen — NICHT
 # via ``import encodings``, das mit Pythons stdlib-Paket ``encodings`` (Codecs)
 # kollidieren würde. So bleibt der stdlib-Import unangetastet.
+# EN: encodings.py lives next to this file and is loaded by file path — NOT
+# via ``import encodings``, which would collide with Python's stdlib
+# ``encodings`` package (codecs). This leaves the stdlib import untouched.
 import importlib.util as _ilu
 
 _enc_spec = _ilu.spec_from_file_location(
@@ -76,6 +119,8 @@ is_encodable = _enc.is_encodable
 
 # h5ad_source.py (Aufgabe 9) ebenfalls per Dateipfad laden — konsistent mit dem
 # Bokeh-Server-Kontext, in dem der mp_lite-Ordner nicht zwingend auf sys.path liegt.
+# EN: Also load h5ad_source.py (task 9) by file path — consistent with the
+# Bokeh server context, where the mp_lite folder is not necessarily on sys.path.
 _h5_spec = _ilu.spec_from_file_location(
     "mp_lite_h5ad_source", Path(__file__).resolve().parent / "h5ad_source.py"
 )
@@ -90,6 +135,9 @@ layout = _h5.layout
 # --------------------------------------------------------------------------
 # Store bereitstellen (Fuseki). Idempotentes init + Beispiel-ABox laden, damit
 # die Anreicherung (②) für die enthaltenen Proben Kontext liefert.
+#
+# EN: Provision the store (Fuseki). Idempotent init + load the sample ABox,
+# so enrichment (②) supplies context for the contained samples.
 # --------------------------------------------------------------------------
 FIXTURE = Path(__file__).resolve().parents[2] / "data" / "sample" / "cases_brca_sample.ttl"
 
@@ -102,7 +150,7 @@ if STORE_OK:
         if FIXTURE.exists():
             store.load_turtle(FIXTURE)
         _boot_msg = f"Fuseki erreichbar · Dataset '{store.settings.dataset}' · Beispieldaten geladen."
-    except Exception as exc:  # noqa: BLE001 (Prototyp: Startfehler nur anzeigen)
+    except Exception as exc:  # noqa: BLE001 (Prototyp: Startfehler nur anzeigen) / EN: noqa: BLE001 (prototype: just display startup errors)
         STORE_OK = False
         _boot_msg = f"Fuseki erreichbar, aber Init/Load fehlgeschlagen: {exc}"
 else:
@@ -113,6 +161,11 @@ else:
 # Kohorten-Farben (Aufgabe 7): stabile Farbe je Krebsart über die Position in
 # OVIEDO_COHORTS. matplotlib-``nipy_spectral`` wie im Original, mit HSV-Fallback,
 # falls matplotlib fehlt. Unbekannte/fehlende Kohorte -> neutrales Grau.
+#
+# EN: Cohort colors (task 7): a stable color per cancer type via its
+# position in OVIEDO_COHORTS. matplotlib's ``nipy_spectral`` as in the
+# original, with an HSV fallback if matplotlib is missing. Unknown/missing
+# cohort -> neutral gray.
 # --------------------------------------------------------------------------
 GRAY = "#9E9E9E"
 
@@ -125,7 +178,7 @@ def _build_cohort_colors() -> dict[str, str]:
         from matplotlib.colors import to_hex
         cmap = colormaps["nipy_spectral"]
         return {c: to_hex(cmap((i + 0.5) / n)) for i, c in enumerate(codes)}
-    except Exception:  # noqa: BLE001 (kein matplotlib -> HSV-Fallback)
+    except Exception:  # noqa: BLE001 (kein matplotlib -> HSV-Fallback) / EN: noqa: BLE001 (no matplotlib -> HSV fallback)
         import colorsys
         out: dict[str, str] = {}
         for i, c in enumerate(codes):
@@ -142,11 +195,15 @@ def _cohort_color(code: str | None) -> str:
 
 
 def _dash(v: object) -> str:
-    """``str(v)`` wenn ``v`` einen Wert hat, sonst ``"--"`` (wie im Oviedo-Tool)."""
+    """``str(v)`` wenn ``v`` einen Wert hat, sonst ``"--"`` (wie im Oviedo-Tool).
+
+    English: ``str(v)`` if ``v`` has a value, otherwise ``"--"`` (as in the Oviedo tool).
+    """
     return str(v) if v not in (None, "") else "--"
 
 
 # Oviedo-Hover-Spalten in exakter Reihenfolge; Default überall "--".
+# EN: Oviedo hover columns in exact order; default "--" everywhere.
 _FIELDS = ("cancer", "sample_type", "race", "sex_at_birth", "ethnicity", "tumor_stage",
            "morphology", "site_biopsy", "primary_diagnosis", "has_metastasis",
            "vital_status")
@@ -157,7 +214,13 @@ def _fill_fields(fields: dict[str, list[str]], i: int, *, code: str | None,
                  morphology, site, dx, metastasis) -> None:
     """Eine Zeile der Hover-Spalten setzen. ``sample_type`` (Oviedo-Spalte 'type')
     kommt aus ``db:Sample``/``db:sampleType`` (Aufgabe 8) und bleibt "--", bis der
-    Mediator ``samples.sample_type`` mappt (HANDOFF.md, Teil 2)."""
+    Mediator ``samples.sample_type`` mappt (HANDOFF.md, Teil 2).
+
+    English: Sets one row of the hover columns. ``sample_type`` (Oviedo
+    column 'type') comes from ``db:Sample``/``db:sampleType`` (task 8) and
+    stays "--" until the mediator maps ``samples.sample_type`` (HANDOFF.md,
+    part 2).
+    """
     fields["cancer"][i] = _dash(code)
     fields["sample_type"][i] = _dash(sample_type)
     fields["race"][i] = _dash(race)
@@ -180,6 +243,16 @@ def _fill_fields(fields: dict[str, list[str]], i: int, *, code: str | None,
 #   3. sonst Synthetik-Fallback, damit die App standalone lauffähig bleibt.
 # ``.h5ad`` wird NUR gelesen; fehlt ``anndata``/die Datei, fällt es sauber (ohne
 # Crash) auf den Graph-/Synthetik-Pfad zurück.
+#
+# EN: Data-source priority (task 9):
+#   1. Expression ``.h5ad`` (mediator artifact) — points/hover from
+#      ``obs``, encodings from ``X``/``obsm`` (real morphing of the
+#      expression sliders).
+#   2. otherwise the graph (``all_cases``, task 7) — as before, expression
+#      sliders disabled.
+#   3. otherwise a synthetic fallback, so the app stays runnable standalone.
+# ``.h5ad`` is ONLY read; if ``anndata``/the file is missing, it falls
+# cleanly (without a crash) back to the graph/synthetic path.
 # --------------------------------------------------------------------------
 adata = load_h5ad()
 h5ad_points: list[dict] = []
@@ -189,15 +262,18 @@ if adata is not None:
         h5ad_points = points_from_obs(adata)
         h5ad_name = resolve_h5ad_path().name
     except Exception:  # noqa: BLE001 (Prototyp: robust -> nächster Pfad)
+        # EN: noqa: BLE001 (prototype: stay robust -> next path)
         h5ad_points = []
 H5AD_OK = bool(h5ad_points)
 
 # Graph nur befragen, wenn kein ``.h5ad`` vorliegt (Priorität 2).
+# EN: Only query the graph if no ``.h5ad`` is present (priority 2).
 real_cases: list[dict] = []
 if not H5AD_OK and STORE_OK:
     try:
         real_cases = all_cases(store)
     except Exception:  # noqa: BLE001 (Prototyp: robust -> Fallback)
+        # EN: noqa: BLE001 (prototype: stay robust -> fallback)
         real_cases = []
 
 point_codes: list[str | None]
@@ -210,6 +286,8 @@ if H5AD_OK:
     for i, p in enumerate(h5ad_points):
         # ``cancer`` (Kohorten-Code) steht direkt in ``obs``; zur Sicherheit aus
         # ``project_id`` ableiten, falls die Spalte mal fehlt.
+        # EN: ``cancer`` (cohort code) sits directly in ``obs``; derived
+        # from ``project_id`` as a safety net in case the column is ever missing.
         code = cancer_code(p.get("project_id")) or p.get("cancer")
         point_codes[i] = code
         _fill_fields(
@@ -244,6 +322,7 @@ elif real_cases:
         )
 else:
     # Fallback: 4 Fixture-Barcodes + 20 synthetische Punkte (wie bisher).
+    # EN: Fallback: 4 fixture barcodes + 20 synthetic points (as before).
     DATA_SOURCE = "Fallback: 4 Beispiel-Fälle + 20 synthetische Punkte (leerer Store)"
     IN_GRAPH = ["TCGA-A1-A0SB", "TCGA-A1-A0SD", "TCGA-A1-A0SE", "TCGA-A1-A0SH"]
     SYNTHETIC = [f"SYN-{i:04d}" for i in range(1, 21)]
@@ -255,7 +334,7 @@ else:
         for i, barcode in enumerate(IN_GRAPH):
             try:
                 ctx = case_context(store, barcode)
-            except Exception:  # noqa: BLE001 (Prototyp: robust bleiben -> "--")
+            except Exception:  # noqa: BLE001 (Prototyp: robust bleiben -> "--") / EN: noqa: BLE001 (prototype: stay robust -> "--")
                 ctx = {}
             if not ctx:
                 continue
@@ -274,6 +353,7 @@ else:
             )
 
 # Farbe je Fall nach Krebsart; vorkommende Kohorten in OVIEDO_COHORTS-Reihenfolge.
+# EN: Color per case by cancer type; cohorts present, in OVIEDO_COHORTS order.
 color = [_cohort_color(code) for code in point_codes]
 _present = {code for code in point_codes if code}
 present_cohorts = [c for c in OVIEDO_COHORTS if c in _present]
@@ -283,6 +363,11 @@ has_uncolored = any(code is None for code in point_codes)
 # ``obsm`` (Aufgabe 9), sonst synthetische Platzhalter — deterministisch, Punktzahl
 # an die echte Fallzahl N angepasst. Die eigentliche Konstruktion erfolgt weiter
 # unten (nach den Skalierungs-Konstanten CIRCLE_SCALE/BASE_WEIGHT).
+# EN: Base views "genes"/"miRNA": on the ``.h5ad`` path, the real tSNE
+# layouts from ``obsm`` (task 9), otherwise synthetic placeholders —
+# deterministic, point count matched to the real case count N. The actual
+# construction happens further below (after the scaling constants
+# CIRCLE_SCALE/BASE_WEIGHT).
 rng = np.random.default_rng(42)
 
 
@@ -294,10 +379,19 @@ rng = np.random.default_rng(42)
 # erhalten; klinische Variablen kommen — sofern encodierbar — als Kreis-Encoding
 # hinzu. Nicht encodierbare Variablen (zu wenig Daten) werden als deaktivierte
 # Slider gezeigt (ehrliche Datenlücke, siehe Div unten + HANDOFF).
+#
+# EN: Multi-variable morph engine (task 6) — mechanically like the Oviedo
+# original:
+#   final position = Σ  a_i · E[i]     with  a = softmax(SENS · slider values)
+# Each E[i] is an (N, 2) array; all are stacked into (N, 2·k) and weighted
+# client-side (CustomJS). Base views "genes"/"miRNA" (L0/L1) are kept;
+# clinical variables are added — where encodable — as a circular encoding.
+# Variables that can't be encoded (too little data) are shown as disabled
+# sliders (an honest data gap, see the Div below + HANDOFF).
 # --------------------------------------------------------------------------
-SENS = 10.0          # Sensibilitäts-Koeffizient der softmax (wie Original)
-CIRCLE_SCALE = 5.0   # Radius der Kreis-Encodings (vergleichbar mit L0/L1-Spanne)
-BASE_WEIGHT = 0.5    # Startgewicht der Basis-View E[0] (wie z[0]=0.5 im Original)
+SENS = 10.0          # Sensibilitäts-Koeffizient der softmax (wie Original) / EN: sensitivity coefficient of the softmax (as in the original)
+CIRCLE_SCALE = 5.0   # Radius der Kreis-Encodings (vergleichbar mit L0/L1-Spanne) / EN: radius of the circular encodings (comparable to the L0/L1 range)
+BASE_WEIGHT = 0.5    # Startgewicht der Basis-View E[0] (wie z[0]=0.5 im Original) / EN: initial weight of the base view E[0] (like z[0]=0.5 in the original)
 
 
 def _softmax(z: np.ndarray) -> np.ndarray:
@@ -309,7 +403,14 @@ def _scale_layout(arr: np.ndarray, target: float = CIRCLE_SCALE) -> np.ndarray:
     """tSNE-/Roh-Layout zentrieren und auf einen mit den Kreis-/Linear-Encodings
     vergleichbaren Wertebereich skalieren (max. |Koordinate| ≈ ``target``). Nötig,
     weil tSNE-Koordinaten in ganz anderen Skalen liegen als die circular/linear
-    Encodings — sonst würde das Morphen zwischen den Views optisch „springen"."""
+    Encodings — sonst würde das Morphen zwischen den Views optisch „springen".
+
+    English: Centers a tSNE/raw layout and scales it to a value range
+    comparable to the circular/linear encodings (max. |coordinate| ≈
+    ``target``). Needed because tSNE coordinates live on entirely different
+    scales than the circular/linear encodings — otherwise morphing between
+    the views would visually "jump".
+    """
     arr = np.asarray(arr, dtype=float)
     centered = arr - arr.mean(axis=0)
     peak = float(np.max(np.abs(centered))) if centered.size else 0.0
@@ -331,8 +432,25 @@ def _scale_layout(arr: np.ndarray, target: float = CIRCLE_SCALE) -> np.ndarray:
 # Original entspricht. Nur die aktiven Slider (mit E-Array) treiben die Morph-Engine
 # — in genau ihrer Reihenfolge (der CustomJS erwartet E in Slider-Reihenfolge).
 # morphology/site_biopsy sind bei Oviedo KEINE Slider (nur Hover) und fehlen hier.
+#
+# EN: Encodings + slider set exactly like Oviedo (task 11)
+# --------------------------------------------------------------------------
+# Exactly Oviedo's 15 sliders, in this order and naming (demo.py):
+#   genes, mirna, cancer, type, race, gender, ethnicity, primary_diagnosis,
+#   has_metastasis, vital_status, cancer (ver), tumor_stage (ver),
+#   miRNA-210-3p (hor), CA9 (ver), SAA1 (hor)
+# ONE deliberate deviation: Oviedo's "gender" is called "sex_at_birth" here
+# — GDC renamed the field, and it is not the same thing domain-wise (see
+# db:sexAtBirth in ontology/databridge-core.ttl).
+# A slider is only active if its encoding data is present; otherwise it is
+# shown disabled (title suffix "(no data)"), so the set visually matches
+# the original. Only the active sliders (with an E array) drive the morph
+# engine — in exactly their order (the CustomJS expects E in slider order).
+# morphology/site_biopsy are NOT sliders in Oviedo (hover only) and are
+# missing here.
 
 # Basis-Views: im .h5ad-Pfad echte tSNE aus obsm, sonst synthetisch (Fallback).
+# EN: Base views: on the .h5ad path, real tSNE from obsm, otherwise synthetic (fallback).
 if H5AD_OK:
     _g = layout(adata, "X_tsne_genes")
     _genes_E = _scale_layout(_g) if (_g is not None and _g.shape[0] == N) else None
@@ -348,14 +466,22 @@ def _missing(v: object) -> bool:
 
 
 def _circ(field_key: str):
-    """Kreis-Encoding einer klinischen obs-Spalte (None, wenn nicht encodierbar)."""
+    """Kreis-Encoding einer klinischen obs-Spalte (None, wenn nicht encodierbar).
+
+    English: Circular encoding of a clinical obs column (None if not encodable).
+    """
     vals = fields[field_key]
     return CIRCLE_SCALE * circular_encoding(vals) if is_encodable(vals) else None
 
 
 def _ordinal_codes(values) -> list:
     """Kategorie -> ganzzahliger Ordinal-Code (0..k-1, sortiert); fehlend -> None.
-    Entspricht Oviedos ``cancer#``/``tumor_stage#`` für die linearen (ver)-Encodings."""
+    Entspricht Oviedos ``cancer#``/``tumor_stage#`` für die linearen (ver)-Encodings.
+
+    English: Category -> integer ordinal code (0..k-1, sorted); missing ->
+    None. Corresponds to Oviedo's ``cancer#``/``tumor_stage#`` for the
+    linear (ver) encodings.
+    """
     classes = sorted({str(v).strip() for v in values if not _missing(v)})
     idx = {c: i for i, c in enumerate(classes)}
     return [None if _missing(v) else float(idx[str(v).strip()]) for v in values]
@@ -363,7 +489,11 @@ def _ordinal_codes(values) -> list:
 
 def _lin_ordinal(field_key: str, direction: str):
     """Lineares Encoding einer Kategorie über ihren Ordinal-Code (Oviedos ``linearEnc``
-    auf ``#``-Spalten). None, wenn nicht encodierbar."""
+    auf ``#``-Spalten). None, wenn nicht encodierbar.
+
+    English: Linear encoding of a category via its ordinal code (Oviedo's
+    ``linearEnc`` on ``#`` columns). None if not encodable.
+    """
     vals = fields[field_key]
     if not is_encodable(vals):
         return None
@@ -372,7 +502,11 @@ def _lin_ordinal(field_key: str, direction: str):
 
 def _marker_enc(symbol: str, direction: str):
     """Lineares Encoding einer Gen-/miRNA-Expressionsspalte aus ``X`` (None, wenn das
-    Symbol fehlt / keine ``.h5ad`` / konstant)."""
+    Symbol fehlt / keine ``.h5ad`` / konstant).
+
+    English: Linear encoding of a gene/miRNA expression column from ``X``
+    (None if the symbol is missing / no ``.h5ad`` / constant).
+    """
     if not H5AD_OK:
         return None
     col = marker_column(adata, symbol)
@@ -382,6 +516,7 @@ def _marker_enc(symbol: str, direction: str):
 
 
 # (Titel, Encoding-Array-oder-None, Startwert) — exakte Oviedo-Reihenfolge.
+# EN: (title, encoding-array-or-None, initial value) — exact Oviedo order.
 _SLIDER_SPECS = [
     ("genes", _genes_E, BASE_WEIGHT),
     ("mirna", _mirna_E, 0.0),
@@ -403,8 +538,8 @@ _SLIDER_SPECS = [
 encoding_names: list[str] = []
 E_arrays: list[np.ndarray] = []
 _active_init: list[float] = []
-morph_sliders: list[Slider] = []    # nur aktive Slider (treiben die Morph-Engine)
-display_sliders: list[Slider] = []  # alle 15 in Oviedo-Reihenfolge (für die Spalte)
+morph_sliders: list[Slider] = []    # nur aktive Slider (treiben die Morph-Engine) / EN: only the active sliders (drive the morph engine)
+display_sliders: list[Slider] = []  # alle 15 in Oviedo-Reihenfolge (für die Spalte) / EN: all 15 in Oviedo order (for the column)
 for _title, _E, _init in _SLIDER_SPECS:
     if _E is not None:
         sl = Slider(start=0.0, end=1.0, value=_init, step=0.01, width=200, title=_title)
@@ -419,6 +554,8 @@ for _title, _E, _init in _SLIDER_SPECS:
 
 # Sicherheitsnetz: bliebe (Extremfall) kein aktives Encoding übrig, braucht die
 # Morph-Engine trotzdem ein E. Dann „genes" synthetisch aktivieren.
+# EN: Safety net: if (in an extreme case) no active encoding were left, the
+# morph engine would still need an E. In that case, activate "genes" synthetically.
 if not E_arrays:
     sl = display_sliders[0]
     sl.disabled = False
@@ -429,10 +566,13 @@ if not E_arrays:
     encoding_names.append("genes")
     _active_init.append(BASE_WEIGHT)
 
-genes_slider = morph_sliders[0]  # erste aktive Encoding-Variable (i. d. R. „genes")
+genes_slider = morph_sliders[0]  # erste aktive Encoding-Variable (i. d. R. „genes") / EN: first active encoding variable (usually "genes")
 
 # E_stack: (N, 2·k) — je Zeile [E0x,E0y, E1x,E1y, …]; Startpositionen serverseitig
 # passend zu den Default-Slider-Werten (CustomJS feuert erst bei Änderung).
+# EN: E_stack: (N, 2·k) — per row [E0x,E0y, E1x,E1y, …]; initial positions
+# computed server-side to match the default slider values (CustomJS only
+# fires on change).
 E_stack = np.concatenate(E_arrays, axis=1)
 _a0 = _softmax(SENS * np.asarray(_active_init))
 _Epos0 = np.zeros((N, 2))
@@ -456,6 +596,11 @@ plot = figure(
     # rechts, minus ②/③-Block unten) und skaliert beim Resize mit. min_height klein
     # halten, damit der ②/③-Block darunter nicht überlappt (sonst erzwingt eine große
     # min_height den Canvas und schiebt sich über den unteren Block).
+    # EN: Responsive: the plot fills the available space (window minus the
+    # slider column on the right, minus the ②/③ block below) and scales on
+    # resize. Keep min_height small, so the ②/③ block below does not
+    # overlap (otherwise a large min_height would force the canvas and push
+    # over the block below).
     sizing_mode="stretch_both", min_width=480, min_height=160,
 )
 plot.scatter("pos_x", "pos_y", source=source, size=8, color="color",
@@ -465,6 +610,11 @@ plot.scatter("pos_x", "pos_y", source=source, size=8, color="color",
 # Kohorte (in OVIEDO_COHORTS-Reihenfolge) ein Eintrag mit COHORT_COLORS. Als Träger
 # der Farb-Swatches dienen leere Dummy-Glyphen (stören das Morphen nicht; das echte
 # Scatter oben trägt die Farbe schon per Punkt).
+# EN: Cohort legend INSIDE the plot (right) — as in the Oviedo screenshot:
+# one entry per present cohort (in OVIEDO_COHORTS order) with
+# COHORT_COLORS. Empty dummy glyphs carry the color swatches (they don't
+# interfere with morphing; the real scatter above already carries the
+# color per point).
 for _c in present_cohorts:
     plot.scatter(x=[], y=[], marker="circle", size=8, fill_alpha=0.8,
                  fill_color=COHORT_COLORS[_c], line_color="#333333", legend_label=_c)
@@ -481,9 +631,10 @@ if plot.legend:
     _lg.glyph_height = 13
     _lg.glyph_width = 13
     _lg.label_height = 13
-    plot.add_layout(_lg, "right")   # Legende rechts aus dem Plot legen
+    plot.add_layout(_lg, "right")   # Legende rechts aus dem Plot legen / EN: place the legend on the right, outside the plot
 
 # Hover = volle Oviedo-MP-Feldliste in exakter Reihenfolge (fehlend -> "--").
+# EN: Hover = full Oviedo MP field list in exact order (missing -> "--").
 _hover_fields = [
     ("Sample", "@tumor"), ("cancer", "@cancer"), ("type", "@sample_type"),
     ("race", "@race"), ("sex_at_birth", "@sex_at_birth"), ("ethnicity", "@ethnicity"),
@@ -506,6 +657,20 @@ _tt = "".join(f"<b>{lbl}:</b> {ref}<br>" for lbl, ref in _hover_fields)
 # sobald er entsteht. DOM-Struktur/-Selektor live an Bokeh 3.10 verifiziert:
 # ``.bk-tooltip-content > div (Wrapper) > div (je Treffer)`` — alle außer dem ersten
 # ausblenden. Einzelne Punkte zeigen weiter alle Felder.
+#
+# EN: Task 12 — for overlapping points, show only the TOPMOST sample in the
+# hover. Bokeh's HoverTool renders one tooltip block per hit point; if
+# multiple samples sit at (almost) the same encoding position (typical with
+# an active categorical slider, where all samples of a class fall on the
+# same circle point), they stack up. Oviedo's trick (a <style> block INSIDE
+# the tooltip HTML) does NOT work in Bokeh 3.10: Bokeh strips <style> out
+# of the tooltip string, and the tooltip lives in its own shadow DOM
+# (``div.bk-Tooltip`` directly on <body>), which document/plot CSS cannot
+# reach. That's why a small MutationObserver (installed once on load via
+# DocumentReady) injects the matching CSS into every tooltip's shadow root
+# as soon as it is created. DOM structure/selector verified live against
+# Bokeh 3.10: ``.bk-tooltip-content > div (wrapper) > div (per hit)`` —
+# hide all but the first. Individual points still show all fields.
 _only_first_tooltip = CustomJS(code=r"""
   if (window.__mp_only_first_tooltip) return;
   window.__mp_only_first_tooltip = true;
@@ -535,6 +700,8 @@ curdoc().js_on_event(DocumentReady, _only_first_tooltip)
 
 # --------------------------------------------------------------------------
 # Widgets (② Kontext + ③ Rückkanal + Status) — die Morph-Slider sind oben erzeugt.
+# EN: Widgets (② context + ③ feedback channel + status) — the morph sliders
+# were created above.
 # --------------------------------------------------------------------------
 conf = Slider(start=0.0, end=1.0, value=0.7, step=0.05, width=240, title="Konfidenz")
 user_in = TextInput(title="Nutzer", value="marcel", width=240)
@@ -553,6 +720,7 @@ findings_div = Div(text="", width=360)
 
 # --------------------------------------------------------------------------
 # ② Anreicherung: Selektion → case_context
+# EN: ② Enrichment: selection → case_context
 # --------------------------------------------------------------------------
 def _render_context(barcode: str) -> str:
     if not STORE_OK:
@@ -591,15 +759,21 @@ source.selected.on_change("indices", on_select)
 # Morph-Callback (client-seitig via CustomJS, für flüssige Interaktion):
 #   a = softmax(SENS · slider_werte);  pos[j] = Σ_i a_i · E[j][2i .. 2i+1]
 # Läuft im Browser, kein Server-Roundtrip pro Slider-Tick.
+#
+# EN: Morph callback (client-side via CustomJS, for smooth interaction):
+#   a = softmax(SENS · slider values);  pos[j] = Σ_i a_i · E[j][2i .. 2i+1]
+# Runs in the browser, no server round-trip per slider tick.
 # --------------------------------------------------------------------------
 morph_cb = CustomJS(args=dict(source=source, s=morph_sliders, sens=SENS), code="""
   // Slider-Werte -> softmax-Gewichte a (Sensibilität sens)
+  // EN: Slider values -> softmax weights a (sensitivity sens)
   const z = s.map(w => w.value * sens);
   const ez = z.map(v => Math.exp(v));
   const sum_ez = ez.reduce((acc, v) => acc + v, 0);
   const a = ez.map(v => v / sum_ez);
 
   // gewichtete Summe der Encodings E (je Zeile [E0x,E0y, E1x,E1y, …])
+  // EN: weighted sum of the encodings E (per row [E0x,E0y, E1x,E1y, …])
   const E = source.data['E'];
   const n = E.length;
   const px = new Array(n);
@@ -623,6 +797,7 @@ for _slider in morph_sliders:
 
 # --------------------------------------------------------------------------
 # ③ Rückkanal: Selektion + Hypothese → write_feedback
+# EN: ③ Feedback channel: selection + hypothesis → write_feedback
 # --------------------------------------------------------------------------
 def on_save():
     if not STORE_OK:
@@ -677,12 +852,22 @@ _refresh_findings()
 # Layout (Aufgabe 11): wie Oviedo — links Plot (Titel „Cancer map", Toolbar oben,
 # Kohorten-Legende rechts im Plot), rechts die schlanke Slider-Spalte. Darunter
 # kompakt: Status + ② Kontext + ③ Rückkanal (nicht mehr die dominante Sidebar).
+#
+# EN: Layout (task 11): like Oviedo — plot on the left (title "Cancer map",
+# toolbar on top, cohort legend inside the plot on the right), the slim
+# slider column on the right. Below, compact: status + ② context + ③
+# feedback channel (no longer the dominant sidebar).
 # --------------------------------------------------------------------------
 # Responsives Layout: der Plot füllt das Fenster (minus Slider-Spalte rechts) und
 # skaliert beim Resize; die Slider-Spalte behält ihre feste Breite ganz rechts, der
 # ②/③-Block bleibt in natürlicher Höhe darunter.
 # Slider-Spalte: feste Breite ganz rechts; volle Zeilenhöhe, bei vielen Sliders
 # intern scrollbar (statt die Zeile in die Höhe zu zwingen).
+# EN: Responsive layout: the plot fills the window (minus the slider column
+# on the right) and scales on resize; the slider column keeps its fixed
+# width on the far right, the ②/③ block stays at natural height below it.
+# Slider column: fixed width on the far right; full row height, internally
+# scrollable with many sliders (instead of forcing the row's height).
 slider_col = column(*display_sliders, width=230, sizing_mode="stretch_height",
                     styles={"overflow-y": "auto"})
 main_row = row(plot, slider_col, sizing_mode="stretch_both")
@@ -690,6 +875,9 @@ main_row = row(plot, slider_col, sizing_mode="stretch_both")
 # ②/③ + Status KOMPAKT (horizontal, Eingaben in Zeilen), damit der Plot oben
 # möglichst viel Höhe behält (der Block bestimmt sonst über seine natürliche Höhe,
 # wie wenig Platz dem Plot bleibt).
+# EN: ②/③ + status COMPACT (horizontal, inputs in rows), so the plot above
+# keeps as much height as possible (otherwise the block's natural height
+# determines how little space is left for the plot).
 context_panel = column(Div(text="<b>② Kontext</b>", width=320), ctx_div, width=340)
 feedback_panel = column(
     Div(text="<b>③ Erkenntnis speichern</b>", width=500),
@@ -708,6 +896,11 @@ bottom = column(
 # Browserfenster (X-Achse über die volle Breite, minus Slider-Spalte); der Feedback-
 # Block (②/③ + Status) liegt DARUNTER und wird beim Runterscrollen sichtbar. So ist
 # das Diagramm maximal groß, ohne dass der Feedback-Block Höhe wegnimmt.
+# EN: Two roots: the plot+slider area (main_row, stretch_both) fills the
+# entire browser window (x-axis across the full width, minus the slider
+# column); the feedback block (②/③ + status) sits BELOW it and becomes
+# visible on scroll-down. This keeps the chart maximally large without the
+# feedback block eating into its height.
 curdoc().add_root(main_row)
 curdoc().add_root(bottom)
 curdoc().title = "MP-lite × Wissensnetz (Prototyp)"
