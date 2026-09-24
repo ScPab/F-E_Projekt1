@@ -93,7 +93,14 @@ ARCH_PULS_LAENGE = 48        # Laenge des wandernden Stuecks in Szeneneinheiten
 ARCH_PULS_BREITE = 3         # Strichstaerke
 ARCH_PULS_TEMPO = 150.0      # Einheiten je Sekunde
 ARCH_PULS_SCHEIN = 3         # so viele Lagen Schein unter der Linie
+ARCH_PULS_SCHWEIF = 7        # so viele Glieder hat der Schweif hinter dem Kopf
 ARCH_TAKT_MS = 40            # Bildtakt der Animation (25 Bilder je Sekunde)
+ARCH_PRO_ZEILE = 3           # so viele Stationen stehen nebeneinander
+ARCH_ZEILEN_ABSTAND = 58     # senkrechter Abstand zwischen den beiden Zeilen
+# Die Pfeile bewusst in Textfarbe statt in BORDER: in BORDER (dem Ton fuer
+# Rahmen von Eingabefeldern) waren sie auf hellem Grund kaum zu sehen.
+ARCH_PFEIL = TEXT
+ARCH_PFEIL_BREITE = 2
 ARCH_GAP = 26                # Abstand zwischen zwei Stationen (Platz fuer den Pfeil)
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als

@@ -153,11 +153,14 @@ class _Kasten(QGraphicsItem):
         self.update()
 
     def _male_laufschrift(self, painter: QPainter) -> None:
-        """Ein leuchtendes Stueck, das am Rand entlangwandert.
+        """Ein Lichtschweif, der am Rand entlangwandert.
 
-        Umgesetzt ueber ein Strichmuster mit wanderndem Versatz: ein kurzes
-        "an", eine sehr lange Luecke — sichtbar ist damit immer genau ein
-        Stueck. Darunter liegen ein paar breitere, blassere Lagen als Schein.
+        Aufbau wie in der Vorlage: ein heller Kopf, dahinter ein weich
+        auslaufender Schweif, darunter breitere und blassere Lagen als Schein.
+        Umgesetzt ueber ein Strichmuster mit wanderndem Versatz — kurzes "an",
+        sehr lange Luecke, also immer genau ein sichtbares Stueck; der Schweif
+        sind mehrere solche Stuecke mit wachsendem Rueckstand und fallender
+        Deckkraft.
         """
         feld = QRectF(0, 0, theme.ARCH_BOX_WIDTH,
                       theme.ARCH_BOX_HEIGHT).adjusted(1, 1, -1, -1)
@@ -169,17 +172,24 @@ class _Kasten(QGraphicsItem):
         # Das Strichmuster rechnet in Vielfachen der Strichstaerke.
         an = theme.ARCH_PULS_LAENGE / breite
         aus = umfang / breite
-        versatz = (self._phase % 1.0) * (an + aus)
+        takt = an + aus
+        kopf = (self._phase % 1.0) * takt
 
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        for lage in range(theme.ARCH_PULS_SCHEIN, 0, -1):
-            stift = QPen(theme.mit_deckkraft(theme.ACCENT, 0.9 / (lage * lage)))
-            stift.setWidthF(breite * lage)
-            stift.setCapStyle(Qt.PenCapStyle.RoundCap)
-            stift.setDashPattern([an, aus])
-            stift.setDashOffset(versatz)
-            painter.setPen(stift)
-            painter.drawPath(pfad)
+        glieder = max(1, theme.ARCH_PULS_SCHWEIF)
+        for glied in range(glieder, 0, -1):
+            # Je weiter hinten, desto blasser und desto weiter zurueck.
+            anteil = glied / glieder
+            versatz = kopf - (glied - 1) * an * 0.55
+            for lage in range(theme.ARCH_PULS_SCHEIN, 0, -1):
+                deckung = (1.0 - anteil * 0.85) * 0.9 / (lage * lage)
+                stift = QPen(theme.mit_deckkraft(theme.ACCENT, deckung))
+                stift.setWidthF(breite * lage)
+                stift.setCapStyle(Qt.PenCapStyle.RoundCap)
+                stift.setDashPattern([an, aus])
+                stift.setDashOffset(versatz)
+                painter.setPen(stift)
+                painter.drawPath(pfad)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:  # noqa: D102
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -278,22 +288,35 @@ class ArchitekturView(QGraphicsView):
         szene = self.scene()
         szene.clear()
 
+        # Zwei Zeilen: erst der Weg zur Datenquelle, dann der Weg ins
+        # Wissensnetz. Nebeneinander waeren sechs Kaesten so schmal, dass die
+        # Beschriftung wieder abgeschnitten wuerde.
         breite = theme.ARCH_BOX_WIDTH
         abstand = theme.ARCH_GAP
+        je_zeile = max(1, theme.ARCH_PRO_ZEILE)
+        hoehe = theme.ARCH_BOX_HEIGHT + theme.ARCH_ZEILEN_ABSTAND
+
         kaesten = []
         for i, station in enumerate(self._ablauf.stationen):
             kasten = _Kasten(station)
-            kasten.setPos(i * (breite + abstand), 0)
+            kasten.setPos((i % je_zeile) * (breite + abstand),
+                          (i // je_zeile) * hoehe)
             szene.addItem(kasten)
             kaesten.append(kasten)
 
-        for links, rechts in zip(kaesten, kaesten[1:]):
-            self._male_pfeil(links, rechts)
+        for i, (links, rechts) in enumerate(zip(kaesten, kaesten[1:])):
+            if (i + 1) % je_zeile == 0:
+                # Zeilenwechsel: eine Kurve vom Ende der Zeile zum Anfang der
+                # naechsten, damit der Weg nicht abreisst.
+                self._male_zeilenwechsel(links, rechts)
+            else:
+                self._male_pfeil(links, rechts)
 
         if self._ablauf.ueberschrift:
             etikett = szene.addText(self._ablauf.ueberschrift)
             etikett.setDefaultTextColor(theme.qcolor(theme.TEXT_MUTED))
-            etikett.setPos(0, theme.ARCH_BOX_HEIGHT + 12)
+            etikett.setPos(0, ((len(kaesten) - 1) // je_zeile) * hoehe
+                           + theme.ARCH_BOX_HEIGHT + 10)
 
         szene.setSceneRect(szene.itemsBoundingRect().adjusted(-8, -8, 8, 8))
         self._einpassen()
@@ -307,22 +330,56 @@ class ArchitekturView(QGraphicsView):
         else:
             self._takt.stop()
 
-    def _male_pfeil(self, links: _Kasten, rechts: _Kasten) -> None:
-        """Waagerechter Pfeil von Kasten zu Kasten."""
-        y = theme.ARCH_BOX_HEIGHT / 2
-        x1 = links.pos().x() + theme.ARCH_BOX_WIDTH
-        x2 = rechts.pos().x()
-        stift = QPen(theme.qcolor(theme.BORDER), theme.BORDER_WIDTH)
-        linie = self.scene().addLine(x1 + 2, y, x2 - 6, y, stift)
-        linie.setZValue(-1)
+    def _stift(self) -> QPen:
+        """Der Strich der Pfeile — in Textfarbe, damit man sie sieht."""
+        stift = QPen(theme.qcolor(theme.ARCH_PFEIL), theme.ARCH_PFEIL_BREITE)
+        stift.setCapStyle(Qt.PenCapStyle.RoundCap)
+        return stift
 
-        spitze = QPainterPath(QPointF(x2 - 2, y))
-        spitze.lineTo(x2 - 8, y - 4)
-        spitze.lineTo(x2 - 8, y + 4)
+    def _male_spitze(self, an: QPointF, richtung: str) -> None:
+        """Pfeilspitze an einem Punkt; ``richtung`` ist "rechts" oder "unten"."""
+        laenge, halb = 9.0, 4.5
+        spitze = QPainterPath(an)
+        if richtung == "rechts":
+            spitze.lineTo(an.x() - laenge, an.y() - halb)
+            spitze.lineTo(an.x() - laenge, an.y() + halb)
+        else:
+            spitze.lineTo(an.x() - halb, an.y() - laenge)
+            spitze.lineTo(an.x() + halb, an.y() - laenge)
         spitze.closeSubpath()
         kopf = self.scene().addPath(spitze, QPen(Qt.PenStyle.NoPen),
-                                    QBrush(theme.qcolor(theme.BORDER)))
+                                    QBrush(theme.qcolor(theme.ARCH_PFEIL)))
         kopf.setZValue(-1)
+
+    def _male_pfeil(self, links: _Kasten, rechts: _Kasten) -> None:
+        """Waagerechter Pfeil von Kasten zu Kasten."""
+        y = links.pos().y() + theme.ARCH_BOX_HEIGHT / 2
+        x1 = links.pos().x() + theme.ARCH_BOX_WIDTH
+        x2 = rechts.pos().x()
+        linie = self.scene().addLine(x1 + 3, y, x2 - 9, y, self._stift())
+        linie.setZValue(-1)
+        self._male_spitze(QPointF(x2 - 3, y), "rechts")
+
+    def _male_zeilenwechsel(self, links: _Kasten, rechts: _Kasten) -> None:
+        """Kurve vom Ende einer Zeile zum Anfang der naechsten.
+
+        Unten aus dem letzten Kasten heraus, quer zurueck und oben in den
+        ersten der naechsten Zeile hinein — so bleibt sichtbar, dass es
+        derselbe Weg ist und nicht zwei getrennte Ketten.
+        """
+        start = QPointF(links.pos().x() + theme.ARCH_BOX_WIDTH / 2,
+                        links.pos().y() + theme.ARCH_BOX_HEIGHT + 3)
+        ende = QPointF(rechts.pos().x() + theme.ARCH_BOX_WIDTH / 2,
+                       rechts.pos().y() - 9)
+        mitte = (start.y() + ende.y()) / 2
+        pfad = QPainterPath(start)
+        # Der zweite Kontrollpunkt liegt senkrecht ueber dem Ziel, damit die
+        # Kurve von oben einlaeuft und die Spitze in ihre Richtung zeigt.
+        pfad.cubicTo(QPointF(start.x(), mitte),
+                     QPointF(ende.x(), ende.y() - 24), ende)
+        kurve = self.scene().addPath(pfad, self._stift())
+        kurve.setZValue(-1)
+        self._male_spitze(QPointF(ende.x(), ende.y() + 6), "unten")
 
     def _einpassen(self) -> None:
         rechteck = self.scene().sceneRect()

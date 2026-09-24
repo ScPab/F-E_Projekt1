@@ -295,9 +295,12 @@ sind bewusst nicht Teil dieser Fassung.
 ## Architekturansicht
 
 Unter der Anzeigefläche stehen zwei Schaltflächen, **Architektur** und **Textausgabe**.
-Standard ist die Architektur: eine Kette aus sechs Stationen, die zeigt, was beim
-Abschicken der Reihe nach passiert — Auswahl → JSON, Mediator, Wrapper und Datenquelle,
-GDC-JSON → RDF, graph-db (Fuseki), Wissensnetz. Die Stationen folgen
+Standard ist die Architektur: eine Kette aus sechs Stationen in **zwei Zeilen**, die zeigt,
+was beim Abschicken der Reihe nach passiert — oben der Weg zur Datenquelle (Auswahl → JSON,
+Mediator, Wrapper und Datenquelle), unten der Weg ins Wissensnetz (GDC-JSON → RDF, graph-db
+(Fuseki), Wissensnetz). Eine Kurve verbindet das Ende der oberen mit dem Anfang der unteren
+Zeile, damit sichtbar bleibt, dass es derselbe Weg ist. Die Pfeile sind in Textfarbe statt
+im hellen Rahmenton — darin waren sie kaum zu sehen. Die Stationen folgen
 `docs/DataBridge_Architektur.drawio`; gerendert wird das Bild nicht, sondern dieselbe Kette
 neu gezeichnet — eine `.drawio` ist XML für einen Editor, kein Format, aus dem man Zustände
 lebendig machen kann. (Das Diagramm ist vom 31.08. und an zwei Stellen überholt: `anndata`
@@ -305,7 +308,8 @@ und der Rückkanal stehen dort als „geplant", anndata läuft inzwischen.)
 
 Jede Station trägt ein gezeichnetes Symbol — Dokument, Dienst, Wolke, RDF-Tripel,
 Zylinder, Netz — und ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. An
-einer laufenden Station wandert eine leuchtende Linie am Rand entlang. Das ist bewusst
+einer laufenden Station wandert ein Lichtschweif am Rand entlang: ein heller Kopf, dahinter
+ein weich auslaufender Schweif, darunter breitere und blassere Lagen als Schein. Das ist bewusst
 **kein Fortschrittsbalken**: die Oberfläche weiß nicht, wie weit der Mediator ist, und ein
 Balken würde genau das behaupten — die umlaufende Linie sagt „hier passiert etwas", ohne zu
 lügen. Der Takt läuft nur, solange wirklich etwas läuft; im Ruhezustand kostet die Ansicht
