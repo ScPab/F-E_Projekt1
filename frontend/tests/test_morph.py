@@ -207,3 +207,82 @@ def test_meldung_nennt_die_probenzahl_als_grund() -> None:
 def test_meldung_bleibt_knapp_bei_genug_proben() -> None:
     assert morph.text_ohne_layout(200) == morph.TEXT_OHNE_LAYOUT
     assert morph.text_ohne_layout(0) == morph.TEXT_OHNE_LAYOUT
+
+
+# --- Hover-Text --------------------------------------------------------------
+def test_hover_text_haelt_oviedos_feldreihenfolge() -> None:
+    zeile = {"tumor": "TCGA-ZZ-0001", "cancer": "BRCA", "sample_type": "Primary Tumor",
+             "race": "white", "sex_at_birth": "female", "ethnicity": "not reported",
+             "tumor_stage": "stage i", "morphology": "8500/3",
+             "site_of_resection_or_biopsy": "Breast", "primary_diagnosis": "Duct",
+             "has_metastasis": "no", "vital_status": "Alive"}
+    zeilen = morph.hover_text(zeile).splitlines()
+    assert zeilen[0] == "Sample: TCGA-ZZ-0001"
+    assert [z.split(":")[0] for z in zeilen[1:]] == list(morph.HOVER_FELDER)
+
+
+def test_hover_text_zeigt_luecken_als_strich() -> None:
+    """Eine fehlende Zeile saehe aus wie ein Feld, das es nicht gibt — die
+    Luecke ist aber eine Aussage ueber die Daten."""
+    text = morph.hover_text({"tumor": "TCGA-ZZ-0002", "cancer": "ACC"})
+    assert "sex_at_birth: --" in text
+    assert len(text.splitlines()) == 1 + len(morph.HOVER_FELDER)
+
+
+def test_hover_text_faellt_auf_die_sample_id_zurueck() -> None:
+    assert morph.hover_text({"sample_id": "s7"}).startswith("Sample: s7")
+
+
+def test_hover_text_behandelt_leere_zeichenketten_wie_fehlend() -> None:
+    assert "race: --" in morph.hover_text({"tumor": "x", "race": "  "})
+
+
+# --- Auftrag aus einer fertigen Datei ----------------------------------------
+PANEL_ATTRIBUTE = [
+    "sex_at_birth", "race", "ethnicity", "vital_status", "primary_diagnosis",
+    "age_at_diagnosis", "morphology", "site_of_resection_or_biopsy",
+    "tumor_stage", "has_metastasis", "sample_type",
+]
+
+
+def _modell(punkte, spalten):
+    return morph.Morphmodell(punkte=punkte, obs_spalten=spalten,
+                             dateiname="test.h5ad")
+
+
+def test_auftrag_liest_kohorten_und_proben_je_kohorte() -> None:
+    punkte = ([{"project_id": "TCGA-BRCA"}] * 20
+              + [{"project_id": "TCGA-LUAD"}] * 12)
+    auftrag = morph.auftrag_aus_modell(_modell(punkte, ["race"]), PANEL_ATTRIBUTE)
+    assert auftrag["cohorts"] == ["TCGA-BRCA", "TCGA-LUAD"]
+    # size ist die groesste Fallzahl je Kohorte - der Mediator holt size je Kohorte.
+    assert auftrag["size"] == 20
+    assert auftrag["proben"] == 32
+
+
+def test_auftrag_nimmt_nur_belegte_spalten_als_attribute() -> None:
+    """Der Mediator legt immer alle Spalten an; nur die angefragten sind gefuellt."""
+    modell = _modell([{"project_id": "TCGA-BRCA"}],
+                     ["submitter_id", "project_id", "race", "tumor_stage"])
+    auftrag = morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)
+    assert auftrag["attributes"] == ["race", "tumor_stage"]
+
+
+def test_auftrag_haelt_die_panel_reihenfolge() -> None:
+    modell = _modell([{"project_id": "TCGA-BRCA"}], ["tumor_stage", "race"])
+    assert morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)["attributes"] == [
+        "race", "tumor_stage",
+    ]
+
+
+def test_auftrag_uebersetzt_das_alte_feld_gender() -> None:
+    """Aeltere Dateien tragen noch Oviedos/GDCs alten Spaltennamen."""
+    modell = _modell([{"project_id": "TCGA-BRCA"}], ["gender"])
+    assert morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)["attributes"] == [
+        "sex_at_birth",
+    ]
+
+
+def test_auftrag_aus_leerem_modell_ist_leer() -> None:
+    auftrag = morph.auftrag_aus_modell(_modell([], []), PANEL_ATTRIBUTE)
+    assert auftrag == {"cohorts": [], "attributes": [], "size": 0, "proben": 0}

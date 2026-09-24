@@ -176,6 +176,22 @@ Zwei leere Zustände, die Verschiedenes bedeuten und deshalb verschieden aussehe
   blockiert nichts — `Vorschau` und `Generieren` sprechen mit dem Mediator, nicht mit
   Fuseki.
 
+**Eine fertige `.h5ad` bringt ihren Auftrag zurück.** Über `Auftrag aus .h5ad …` links
+über dem Netz lässt sich eine früher erzeugte Datei öffnen; die Oberfläche stellt daraus
+die Auswahl wieder her und zeichnet das Netz dazu. Das ist eine **Rekonstruktion, keine
+Aufzeichnung**: die Datei führt den Auftrag nicht mit (`uns` ist leer), er wird aus den
+Daten abgeleitet —
+
+| woraus | wie verlässlich |
+| --- | --- |
+| Kohorten aus `obs["project_id"]` | verlässlich |
+| Attribute aus den belegten `obs`-Spalten | ein angefragtes Attribut, das für **jede** Probe leer blieb, ist von einem nie angefragten nicht zu unterscheiden und fehlt |
+| `Proben` aus der größten Fallzahl je Kohorte | verlässlich, solange nicht nachträglich gefiltert wurde |
+| Datenquelle | steht nicht in der Datei und bleibt unangetastet |
+
+Ältere Dateien tragen noch die Spalte `gender`; sie wird auf `sex_at_birth` gezogen. Die
+Statuszeile nennt nach dem Lesen, was gesetzt wurde und was nicht.
+
 Aktualisiert wird beim Start, nach jedem Aufruf und über **`Ansicht > Netz aktualisieren`
 (F5)** — nötig, weil der Store sich auch ohne diese Oberfläche ändert, etwa durch
 `scripts/run_selection.py` oder `start_all.ps1 -FullLoad`. Rechts in der Statusleiste steht
@@ -254,6 +270,15 @@ Ein Regler ist ebenso deaktiviert, wenn seine Variable nicht encodierbar ist. Er
 `nur ein Wert vorhanden` oder `Marker nicht in var` — ehrliche Lücke statt unsichtbarer
 Grenze, dieselbe Regel wie bei ENA und GEO im Auswahlpanel.
 
+**Beim Schweben über einen Punkt** stehen dessen Werte im Tooltip — Sample, Kohorte,
+Probentyp, race, sex_at_birth, ethnicity, tumor_stage, morphology,
+site_of_resection_or_biopsy, primary_diagnosis, has_metastasis, vital_status, in genau
+dieser Reihenfolge wie im Original. Fehlende Werte stehen als `--` da und werden **nicht**
+weggelassen: eine Lücke ist eine Aussage über die Daten, eine fehlende Zeile sähe aus wie
+ein Feld, das es nicht gibt. Der Punkt unter der Maus wird dabei größer und bekommt einen
+Rand in der Akzentfarbe. Ein **Fadenkreuz** folgt der Maus innerhalb der Karte und
+verschwindet, sobald man sie verlässt.
+
 **Klick auf einen Punkt** holt den Kontext dieser Probe aus dem Wissensnetz
 (`enrichment.case_context`, im eigenen Prozess, kein Endpunkt im Mediator) und zeigt ihn
 unter der Karte. Der Schlüssel ist `obs["submitter_id"]` gegen `db:submitterId`. Zwei
@@ -267,6 +292,58 @@ ausgewählte Punkte bekommen einen Rand in der Akzentfarbe, die Füllung bleibt 
 Kohortenfarbe. Klick daneben hebt die Auswahl auf. Lasso und Rückkanal (`write_feedback`)
 sind bewusst nicht Teil dieser Fassung.
 
+## Architekturansicht
+
+Unter der Anzeigefläche stehen zwei Schaltflächen, **Architektur** und **Textausgabe**.
+Standard ist die Architektur: eine Kette aus sechs Stationen in **zwei Zeilen**, die zeigt,
+was beim Abschicken der Reihe nach passiert — oben der Weg zur Datenquelle (Auswahl → JSON,
+Mediator, Wrapper und Datenquelle), unten der Weg ins Wissensnetz (GDC-JSON → RDF, graph-db
+(Fuseki), Wissensnetz). Ein abgewinkelter Pfeil — runter, quer, wieder runter, mit kleiner
+Verrundung an den Ecken — verbindet das Ende der oberen mit dem Anfang der unteren Zeile,
+damit sichtbar bleibt, dass es derselbe Weg ist. Die Pfeile sind in Textfarbe statt
+im hellen Rahmenton — darin waren sie kaum zu sehen. Die Stationen folgen
+`docs/DataBridge_Architektur.drawio`; gerendert wird das Bild nicht, sondern dieselbe Kette
+neu gezeichnet — eine `.drawio` ist XML für einen Editor, kein Format, aus dem man Zustände
+lebendig machen kann. (Das Diagramm ist vom 31.08. und an zwei Stellen überholt: `anndata`
+und der Rückkanal stehen dort als „geplant", anndata läuft inzwischen.)
+
+Jede Station trägt ein gezeichnetes Symbol — Dokument, Dienst, Wolke, RDF-Tripel,
+Zylinder, Netz — und ihre Farbe: wartet, **läuft**, ok, fehlgeschlagen, übersprungen. An
+einer laufenden Station wandert ein Lichtschweif am Rand entlang: ein heller Kopf, dahinter
+ein weich auslaufender Schweif, darunter breitere und blassere Lagen als Schein. Das ist bewusst
+**kein Fortschrittsbalken**: die Oberfläche weiß nicht, wie weit der Mediator ist, und ein
+Balken würde genau das behaupten — die umlaufende Linie sagt „hier passiert etwas", ohne zu
+lügen. Der Takt läuft nur, solange wirklich etwas läuft; im Ruhezustand kostet die Ansicht
+nichts. Die
+Symbole sind selbst gemalt, keine Icon-Dateien: sie skalieren mit der Szene, tragen die
+Farbe des Zustands und kosten keine neue Abhängigkeit. Benannt werden **Komponenten, keine
+Personen** — wer welchen Teil betreut, gehört in die Projektdoku, nicht in eine Oberfläche,
+die später jemand anders bedient. Die
+Textausgabe bleibt einen Klick entfernt und unverändert — sie ist das Rohmaterial, wenn man
+einer Station nicht glaubt.
+
+**Was die Ansicht ehrlich zeigen kann.** Die Oberfläche hört den Mediator **nicht** mit: es
+gibt keinen Fortschrittskanal, nur einen HTTP-Aufruf, der läuft, und eine Antwort, die
+kommt. Während des Aufrufs steht deshalb nur fest, *dass* Mediator und Wrapper arbeiten,
+nicht wie weit sie sind. Alles Genauere ist **Beleg aus der Antwort**:
+
+| Station | woraus belegt |
+| --- | --- |
+| Auswahl → JSON | der Auftrag selbst, im Fenster gebaut |
+| Mediator | `status`, `recipe_key` je Ebene |
+| Wrapper → Datenquelle | `selection.source`, `failed_cohorts` |
+| GDC-JSON → RDF | `triple_count` |
+| graph-db (Fuseki) | dass Tripel da sind, plus `load=true` (ADR-0003) |
+| Wissensnetz | **eigener Abzug** vor und nach dem Aufruf, nicht die Antwort |
+
+Die Messmatrix (`.h5ad`) steht bewusst **nicht** in der Kette: sie ist ein Nebenprodukt des
+Generierens und bei jeder Vorschau grau, also meistens Rauschen. Was aus ihr wurde, sagen
+die Statuszeile und die Textausgabe.
+
+Ohne Beleg bleibt eine Station grau statt grün — eine erfundene Fortschrittsanzeige wäre
+genau die Sorte Behauptung, die man später glaubt. Die Zeile unter der Kette sagt das
+ebenfalls.
+
 ## Aufbau
 
 | Datei | Zweck |
@@ -279,12 +356,15 @@ sind bewusst nicht Teil dieser Fassung.
 | `searchable_select.py` | aufklappende Auswahlmenüs: `MultiSelect` (Häkchen; Kohorte, `Obj`, `Datenquelle`) und `SearchableSelect` (einwertig, zurzeit ungenutzt) — gemeinsame Karte, gemeinsamer Zeilen-Delegate |
 | `config/panel.json` | Modalitäten, Quellen, Attribute, Kohorten-Klarnamen |
 | `netz_view.py` | das gezeichnete Netz (`QGraphicsView`, kein Browser) |
+| `architektur_view.py` | die Stationenkette unter der Anzeige |
+| `ablauf.py` | welche Station was belegt — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `projektion_view.py` | die Morphing-Karte (`pyqtgraph`, Regler, Auswahl) |
 | `morph.py` | Encodings und Positionen — **ohne Qt-Import**, nutzt die mp_lite-Module per Dateipfad |
 | `store_reader.py` | die drei SPARQL-Abfragen gegen Fuseki — **ohne Qt-Import**, deshalb ohne Fenster testbar |
 | `tests/test_mediator_client.py` | Tests ohne Qt und ohne Netz (`requests` gemockt) |
 | `tests/test_store_reader.py` | Tests der Auswertung, mit einem Doppel für `GraphStore` |
 | `tests/test_morph.py` | Tests der Morphing-Rechnung, mit einem kuenstlichen AnnData |
+| `tests/test_ablauf.py` | Tests der Stationenkette: keine Station ohne Beleg |
 
 ```powershell
 pytest frontend/tests -q

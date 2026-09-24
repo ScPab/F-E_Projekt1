@@ -54,7 +54,18 @@ DEFAULT_BASE_URL = "http://localhost:8000"
 # EN: Preview is cheap (metadata only), generate downloads raw data and
 # takes minutes — hence two very different timeouts.
 PREVIEW_TIMEOUT = 60.0
-GENERATE_TIMEOUT = 900.0
+# 30 Minuten statt 15. Gemessen an einem Auftrag ueber 5 Kohorten x 50 Proben:
+# 245 Dateien, rund 1 GB, ~10 bis 16 Dateien je Minute ueber `gdc-client` —
+# also gut 20 Minuten, in denen die alte Grenze von 900 s zweimal zuschlug,
+# obwohl der Mediator ungestoert weiterlief. Ueber DATABRIDGE_GENERATE_TIMEOUT
+# anpassbar, damit dafuer niemand Code aendern muss.
+# EN: 30 minutes instead of 15. Measured on a job over 5 cohorts x 50
+# samples: 245 files, roughly 1 GB, ~10 to 16 files per minute via
+# `gdc-client` — so a good 20 minutes, during which the old 900s limit
+# tripped twice even though the mediator kept working undisturbed.
+# Adjustable via DATABRIDGE_GENERATE_TIMEOUT so nobody needs to change
+# code for it.
+GENERATE_TIMEOUT = float(os.environ.get("DATABRIDGE_GENERATE_TIMEOUT", 1800.0))
 
 # Grenzen aus der OpenAPI (SelectionRequest.size).
 # EN: Limits from the OpenAPI (SelectionRequest.size).
@@ -249,7 +260,18 @@ def _post(path: str, payload: dict[str, Any], *, base_url: str, timeout: float) 
     try:
         resp = requests.post(url, json=payload, timeout=timeout)
     except requests.Timeout:
-        return Result(ok=False, error=f"Zeitüberschreitung nach {timeout:.0f}s bei {path}.")
+        # Wichtig: der Mediator bricht dabei NICHT ab. Nachgemessen an einem
+        # Auftrag, der hier auflief — `gdc-client` lud im Container ungestört
+        # weiter, lange nachdem diese Seite aufgegeben hatte.
+        # EN: Important: the mediator does NOT abort in that case.
+        # Verified against a job that ran here — `gdc-client` kept
+        # downloading undisturbed in the container long after this side
+        # had given up.
+        return Result(ok=False, error=(
+            f"Zeitüberschreitung nach {timeout:.0f}s bei {path}. "
+            "Der Mediator arbeitet weiter — der Abruf läuft dort zu Ende, "
+            "auch wenn diese Oberfläche nicht mehr darauf wartet."
+        ))
     except requests.ConnectionError:
         return Result(
             ok=False,

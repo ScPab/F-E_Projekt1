@@ -43,6 +43,11 @@ pyside6>=6.6
 # zaeh. Anders als bei pyside6 ist pip hier unbedenklich - pyqtgraph ist reines
 # Python, ohne kompilierte Teile und ohne ICU-Bindung.
 pyqtgraph>=0.13
+# anndata liest die .h5ad der Projektion (frontend/morph.py ueber
+# wissensnetz/prototype/mp_lite/h5ad_source.py). Die Zeile steht weiter unten im
+# Mediator-Block; sie ist seit Aufgabe 20 fuer die Oberflaeche NICHT mehr
+# optional - ohne anndata bleibt die Karte leer und meldet nur, dass die Datei
+# nicht gelesen werden konnte.
 # requests kommt bereits ueber ./wissensnetz und ./wrappers mit, steht hier aber
 # explizit: frontend/mediator_client.py importiert es direkt.
 requests>=2.28
@@ -57,9 +62,11 @@ python-dotenv>=1
 # --- Tests -----------------------------------------------------------------
 pytest>=7
 
-# --- Mediator: wissenschaftlicher Stack (optional, schwer) -----------------
-# Nur nötig, wenn du die anndata-/Messmatrizen-Konvertierung des Mediators
-# lokal ausführst. Wenn nicht gebraucht: die beiden Zeilen auskommentieren.
+# --- Wissenschaftlicher Stack ----------------------------------------------
+# anndata ist PFLICHT, sobald die Oberfläche benutzt wird: die Projektion liest
+# damit die .h5ad (siehe oben im frontend-Block). scanpy braucht nur die
+# anndata-/Messmatrizen-Konvertierung des Mediators lokal — wer die nicht
+# ausführt, kann diese eine Zeile auskommentieren.
 # (Über Conda oft robuster: `conda install -c conda-forge anndata scanpy`.)
 anndata
 scanpy>=1.10
@@ -67,6 +74,9 @@ scanpy>=1.10
 # --- Optional: Oviedos Original-demo.py / Daten-Notebook -------------------
 # Nur nötig, um die echten TCGA-Daten für die Original-Demo neu zu erzeugen
 # (get_and_process_tcga_data.ipynb). Für den MP-lite-Prototyp NICHT nötig.
+# matplotlib nutzt zusätzlich die Kohortenpalette der Projektion
+# (theme.cohort_colors, nipy_spectral wie im Original); fehlt es, greift dort
+# ein HSV-Fächer — die Karte läuft, die Farben weichen dann aber von MP-Lite ab.
 pandas>=2
 scipy>=1.11
 scikit-learn>=1.3

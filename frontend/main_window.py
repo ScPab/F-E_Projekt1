@@ -52,10 +52,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import ablauf
 import mediator_client as mc
 import store_reader as sr
 import theme
 import worker
+from architektur_view import ArchitekturPanel
 from netz_view import NetzPanel
 from projektion_view import ProjektionPanel
 from searchable_select import KIND_HEADER, MultiSelect
@@ -182,6 +184,9 @@ class MainWindow(QMainWindow):
         # EN: Last saved .h5ad — the projection loads it as soon as you
         # switch to it (not before, see _wechsle_ansicht).
         self._offene_h5ad = ""
+        # Der Auftrag, der gerade unterwegs ist — die Architekturansicht zeigt
+        # ihn, und nach der Antwort wird er gegen das Ergebnis gehalten.
+        self._laufender_auftrag: dict[str, Any] | None = None
         # Ebenen des letzten erfolgreichen 'Generieren'-Laufs mit .h5ad —
         # Grundlage fuer das Download-Menue (siehe _update_download_menu).
         # EN: Levels of the last successful 'Generieren' (generate) run with
@@ -465,6 +470,7 @@ class MainWindow(QMainWindow):
         # rebuilt). A splitter inside a splitter — intentional and the
         # smallest possible change. Its position is deliberately not saved.
         self._netz = NetzPanel(self._attribut_namen())
+        self._netz.datei_gewuenscht.connect(self._lade_auftrag)
         self._projektion = ProjektionPanel()
         self._projektion.datei_gewuenscht.connect(self._lade_h5ad)
         self._projektion.probe_geklickt.connect(self._hole_kontext)
@@ -478,14 +484,14 @@ class MainWindow(QMainWindow):
         self._anzeige = anzeige = QSplitter(Qt.Orientation.Vertical)
         anzeige.addWidget(self._baue_umschalter())
         anzeige.addWidget(self._ansichten)
-        anzeige.addWidget(self._output)
+        anzeige.addWidget(self._baue_unten())
         # Die Titelzeile ist kein Feld zum Ziehen: nur die beiden Flaechen
         # darunter teilen sich den Platz.
         # EN: The title row is not a draggable field: only the two areas
         # below it share the space.
         anzeige.setStretchFactor(1, 3)
         anzeige.setStretchFactor(2, 2)
-        anzeige.setSizes([28, 360, 240])
+        anzeige.setSizes([28, 340, 260])
         anzeige.handle(1).setEnabled(False)
         layout.addWidget(anzeige, stretch=1)
 
@@ -564,6 +570,57 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._ansicht_hinweis)
         return zeile
 
+    def _baue_unten(self) -> QWidget:
+        """Die untere Haelfte: Umschalter und dahinter Architektur oder Text.
+
+        Standard ist die **Architektur** — sie zeigt, was beim Abschicken der
+        Reihe nach passiert. Der Antworttext bleibt einen Klick entfernt; er ist
+        das Rohmaterial, wenn man einer Station nicht glaubt.
+        """
+        self._unten_bereich = unten = QWidget()
+        layout = QVBoxLayout(unten)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        zeile = QHBoxLayout()
+        zeile.setContentsMargins(2, 0, 2, 0)
+        zeile.setSpacing(0)
+        self._knopf_architektur = QPushButton("Architektur")
+        self._knopf_architektur.setObjectName(theme.OBJ_SWITCH_LEFT)
+        self._knopf_text = QPushButton("Textausgabe")
+        self._knopf_text.setObjectName(theme.OBJ_SWITCH_RIGHT)
+        for knopf in (self._knopf_architektur, self._knopf_text):
+            knopf.setCheckable(True)
+        self._knopf_architektur.setChecked(True)
+
+        self._untengruppe = QButtonGroup(self)
+        self._untengruppe.setExclusive(True)
+        self._untengruppe.addButton(self._knopf_architektur, 0)
+        self._untengruppe.addButton(self._knopf_text, 1)
+        self._untengruppe.idClicked.connect(self._wechsle_unten)
+
+        zeile.addWidget(self._knopf_architektur)
+        zeile.addWidget(self._knopf_text)
+        zeile.addStretch(1)
+        self._unten_hinweis = QLabel("Was im Hintergrund passiert")
+        self._unten_hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
+        zeile.addWidget(self._unten_hinweis)
+        layout.addLayout(zeile)
+
+        self._architektur = ArchitekturPanel()
+        self._unten = QStackedWidget()
+        self._unten.addWidget(self._architektur)
+        self._unten.addWidget(self._output)
+        layout.addWidget(self._unten, stretch=1)
+        return unten
+
+    def _wechsle_unten(self, index: int) -> None:
+        """Umschalten ist rein optisch — der Antworttext bleibt stehen, auch
+        wenn man ihn gerade nicht sieht."""
+        self._unten.setCurrentIndex(index)
+        self._unten_hinweis.setText("Was im Hintergrund passiert" if index == 0
+                                    else "Die Antwort des Mediators, unveraendert")
+
     # -- Projektion ----------------------------------------------------------
     # EN: Projection (translated)
     def _wechsle_ansicht(self, index: int) -> None:
@@ -607,11 +664,11 @@ class MainWindow(QMainWindow):
             self._breiten = self._splitter.sizes()
             self._hoehen = self._anzeige.sizes()
             panel.hide()
-            self._output.hide()
+            self._unten_bereich.hide()
             self._aktionen.hide()
             return
         panel.show()
-        self._output.show()
+        self._unten_bereich.show()
         self._aktionen.show()
         if getattr(self, "_breiten", None):
             self._splitter.setSizes(self._breiten)
@@ -620,6 +677,59 @@ class MainWindow(QMainWindow):
     def _projektion_hinweis(self) -> str:
         name = self._projektion.dateiname()
         return f"Messdaten aus {name}" if name else "Keine Datei geladen"
+
+    def _lade_auftrag(self, pfad: str) -> None:
+        """Eine fertige ``.h5ad`` oeffnen und die Auswahl daraus wiederherstellen.
+
+        Geladen wird im selben Worker wie fuer die Projektion — es ist dieselbe
+        Datei und derselbe Grund: 44 MB duerfen das Fenster nicht einfrieren.
+        """
+        if self._h5_thread is not None:
+            self.set_status("Es wird bereits eine Datei geladen — bitte warten.",
+                            "warning")
+            return
+        name = Path(pfad).name
+        self.set_status(f"Lese Auftrag aus {name} … Das Fenster bleibt bedienbar.",
+                        "busy")
+        self._h5_thread, self._h5_worker = worker.start_h5ad(
+            pfad, self._auftrag_fertig)
+        self._h5_thread.finished.connect(self._release_h5_thread)
+
+    def _auftrag_fertig(self, modell, fehler: str) -> None:
+        """Die rekonstruierte Auswahl ins Panel uebernehmen.
+
+        **Rekonstruktion, keine Aufzeichnung**: die Datei fuehrt den Auftrag
+        nicht mit (``uns`` ist leer), er wird aus den Daten abgeleitet (siehe
+        ``morph.auftrag_aus_modell``). Die Datenquelle steht nicht in der Datei
+        und bleibt deshalb unangetastet.
+        """
+        if modell is None:
+            self.set_status(fehler, "error")
+            return
+
+        import morph
+
+        auftrag = morph.auftrag_aus_modell(modell, self._attribut_namen())
+        bekannt = [k for k in auftrag["cohorts"] if k in self._cohorts]
+        fremd = [k for k in auftrag["cohorts"] if k not in self._cohorts]
+
+        self._cohort_select.set_checked(bekannt)
+        self._attribute_select.set_checked(auftrag["attributes"])
+        if auftrag["size"]:
+            self._size_spin.setValue(
+                max(mc.SIZE_MIN, min(mc.SIZE_MAX, auftrag["size"])))
+
+        teile = [
+            f"Auftrag aus {modell.dateiname} gelesen: {len(bekannt)} "
+            f"{'Kohorte' if len(bekannt) == 1 else 'Kohorten'}, "
+            f"{len(auftrag['attributes'])} Attribute, {auftrag['proben']} Proben."
+        ]
+        if fremd:
+            teile.append(f"Nicht im Panel: {', '.join(fremd)}.")
+        # Ehrlich bleiben: was die Datei nicht hergibt, wurde auch nicht gesetzt.
+        teile.append("Datenquelle bleibt unveraendert; leer gebliebene Attribute "
+                     "sind nicht rekonstruierbar.")
+        self.set_status("  ".join(teile), "success" if bekannt else "warning")
 
     def _lade_h5ad(self, pfad: str) -> None:
         """Eine ``.h5ad`` im Worker-Thread laden (siehe ``worker.H5adWorker``).
@@ -1219,13 +1329,25 @@ class MainWindow(QMainWindow):
         was = "Vorschau" if mode == "preview" else "Generieren"
         quellen = ", ".join(lvl["source"] for lvl in payload["levels"])
         kohorten = payload["levels"][0]["cohorts"]
+        hinweis = ""
+        if mode == "generate":
+            # Beim Generieren laedt der Mediator je Probe eine Datei ueber
+            # gdc-client. Gemessen an einem Lauf mit 245 Dateien: rund 10 bis 16
+            # Dateien je Minute. Wer 250 anstoesst, soll vorher wissen, dass das
+            # eine Viertelstunde und mehr dauert.
+            dateien = len(kohorten) * payload["size"] * len(payload["levels"])
+            hinweis = (f" Etwa {dateien} Dateien, erfahrungsgemaess rund "
+                       f"{max(1, round(dateien / 13)) } Minuten.")
         self.set_status(
             f"{was} laeuft … {', '.join(kohorten)}, "
-            f"{payload['size']} Proben je Kohorte, Quelle(n): {quellen}. "
-            f"Das Fenster bleibt bedienbar.",
+            f"{payload['size']} Proben je Kohorte, Quelle(n): {quellen}."
+            f"{hinweis} Das Fenster bleibt bedienbar.",
             "busy",
         )
         self._output.setPlainText(f"{was} laeuft, bitte warten …")
+        # Die Architektur zeigt ab jetzt, was unterwegs ist.
+        self._architektur.zeige(ablauf.laufend(payload, mode))
+        self._laufender_auftrag = payload
         self._thread, self._worker = worker.start_call(
             payload, mode, self._on_finished,
             vorher=self._abzug_vorher, nachher=self._abzug_nachher,
@@ -1253,6 +1375,11 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self._render(result, mode)
         self._netz_zeigen(self._letzter_abzug, unterschied)
+        self._architektur.zeige(ablauf.fertig(
+            self._laufender_auftrag or self.current_payload(), mode,
+            ok=result.ok, levels=result.levels() if result.ok else [],
+            fehler=result.error or "", unterschied=unterschied,
+        ))
 
     def _release_thread(self) -> None:
         """Referenzen freigeben, sobald der Thread wirklich gestoppt ist.

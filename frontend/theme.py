@@ -91,6 +91,7 @@ NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens / EN: thi
 # EN: Projection (projektion_view.py)
 SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte / EN: width of the slider column to the right of the map
 SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte / EN: diameter of a point on the map
+SCATTER_HOVER_PLUS = 4       # so viel groesser wird er unter der Maus / EN: this much bigger it gets under the mouse
 MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens / EN: the map never gets smaller than this
 LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte / EN: width of the cohort legend to the right of the map
 # Achsen und Gitter der Karte bewusst dunkler als BORDER: der Rahmen einer
@@ -100,6 +101,29 @@ LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte / EN
 AXIS = "#6b7280"             # Achsenlinie, Beschriftung und Gitter / EN: axis line, labels and grid
 GRID_ALPHA = 0.6             # Deckkraft des Gitters in der Karte / EN: opacity of the grid on the map
 NEUTRAL = "#9E9E9E"          # Kohorte unbekannt oder fehlend / EN: cohort unknown or missing
+
+# --- Architekturansicht (architektur_view.py) ------------------------------
+ARCH_BOX_WIDTH = 250         # Breite einer Station (Symbol, Komponente, Beleg)
+ARCH_BOX_HEIGHT = 62         # deren Hoehe
+ARCH_ICON = 30               # Kantenlaenge des Symbols links im Kasten
+ARCH_ICON_MARGIN = 12        # dessen Abstand zum Rand
+# Die Linie, die waehrend eines Aufrufs am Rand entlanglaeuft ("border line
+# overlay"): Laenge des leuchtenden Stuecks, Breite, Tempo und wie weit der
+# Schein darunter ausblutet.
+ARCH_PULS_LAENGE = 48        # Laenge des wandernden Stuecks in Szeneneinheiten
+ARCH_PULS_BREITE = 3         # Strichstaerke
+ARCH_PULS_TEMPO = 150.0      # Einheiten je Sekunde
+ARCH_PULS_SCHEIN = 3         # so viele Lagen Schein unter der Linie
+ARCH_PULS_SCHWEIF = 7        # so viele Glieder hat der Schweif hinter dem Kopf
+ARCH_TAKT_MS = 40            # Bildtakt der Animation (25 Bilder je Sekunde)
+ARCH_PRO_ZEILE = 3           # so viele Stationen stehen nebeneinander
+ARCH_ZEILEN_ABSTAND = 58     # senkrechter Abstand zwischen den beiden Zeilen
+# Die Pfeile bewusst in Textfarbe statt in BORDER: in BORDER (dem Ton fuer
+# Rahmen von Eingabefeldern) waren sie auf hellem Grund kaum zu sehen.
+ARCH_PFEIL = TEXT
+ARCH_PFEIL_BREITE = 2
+ARCH_ECKE = 10               # Verrundung der rechten Winkel im Zeilenwechsel
+ARCH_GAP = 26                # Abstand zwischen zwei Stationen (Platz fuer den Pfeil)
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
 # Konstanten, damit ein Tippfehler nicht zu stillem Stilverlust fuehrt.
@@ -540,6 +564,17 @@ def select_button_style(leer: bool) -> str:
     ``searchable_select.py``.
     """
     return f"QPushButton#{OBJ_SELECT_BUTTON} {{ color: {TEXT_MUTED if leer else TEXT}; }}"
+
+
+def mit_deckkraft(farbe: str, anteil: float) -> QColor:
+    """Eine Farbkonstante mit Deckkraft — fuer den Schein unter der Laufschrift.
+
+    Auch das gehoert hierher: ausserhalb dieser Datei soll niemand an Farben
+    rechnen muessen.
+    """
+    c = QColor(farbe)
+    c.setAlphaF(max(0.0, min(1.0, anteil)))
+    return c
 
 
 def cohort_colors() -> dict[str, str]:

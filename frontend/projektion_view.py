@@ -241,10 +241,29 @@ class ProjektionPanel(QWidget):
         # EN: The map should not shrink to a stamp even at 900 x 600.
         self._plot.setMinimumHeight(theme.MAP_MIN_HEIGHT)
 
-        self._punkte = pg.ScatterPlotItem(size=theme.SCATTER_POINT_SIZE,
-                                          pen=pg.mkPen(None))
+        # ``hoverable`` laesst pyqtgraph den Punkt unter der Maus hervorheben
+        # und ``tip`` dazu den Text bauen — die Werte der Probe, wie im Original.
+        self._punkte = pg.ScatterPlotItem(
+            size=theme.SCATTER_POINT_SIZE,
+            pen=pg.mkPen(None),
+            hoverable=True,
+            hoverSize=theme.SCATTER_POINT_SIZE + theme.SCATTER_HOVER_PLUS,
+            hoverPen=pg.mkPen(theme.ACCENT, width=2),
+            tip=self._hover_text,
+        )
         self._punkte.sigClicked.connect(self._punkt_geklickt)
         self._plot.addItem(self._punkte)
+
+        # Fadenkreuz: zwei Linien, die der Maus folgen — wie im Original von
+        # Oviedo. Sie liegen hinter den Punkten und fangen keine Klicks ab.
+        stift = pg.mkPen(theme.AXIS, width=1)
+        self._kreuz_x = pg.InfiniteLine(angle=90, movable=False, pen=stift)
+        self._kreuz_y = pg.InfiniteLine(angle=0, movable=False, pen=stift)
+        for linie in (self._kreuz_x, self._kreuz_y):
+            linie.setZValue(-1)
+            linie.hide()
+            self._plot.addItem(linie, ignoreBounds=True)
+        self._plot.scene().sigMouseMoved.connect(self._maus_bewegt)
         # Klick ins Leere hebt die Auswahl auf. Der Punkt-Klick kommt zuerst und
         # setzt eine Marke, an der dieser Handler erkennt, dass er nichts tun soll.
         # EN: Clicking empty space clears the selection. The point click
@@ -355,6 +374,8 @@ class ProjektionPanel(QWidget):
     def _zeige_hinweis(self, text: str) -> None:
         self._hinweis.setText(text)
         self._hinweis.show()
+        self._kreuz_x.hide()
+        self._kreuz_y.hide()
         self._plot.hide()
         self._legende.setText("")
 
@@ -442,6 +463,43 @@ class ProjektionPanel(QWidget):
         rand.setWidth(2)
         return [rand if i in self._ausgewaehlt else leer
                 for i in range(len(self._farben))]
+
+    # -- Schweben ----------------------------------------------------------
+    def _hover_text(self, x: float = 0.0, y: float = 0.0, data=None) -> str:
+        """Die Werte der Probe unter der Maus (siehe ``morph.hover_text``).
+
+        ``data`` ist der Index, den :meth:`_zeichne` an den Punkt gehaengt hat.
+        Die Namen der Parameter sind **nicht frei waehlbar**: pyqtgraph ruft
+        diese Funktion mit Schluesselworten auf (``tip(x=…, y=…, data=…)``),
+        eine andere Benennung faellt erst beim Schweben auf.
+        """
+        if self._modell is None or data is None:
+            return ""
+        try:
+            return morph.hover_text(self._modell.punkte[int(data)])
+        except (IndexError, TypeError, ValueError):
+            return ""
+
+    def _maus_bewegt(self, pos) -> None:
+        """Das Fadenkreuz der Maus nachfuehren — nur innerhalb der Karte."""
+        if self._modell is None or not self._modell.hat_basis:
+            return
+        if not self._plot.sceneBoundingRect().contains(pos):
+            self._kreuz_x.hide()
+            self._kreuz_y.hide()
+            return
+        punkt = self._box.mapSceneToView(pos)
+        self._kreuz_x.setPos(punkt.x())
+        self._kreuz_y.setPos(punkt.y())
+        self._kreuz_x.show()
+        self._kreuz_y.show()
+
+    def leaveEvent(self, event) -> None:  # noqa: D102
+        # Verlaesst die Maus die Ansicht, bleibt sonst ein Kreuz stehen, das
+        # nirgendwohin zeigt.
+        self._kreuz_x.hide()
+        self._kreuz_y.hide()
+        super().leaveEvent(event)
 
     # -- Auswahl -----------------------------------------------------------
     def _punkt_geklickt(self, _item, punkte) -> None:
