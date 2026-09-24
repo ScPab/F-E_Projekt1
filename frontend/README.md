@@ -298,8 +298,9 @@ Unter der Anzeigefläche stehen zwei Schaltflächen, **Architektur** und **Texta
 Standard ist die Architektur: eine Kette aus sechs Stationen in **zwei Zeilen**, die zeigt,
 was beim Abschicken der Reihe nach passiert — oben der Weg zur Datenquelle (Auswahl → JSON,
 Mediator, Wrapper und Datenquelle), unten der Weg ins Wissensnetz (GDC-JSON → RDF, graph-db
-(Fuseki), Wissensnetz). Eine Kurve verbindet das Ende der oberen mit dem Anfang der unteren
-Zeile, damit sichtbar bleibt, dass es derselbe Weg ist. Die Pfeile sind in Textfarbe statt
+(Fuseki), Wissensnetz). Ein abgewinkelter Pfeil — runter, quer, wieder runter, mit kleiner
+Verrundung an den Ecken — verbindet das Ende der oberen mit dem Anfang der unteren Zeile,
+damit sichtbar bleibt, dass es derselbe Weg ist. Die Pfeile sind in Textfarbe statt
 im hellen Rahmenton — darin waren sie kaum zu sehen. Die Stationen folgen
 `docs/DataBridge_Architektur.drawio`; gerendert wird das Bild nicht, sondern dieselbe Kette
 neu gezeichnet — eine `.drawio` ist XML für einen Editor, kein Format, aus dem man Zustände

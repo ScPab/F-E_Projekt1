@@ -372,11 +372,17 @@ class ArchitekturView(QGraphicsView):
         ende = QPointF(rechts.pos().x() + theme.ARCH_BOX_WIDTH / 2,
                        rechts.pos().y() - 9)
         mitte = (start.y() + ende.y()) / 2
+        # Rechte Winkel mit kleiner Verrundung statt einer weiten Kurve: runter,
+        # quer, wieder runter. Eine schraege Kurve ueber die halbe Breite sieht
+        # aus, als gehoerte sie nicht zur Kette.
+        r = theme.ARCH_ECKE
+        quer = -1 if ende.x() < start.x() else 1
         pfad = QPainterPath(start)
-        # Der zweite Kontrollpunkt liegt senkrecht ueber dem Ziel, damit die
-        # Kurve von oben einlaeuft und die Spitze in ihre Richtung zeigt.
-        pfad.cubicTo(QPointF(start.x(), mitte),
-                     QPointF(ende.x(), ende.y() - 24), ende)
+        pfad.lineTo(start.x(), mitte - r)
+        pfad.quadTo(QPointF(start.x(), mitte), QPointF(start.x() + quer * r, mitte))
+        pfad.lineTo(ende.x() - quer * r, mitte)
+        pfad.quadTo(QPointF(ende.x(), mitte), QPointF(ende.x(), mitte + r))
+        pfad.lineTo(ende)
         kurve = self.scene().addPath(pfad, self._stift())
         kurve.setZValue(-1)
         self._male_spitze(QPointF(ende.x(), ende.y() + 6), "unten")

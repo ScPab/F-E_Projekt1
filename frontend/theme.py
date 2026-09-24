@@ -101,6 +101,7 @@ ARCH_ZEILEN_ABSTAND = 58     # senkrechter Abstand zwischen den beiden Zeilen
 # Rahmen von Eingabefeldern) waren sie auf hellem Grund kaum zu sehen.
 ARCH_PFEIL = TEXT
 ARCH_PFEIL_BREITE = 2
+ARCH_ECKE = 10               # Verrundung der rechten Winkel im Zeilenwechsel
 ARCH_GAP = 26                # Abstand zwischen zwei Stationen (Platz fuer den Pfeil)
 
 # Objektnamen, ueber die das Stylesheet einzelne Widgets adressiert. Als
