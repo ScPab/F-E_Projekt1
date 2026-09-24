@@ -72,6 +72,7 @@ NETZ_BORDER_OPEN = 2         # dickerer Rand des aufgeklappten Knotens
 # --- Projektion (projektion_view.py) ---------------------------------------
 SLIDER_COLUMN_WIDTH = 240    # Breite der Reglerspalte rechts neben der Karte
 SCATTER_POINT_SIZE = 8       # Durchmesser eines Punktes in der Karte
+SCATTER_HOVER_PLUS = 4       # so viel groesser wird er unter der Maus
 MAP_MIN_HEIGHT = 220         # so gross bleibt die Karte mindestens
 LEGEND_WIDTH = 96            # Breite der Kohorten-Legende rechts der Karte
 # Achsen und Gitter der Karte bewusst dunkler als BORDER: der Rahmen einer

@@ -254,6 +254,15 @@ Ein Regler ist ebenso deaktiviert, wenn seine Variable nicht encodierbar ist. Er
 `nur ein Wert vorhanden` oder `Marker nicht in var` — ehrliche Lücke statt unsichtbarer
 Grenze, dieselbe Regel wie bei ENA und GEO im Auswahlpanel.
 
+**Beim Schweben über einen Punkt** stehen dessen Werte im Tooltip — Sample, Kohorte,
+Probentyp, race, sex_at_birth, ethnicity, tumor_stage, morphology,
+site_of_resection_or_biopsy, primary_diagnosis, has_metastasis, vital_status, in genau
+dieser Reihenfolge wie im Original. Fehlende Werte stehen als `--` da und werden **nicht**
+weggelassen: eine Lücke ist eine Aussage über die Daten, eine fehlende Zeile sähe aus wie
+ein Feld, das es nicht gibt. Der Punkt unter der Maus wird dabei größer und bekommt einen
+Rand in der Akzentfarbe. Ein **Fadenkreuz** folgt der Maus innerhalb der Karte und
+verschwindet, sobald man sie verlässt.
+
 **Klick auf einen Punkt** holt den Kontext dieser Probe aus dem Wissensnetz
 (`enrichment.case_context`, im eigenen Prozess, kein Endpunkt im Mediator) und zeigt ihn
 unter der Karte. Der Schlüssel ist `obs["submitter_id"]` gegen `db:submitterId`. Zwei

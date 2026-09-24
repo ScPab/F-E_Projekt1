@@ -170,3 +170,31 @@ def test_meldung_nennt_die_probenzahl_als_grund() -> None:
 def test_meldung_bleibt_knapp_bei_genug_proben() -> None:
     assert morph.text_ohne_layout(200) == morph.TEXT_OHNE_LAYOUT
     assert morph.text_ohne_layout(0) == morph.TEXT_OHNE_LAYOUT
+
+
+# --- Hover-Text --------------------------------------------------------------
+def test_hover_text_haelt_oviedos_feldreihenfolge() -> None:
+    zeile = {"tumor": "TCGA-ZZ-0001", "cancer": "BRCA", "sample_type": "Primary Tumor",
+             "race": "white", "sex_at_birth": "female", "ethnicity": "not reported",
+             "tumor_stage": "stage i", "morphology": "8500/3",
+             "site_of_resection_or_biopsy": "Breast", "primary_diagnosis": "Duct",
+             "has_metastasis": "no", "vital_status": "Alive"}
+    zeilen = morph.hover_text(zeile).splitlines()
+    assert zeilen[0] == "Sample: TCGA-ZZ-0001"
+    assert [z.split(":")[0] for z in zeilen[1:]] == list(morph.HOVER_FELDER)
+
+
+def test_hover_text_zeigt_luecken_als_strich() -> None:
+    """Eine fehlende Zeile saehe aus wie ein Feld, das es nicht gibt — die
+    Luecke ist aber eine Aussage ueber die Daten."""
+    text = morph.hover_text({"tumor": "TCGA-ZZ-0002", "cancer": "ACC"})
+    assert "sex_at_birth: --" in text
+    assert len(text.splitlines()) == 1 + len(morph.HOVER_FELDER)
+
+
+def test_hover_text_faellt_auf_die_sample_id_zurueck() -> None:
+    assert morph.hover_text({"sample_id": "s7"}).startswith("Sample: s7")
+
+
+def test_hover_text_behandelt_leere_zeichenketten_wie_fehlend() -> None:
+    assert "race: --" in morph.hover_text({"tumor": "x", "race": "  "})

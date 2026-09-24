@@ -325,3 +325,35 @@ def lade_modell(pfad: str | Path | None = None) -> tuple[Morphmodell | None, str
         return baue_encodings(adata, dateiname=ziel.name), ""
     except Exception as fehler:      # noqa: BLE001 - jede Stoerung gleich melden
         return None, f"{ziel.name} liess sich nicht auswerten: {fehler}"
+
+
+# --- Hover: die Werte einer Probe --------------------------------------------
+# Oviedos Hover-Felder in genau dieser Reihenfolge (``mp_lite/app.py::_FIELDS``,
+# dort aus ``demo.py`` uebernommen). Eine bewusste Abweichung: Oviedos
+# ``gender`` heisst hier ``sex_at_birth`` — GDC hat das Feld umbenannt, und
+# fachlich ist es nicht dasselbe.
+HOVER_FELDER = (
+    "cancer", "sample_type", "race", "sex_at_birth", "ethnicity", "tumor_stage",
+    "morphology", "site_of_resection_or_biopsy", "primary_diagnosis",
+    "has_metastasis", "vital_status",
+)
+
+# Was im Hover steht, wenn ein Feld leer ist — wie im Oviedo-Tool.
+FEHLT = "--"
+
+
+def hover_text(zeile: dict[str, Any]) -> str:
+    """Die Werte einer Probe als Hover-Text, Feld je Zeile.
+
+    Fehlende Werte stehen als ``--`` da und werden **nicht** weggelassen: eine
+    Luecke ist eine Aussage ueber die Daten, eine fehlende Zeile sieht aus wie
+    ein Feld, das es nicht gibt.
+    """
+    def wert(feld: str) -> str:
+        v = zeile.get(feld)
+        return FEHLT if v is None or str(v).strip() in ("", FEHLT) else str(v)
+
+    probe = zeile.get("tumor") or zeile.get("sample_id") or FEHLT
+    zeilen = [f"Sample: {probe}"]
+    zeilen += [f"{feld}: {wert(feld)}" for feld in HOVER_FELDER]
+    return "\n".join(zeilen)
