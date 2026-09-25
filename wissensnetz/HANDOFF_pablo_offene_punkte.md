@@ -294,3 +294,30 @@ die Oberfläche kann dann nur weniger sagen, als sie zeigt.
   Oberfläche zeigt bewusst keinen Fortschrittsbalken, weil sie ihn nicht belegen könnte.
 - Kein Abbrechen laufender Aufträge, keine Änderung an `recipe_key`, keine neue
   Endpunkt-Variante.
+
+---
+
+## Antwort von Pablo (Mediator)
+
+**Stand:** 2026-09-25
+
+| Punkt | Status | Zusage/Termin |
+|---|---|---|
+| **P1** | noch nicht begonnen | *TODO* |
+| **P2** | noch nicht begonnen | *TODO* |
+| **P3** | noch nicht begonnen | *TODO* |
+
+### P1 · Ein langer Auftrag blockiert den ganzen Dienst
+
+*TODO: Rückmeldung zum Vorschlag (`async` streichen bzw. `run_in_threadpool`),
+Zeitplan, offene Fragen.*
+
+### P2 · Fortschritt während eines Auftrags melden
+
+*TODO: Rückmeldung zum Vorschlag (Progress-Header + Abfrage-Endpunkt vs. SSE),
+Zeitplan, offene Fragen.*
+
+### P3 · Den Auftrag ins `.h5ad` schreiben
+
+*TODO: Rückmeldung zum Vorschlag (`uns["databridge_selection"]`), Zeitplan,
+offene Fragen.*
