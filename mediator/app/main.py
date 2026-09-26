@@ -37,15 +37,18 @@ anndata/.h5ad (expression matrices, part 3 of wissensnetz/HANDOFF_anndata.md)
 is wired up via POST /export/anndata (see app/semantic/expression.py).
 """
 
+import json
 import os
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 import pandas as pd
 from cbioportal import CBioPortalWrapper
 from ena import ENAWrapper
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse
 from gdc import GDCWrapper, build_filters
 from geo import GEOWrapper, build_search_term as geo_build_search_term
@@ -123,6 +126,7 @@ def fetch_selection_files(
     data_type: str,
     size: int,
     per_cohort_size: int | None,
+    progress_id: str | None = None,
 ) -> tuple[list[dict], list[dict], list[str]]:
     """Der gemeinsame Abrufschritt (M3, siehe
     recherche/Umsetzungsplan_UI-gesteuerte-Akquise.pdf, Abschnitt 1b/3):
@@ -163,6 +167,16 @@ def fetch_selection_files(
     reshaping needed — same nested form as GDC's `/cases`), `failed_cohorts`
     for cohorts whose query failed (does not kill the whole fetch, see
     wissensnetz/HANDOFF_export_stratified.md).
+
+    `progress_id` ist optional (P2, siehe
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): ohne Angabe verhält sich
+    diese Funktion exakt wie zuvor; mit Angabe meldet sie einen
+    `wrapper_query`-Fortschrittseintrag je Kohorte.
+
+    English: `progress_id` is optional (P2, see
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): without it, this function
+    behaves exactly as before; with it, it reports one `wrapper_query`
+    progress entry per cohort.
     """
     file_fields = ["file_id", "file_name"] + [f"cases.{f}" for f in resolve_case_fields(attributes)]
     n_each = per_cohort_size or size
@@ -170,6 +184,7 @@ def fetch_selection_files(
     hits: list[dict] = []
     failed_cohorts: list[str] = []
     for cohort in cohorts:
+        _progress_event(progress_id, "wrapper_query", "start", {"source": "gdc", "cohort": cohort})
         filters = build_filters(
             project_id=cohort,
             experimental_strategy=experimental_strategy,
@@ -178,12 +193,16 @@ def fetch_selection_files(
         )
         try:
             result = wrapper.query("files", filters=filters, fields=file_fields, size=n_each)
-        except RequestException:
+        except RequestException as exc:
             # eine leere/kaputte Kohorte soll nicht den ganzen Abruf killen
             # EN: an empty/broken cohort should not kill the whole fetch
             failed_cohorts.append(cohort)
+            _progress_event(progress_id, "wrapper_query", "error", {"source": "gdc", "cohort": cohort, "error": str(exc)})
             continue
         hits.extend(result["results"])
+        _progress_event(
+            progress_id, "wrapper_query", "ok", {"source": "gdc", "cohort": cohort, "hits": len(result["results"])}
+        )
 
     cases_by_id: dict[str, dict] = {}
     for hit in hits:
@@ -524,6 +543,27 @@ def _selection_recipe_key(level: SingleSelection, request: SelectionRequest) -> 
     return wrapper.cache.recipes.key_for(recipe)
 
 
+def _selection_uns(*, recipe_key: str, endpoint: str, **fields: Any) -> dict[str, str]:
+    """Baut die `uns["databridge_selection"]`-Nutzlast eines `.h5ad` (P3, siehe
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): der Auftrag, der zu dieser
+    Datei führte, als JSON-**Zeichenkette** (nicht als verschachteltes Dict —
+    `uns` landet in HDF5 als Gruppe, und Listen/`None` kommen dort je nach
+    anndata-Version verlustbehaftet zurück; eine Zeichenkette übersteht den
+    Roundtrip unverändert und ist mit `json.loads` in einer Zeile gelesen).
+    `"schema": 1` versioniert das Format für künftige Änderungen.
+
+    English: Builds the `uns["databridge_selection"]` payload of a `.h5ad`
+    (P3, see wissensnetz/HANDOFF_pablo_offene_punkte.md): the request that
+    produced this file, as a JSON **string** (not a nested dict — `uns`
+    lands in HDF5 as a group, and lists/`None` come back lossy there
+    depending on the anndata version; a string survives the round trip
+    unchanged and is read with `json.loads` in one line). `"schema": 1`
+    versions the format for future changes.
+    """
+    payload = {"schema": 1, "recipe_key": recipe_key, "created": _iso_now(), "endpoint": endpoint, **fields}
+    return {"databridge_selection": json.dumps(payload, ensure_ascii=False)}
+
+
 @dataclass
 class SelectionFetchResult:
     """Ergebnis des quellen-abhängigen Abrufs+Übersetzung einer Auswahl-Ebene
@@ -549,7 +589,8 @@ class SelectionFetchResult:
 
 
 def _fetch_selection_level(
-    level: SingleSelection, request: SelectionRequest, recipe_key: str, alignment: dict[str, str]
+    level: SingleSelection, request: SelectionRequest, recipe_key: str, alignment: dict[str, str],
+    progress_id: str | None = None,
 ) -> SelectionFetchResult:
     """Back-Mediator-Dispatcher (M9): übersetzt eine generische Auswahl-Ebene
     (Kohorte/Modalität/Attribute/Datenquelle aus dem UI-Panel) in die jeweils
@@ -560,6 +601,9 @@ def _fetch_selection_level(
     `_build_anndata_from_geo_best_effort`) — beide Endpunkte behandeln eine
     fehlschlagende Ebene unabhängig von den anderen (Entscheidung 7.2).
 
+    `progress_id` wird nur von `selection_generate` durchgereicht (P2) und
+    landet am Ende bei `fetch_selection_files`/den Quell-Zweigen.
+
     English: Back-mediator dispatcher (M9): translates a generic selection
     level (cohort/modality/attributes/source from the UI panel) into the
     respective native request form of the chosen data source.
@@ -568,16 +612,19 @@ def _fetch_selection_level(
     only genuinely for preview (generate is best-effort, see
     `_build_anndata_from_geo_best_effort`) — both endpoints handle a failing
     level independently of the others (decision 7.2).
+
+    `progress_id` is only passed through by `selection_generate` (P2) and
+    ends up at `fetch_selection_files`/the source branches.
     """
     if level.modality != "gene_expression":
         raise ValueError(f"Modalität {level.modality!r} noch nicht angebunden (siehe Umsetzungsplan W6).")
 
     if level.source == "gdc":
-        return _fetch_gdc_level(level, request, recipe_key, alignment)
+        return _fetch_gdc_level(level, request, recipe_key, alignment, progress_id)
     if level.source == "cbioportal":
-        return _fetch_cbioportal_level(level, request, recipe_key)
+        return _fetch_cbioportal_level(level, request, recipe_key, progress_id)
     if level.source == "geo":
-        return _fetch_geo_level(level, request, recipe_key)
+        return _fetch_geo_level(level, request, recipe_key, progress_id)
     if level.source == "ena":
         raise ValueError(
             "Datenquelle 'ena' ist im Back-Mediator (M9) bewusst nicht angebunden: ENA organisiert Daten "
@@ -589,7 +636,8 @@ def _fetch_selection_level(
 
 
 def _fetch_gdc_level(
-    level: SingleSelection, request: SelectionRequest, recipe_key: str, alignment: dict[str, str]
+    level: SingleSelection, request: SelectionRequest, recipe_key: str, alignment: dict[str, str],
+    progress_id: str | None = None,
 ) -> SelectionFetchResult:
     """GDC-Zweig des Back-Mediators — unverändert die bisherige Logik (M3/M4),
     nur um das gemeinsame `SelectionFetchResult` herum verpackt.
@@ -606,6 +654,7 @@ def _fetch_gdc_level(
         data_type="Gene Expression Quantification",
         size=request.size,
         per_cohort_size=request.per_cohort_size,
+        progress_id=progress_id,
     )
     if not cases:
         raise ValueError(f"Keine Treffer für Kohorte(n) {level.cohorts!r}.")
@@ -614,7 +663,12 @@ def _fetch_gdc_level(
     def build_anndata() -> dict:
         if not hits:
             raise ValueError(f"Keine Expressions-Files für Kohorte(n) {level.cohorts!r}.")
-        return _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True)
+        uns = _selection_uns(
+            recipe_key=recipe_key, endpoint="/selection/generate", source=level.source, cohorts=level.cohorts,
+            modality=level.modality, attributes=level.attributes, size=request.size,
+            per_cohort_size=request.per_cohort_size, experimental_strategy="RNA-Seq",
+        )
+        return _build_anndata_from_hits(wrapper, hits, recipe_key, compute_tsne=True, progress_id=progress_id, uns=uns)
 
     return SelectionFetchResult(
         graph=graph, star_annotations=star_annotations, failed_cohorts=failed_cohorts, build_anndata=build_anndata
@@ -712,7 +766,9 @@ def _pick_cbioportal_sample_list(wrapper: CBioPortalWrapper, study_id: str) -> O
     return largest.get("sampleListId")
 
 
-def _fetch_cbioportal_level(level: SingleSelection, request: SelectionRequest, recipe_key: str) -> SelectionFetchResult:
+def _fetch_cbioportal_level(
+    level: SingleSelection, request: SelectionRequest, recipe_key: str, progress_id: str | None = None,
+) -> SelectionFetchResult:
     """cBioPortal-Zweig des Back-Mediators (M9): jede Kohorte wird über
     `_resolve_cbioportal_study` auf eine Studie abgebildet, deren
     Klinikdaten real geholt und via `mapping_cbioportal.clinical_data_to_graph`
@@ -736,26 +792,37 @@ def _fetch_cbioportal_level(level: SingleSelection, request: SelectionRequest, r
     # EN: (study_id, sample_ids)
 
     for cohort in level.cohorts:
+        _progress_event(progress_id, "wrapper_query", "start", {"source": "cbioportal", "cohort": cohort})
         study_id = _resolve_cbioportal_study(wrapper, cohort)
         if not study_id:
             failed_cohorts.append(cohort)
+            _progress_event(progress_id, "wrapper_query", "error",
+                             {"source": "cbioportal", "cohort": cohort, "error": "keine passende Studie gefunden"})
             continue
         try:
             patient_rows = wrapper.get_clinical_data(study_id, clinical_data_type="PATIENT", size=2000)["results"]
             sample_rows = wrapper.get_clinical_data(study_id, clinical_data_type="SAMPLE", size=2000)["results"]
-        except RequestException:
+        except RequestException as exc:
             failed_cohorts.append(cohort)
+            _progress_event(progress_id, "wrapper_query", "error", {"source": "cbioportal", "cohort": cohort, "error": str(exc)})
             continue
         graph, _stars = mapping_cbioportal.clinical_data_to_graph(patient_rows, sample_rows, study_id=study_id)
         combined += graph
         sample_ids = sorted({row.get("sampleId") for row in sample_rows if row.get("sampleId")})[:n_each]
         if sample_ids:
             resolved.append((study_id, sample_ids))
+        _progress_event(progress_id, "wrapper_query", "ok",
+                         {"source": "cbioportal", "cohort": cohort, "study_id": study_id, "hits": len(sample_ids)})
 
     def build_anndata() -> dict:
         if not resolved:
             raise ValueError(f"Keine cBioPortal-Studie mit Proben gefunden für Kohorte(n) {level.cohorts!r}.")
-        return _build_anndata_from_cbioportal(wrapper, resolved, recipe_key, compute_tsne=True)
+        uns = _selection_uns(
+            recipe_key=recipe_key, endpoint="/selection/generate", source=level.source, cohorts=level.cohorts,
+            modality=level.modality, attributes=level.attributes, size=request.size,
+            per_cohort_size=request.per_cohort_size,
+        )
+        return _build_anndata_from_cbioportal(wrapper, resolved, recipe_key, compute_tsne=True, uns=uns)
 
     return SelectionFetchResult(graph=combined, failed_cohorts=failed_cohorts, build_anndata=build_anndata)
 
@@ -766,6 +833,7 @@ def _build_anndata_from_cbioportal(
     recipe_key: str,
     *,
     compute_tsne: bool = False,
+    uns: dict[str, str] | None = None,
 ) -> dict:
     """Baut ein `.h5ad` aus cBioPortals `get_molecular_data()` (Back-Mediator M9).
 
@@ -777,6 +845,10 @@ def _build_anndata_from_cbioportal(
     (siehe `_pick_cbioportal_profile`/`_pick_cbioportal_sample_list`); fehlt
     eines davon, wird nur diese Studie übersprungen, nicht die ganze Ebene.
 
+    `uns` (P3, siehe wissensnetz/HANDOFF_pablo_offene_punkte.md): optionale
+    `uns["databridge_selection"]`-Nutzlast (siehe `_selection_uns`), landet
+    unverändert im geschriebenen `.h5ad`.
+
     English: Builds a `.h5ad` from cBioPortal's `get_molecular_data()`
     (back-mediator M9).
 
@@ -787,6 +859,10 @@ def _build_anndata_from_cbioportal(
     each resolved study, an mRNA profile + a sample list is chosen (see
     `_pick_cbioportal_profile`/`_pick_cbioportal_sample_list`); if either is
     missing, only that study is skipped, not the whole level.
+
+    `uns` (P3, see wissensnetz/HANDOFF_pablo_offene_punkte.md): optional
+    `uns["databridge_selection"]` payload (see `_selection_uns`), ends up
+    unchanged in the written `.h5ad`.
     """
     gene_ids_str = [str(g) for g in cancer_types.DEMO_GENE_PANEL.values()]
     gene_labels = {str(entrez_id): symbol for symbol, entrez_id in cancer_types.DEMO_GENE_PANEL.items()}
@@ -831,7 +907,7 @@ def _build_anndata_from_cbioportal(
         if tsne is not None:
             obsm["X_tsne_genes"] = tsne
 
-    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
+    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None, uns=uns)
     filename = f"{recipe_key}.h5ad"
     out_path = expression_export.write_h5ad(adata, export_dir() / filename)
 
@@ -848,7 +924,9 @@ def _build_anndata_from_cbioportal(
     }
 
 
-def _fetch_geo_level(level: SingleSelection, request: SelectionRequest, recipe_key: str) -> SelectionFetchResult:
+def _fetch_geo_level(
+    level: SingleSelection, request: SelectionRequest, recipe_key: str, progress_id: str | None = None,
+) -> SelectionFetchResult:
     """GEO-Zweig des Back-Mediators (M9): jede Kohorte wird über
     `cancer_types.cancer_name` auf einen Freitext-Suchbegriff abgebildet und
     per `GEOWrapper.query()` (nicht `.search()`, das kein `extra` durchreicht,
@@ -871,26 +949,36 @@ def _fetch_geo_level(level: SingleSelection, request: SelectionRequest, recipe_k
     all_series: list[dict] = []
 
     for cohort in level.cohorts:
+        _progress_event(progress_id, "wrapper_query", "start", {"source": "geo", "cohort": cohort})
         term = geo_build_search_term(
             organism="Homo sapiens", entry_type="gse", extra=[f'"{cancer_types.cancer_name(cohort)}"']
         )
         try:
             result = wrapper.query(term=term, db="gds", size=n_each)
-        except RequestException:
+        except RequestException as exc:
             failed_cohorts.append(cohort)
+            _progress_event(progress_id, "wrapper_query", "error", {"source": "geo", "cohort": cohort, "error": str(exc)})
             continue
         hits = result.get("results") or []
         if not hits:
             failed_cohorts.append(cohort)
+            _progress_event(progress_id, "wrapper_query", "error",
+                             {"source": "geo", "cohort": cohort, "error": "keine Serien gefunden"})
             continue
         all_series.extend(hits)
+        _progress_event(progress_id, "wrapper_query", "ok", {"source": "geo", "cohort": cohort, "hits": len(hits)})
 
     if all_series:
         graph, _stars = mapping_geo.series_to_graph(all_series)
         combined += graph
 
     def build_anndata() -> dict:
-        return _build_anndata_from_geo_best_effort(wrapper, all_series, recipe_key, compute_tsne=True)
+        uns = _selection_uns(
+            recipe_key=recipe_key, endpoint="/selection/generate", source=level.source, cohorts=level.cohorts,
+            modality=level.modality, attributes=level.attributes, size=request.size,
+            per_cohort_size=request.per_cohort_size,
+        )
+        return _build_anndata_from_geo_best_effort(wrapper, all_series, recipe_key, compute_tsne=True, uns=uns)
 
     return SelectionFetchResult(graph=combined, failed_cohorts=failed_cohorts, build_anndata=build_anndata)
 
@@ -905,10 +993,16 @@ _GEO_TABLE_SUFFIXES = (".txt", ".tsv", ".csv", ".txt.gz", ".tsv.gz", ".csv.gz")
 
 
 def _build_anndata_from_geo_best_effort(
-    wrapper: GEOWrapper, series_list: list[dict], recipe_key: str, *, compute_tsne: bool = False
+    wrapper: GEOWrapper, series_list: list[dict], recipe_key: str, *, compute_tsne: bool = False,
+    uns: dict[str, str] | None = None,
 ) -> dict:
     """Best-Effort-Matrixaufbau aus GEO-Supplementary-Dateien (Back-Mediator M9,
     mit dem Nutzer als "GEO zusätzlich versuchen (best effort)" abgestimmt).
+
+    `uns` (P3): optionale `uns["databridge_selection"]`-Nutzlast (siehe
+    `_selection_uns`), landet unverändert im geschriebenen `.h5ad`.
+    EN: `uns` (P3): optional `uns["databridge_selection"]` payload (see
+    `_selection_uns`), ends up unchanged in the written `.h5ad`.
 
     GEO hat — anders als GDCs einheitliche STAR-Gene-Counts-Dateien — KEIN
     einheitliches Dateiformat über Serien hinweg. Dieser Versuch lädt je
@@ -989,7 +1083,7 @@ def _build_anndata_from_geo_best_effort(
         if tsne is not None:
             obsm["X_tsne_genes"] = tsne
 
-    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
+    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None, uns=uns)
     filename = f"{recipe_key}.h5ad"
     out_path = expression_export.write_h5ad(adata, export_dir() / filename)
 
@@ -1051,8 +1145,117 @@ def _load_selection_knowledge(turtle: str) -> None:
         raise HTTPException(status_code=502, detail=f"Wissensnetz-Import fehlgeschlagen: {exc}") from exc
 
 
+# ----------------------------------------------------------------------
+# Fortschritts-Kanal für POST /selection/generate (P2, siehe
+# wissensnetz/HANDOFF_pablo_offene_punkte.md)
+# EN: Progress channel for POST /selection/generate (P2, see
+# wissensnetz/HANDOFF_pablo_offene_punkte.md)
+# ----------------------------------------------------------------------
+
+# Ein Dict im Prozess genügt (kein Redis, siehe Handoff-Vorschlag) — die
+# Korrelations-ID kommt vom Aufrufer im Header ``X-DataBridge-Progress-Id``,
+# das Auftrags-JSON (SelectionRequest, ADR-0003) bleibt dadurch unverändert.
+# EN: A dict in the process is enough (no Redis, see the handoff proposal)
+# — the correlation ID comes from the caller in the
+# ``X-DataBridge-Progress-Id`` header, so the request JSON (SelectionRequest,
+# ADR-0003) stays unchanged.
+_PROGRESS_TTL_SECONDS = 600
+_PROGRESS_MAX_ENTRIES = 200
+_progress_log: dict[str, dict[str, Any]] = {}
+
+
+def _iso_now() -> str:
+    """Zeitstempel im selben Format wie im Handoff-Beispiel (ISO-8601, Millisekunden, UTC).
+    Wird sowohl für Fortschritts-Ereignisse (P2) als auch für den
+    `"created"`-Zeitstempel in `_selection_uns` (P3) benutzt.
+
+    English: Timestamp in the same format as the handoff example (ISO 8601,
+    milliseconds, UTC). Used both for progress events (P2) and for the
+    `"created"` timestamp in `_selection_uns` (P3).
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _progress_prune() -> None:
+    """Alte (abgeschlossene, länger als `_PROGRESS_TTL_SECONDS` her) und bei
+    Überzahl auch die ältesten überzähligen Einträge verwerfen.
+
+    English: Discards old (finished, older than `_PROGRESS_TTL_SECONDS`)
+    entries, and additionally the oldest excess entries if there are too many.
+    """
+    now = time.monotonic()
+    for pid in [
+        pid for pid, entry in _progress_log.items()
+        if entry["finished_at"] is not None and now - entry["finished_at"] > _PROGRESS_TTL_SECONDS
+    ]:
+        del _progress_log[pid]
+    overflow = len(_progress_log) - _PROGRESS_MAX_ENTRIES
+    if overflow > 0:
+        for pid in list(_progress_log)[:overflow]:  # dict erhält Einfuegereihenfolge / EN: dict preserves insertion order
+            del _progress_log[pid]
+
+
+def _progress_start(progress_id: str | None) -> None:
+    """Neuen Fortschritts-Eintrag anlegen; ohne `progress_id` ein No-op (Aufruf
+    ohne den Header verhält sich exakt wie ohne Fortschrittskanal).
+
+    English: Creates a new progress entry; a no-op without `progress_id`
+    (a call without the header behaves exactly like without the progress
+    channel).
+    """
+    if not progress_id:
+        return
+    _progress_prune()
+    _progress_log[progress_id] = {"events": [], "finished": False, "finished_at": None}
+
+
+def _progress_event(progress_id: str | None, stage: str, state: str, detail: dict[str, Any] | None = None) -> None:
+    """Ein Ereignis anhängen; ohne `progress_id` oder für eine unbekannte ID ein No-op.
+
+    English: Appends one event; a no-op without `progress_id` or for an unknown ID.
+    """
+    if not progress_id or progress_id not in _progress_log:
+        return
+    event: dict[str, Any] = {"ts": _iso_now(), "stage": stage, "state": state}
+    if detail:
+        event["detail"] = detail
+    _progress_log[progress_id]["events"].append(event)
+
+
+def _progress_finish(progress_id: str | None) -> None:
+    """Abschliessendes `done`-Ereignis anhängen und den Eintrag als beendet markieren
+    (Grundlage für die TTL-Bereinigung in `_progress_prune`).
+
+    English: Appends the closing `done` event and marks the entry as
+    finished (basis for the TTL cleanup in `_progress_prune`).
+    """
+    if not progress_id or progress_id not in _progress_log:
+        return
+    _progress_event(progress_id, "done", "ok")
+    _progress_log[progress_id]["finished"] = True
+    _progress_log[progress_id]["finished_at"] = time.monotonic()
+
+
+@app.get("/selection/progress/{progress_id}")
+def selection_progress(progress_id: str) -> dict:
+    """Fortschritts-Ereignisse eines laufenden oder abgeschlossenen
+    `POST /selection/generate`-Aufrufs (P2). Eine unbekannte oder bereits
+    verworfene `progress_id` liefert `404`, kein `500` (Abnahme-Kriterium
+    im Handoff).
+
+    English: Progress events of a running or finished `POST
+    /selection/generate` call (P2). An unknown or already-discarded
+    `progress_id` returns `404`, not `500` (acceptance criterion in the
+    handoff).
+    """
+    entry = _progress_log.get(progress_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Unbekannte progress_id: {progress_id!r}")
+    return {"progress_id": progress_id, "finished": entry["finished"], "events": entry["events"]}
+
+
 @app.post("/selection/preview")
-async def selection_preview(request: SelectionRequest) -> SelectionPreviewResponse:
+def selection_preview(request: SelectionRequest) -> SelectionPreviewResponse:
     """Billiger Vorschau-Endpunkt (Entscheidung 7.3: geteilter Abruf ohne Matrizen,
     aber MIT Laden — siehe `_load_selection_knowledge`/P1).
 
@@ -1072,6 +1275,23 @@ async def selection_preview(request: SelectionRequest) -> SelectionPreviewRespon
     that) — that is the difference between cheap and expensive. A failing
     level returns `status="error"` without affecting the other levels of the
     request.
+
+    Plain `def`, not `async def` (Punkt P1 in
+    wissensnetz/HANDOFF_pablo_offene_punkte.md, nicht zu verwechseln mit
+    dem P1 aus HANDOFF_pablo_store_waechst.md oben): der Rumpf macht
+    blockierende Arbeit (HTTP-Aufrufe an die Wrapper, Fuseki-Schreiben)
+    — als `async def` würde das den Event-Loop von uvicorn blockieren
+    und den gesamten Dienst (inklusive `/health`) für die Dauer des
+    Aufrufs unerreichbar machen. FastAPI führt ein gewöhnliches `def`
+    stattdessen in einem Worker-Thread aus.
+
+    Plain `def`, not `async def` (point P1 in
+    wissensnetz/HANDOFF_pablo_offene_punkte.md, not to be confused with
+    the P1 from HANDOFF_pablo_store_waechst.md above): the body does
+    blocking work (HTTP calls to the wrappers, Fuseki writes) — as
+    `async def` it would block uvicorn's event loop and make the whole
+    service (including `/health`) unresponsive for the call's duration.
+    FastAPI instead runs a plain `def` in a worker thread.
     """
     alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
     levels: list[SelectionLevelResult] = []
@@ -1096,7 +1316,10 @@ async def selection_preview(request: SelectionRequest) -> SelectionPreviewRespon
 
 
 @app.post("/selection/generate")
-async def selection_generate(request: SelectionRequest) -> SelectionGenerateResponse:
+def selection_generate(
+    request: SelectionRequest,
+    x_databridge_progress_id: Optional[str] = Header(None, alias="X-DataBridge-Progress-Id"),
+) -> SelectionGenerateResponse:
     """Teurer Generieren-Endpunkt: baut zusätzlich zur Turtle-Serialisierung/dem
     Laden (siehe `selection_preview`) ein `.h5ad` je Ebene, auf demselben
     geteilten Proben-Set (M3+M6). Wie bei `selection_preview` beeinträchtigt
@@ -1109,6 +1332,19 @@ async def selection_generate(request: SelectionRequest) -> SelectionGenerateResp
     heruntergeladen noch erneut gebaut — derselbe Cache-Kurzschluss wie in
     `POST /export/anndata`, jetzt auch hier.
 
+    Plain `def`, nicht `async def` (P1, siehe
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): derselbe Grund wie bei
+    `selection_preview` — der Rumpf blockiert (Download, HTTP, Fuseki),
+    FastAPI führt das jetzt in einem Worker-Thread statt im Event-Loop aus.
+
+    Fortschritt (P2, siehe wissensnetz/HANDOFF_pablo_offene_punkte.md):
+    optionaler Header `X-DataBridge-Progress-Id`. Ohne ihn verhält sich der
+    Aufruf exakt wie zuvor (`_progress_*`-Helfer sind dann No-ops). Mit ihm
+    lässt sich der Verlauf über `GET /selection/progress/{id}` abfragen —
+    `request_received` hier, `wrapper_query`/`download` tiefer in
+    `_fetch_selection_level`/`_build_anndata_from_hits`, `mapping`/
+    `store_load`/`matrix`/`done` hier um die entsprechenden Schritte herum.
+
     English: Expensive generate endpoint: in addition to the Turtle
     serialization/loading (see `selection_preview`), builds a `.h5ad` per
     level, on the same shared sample set (M3+M6). As with
@@ -1120,38 +1356,70 @@ async def selection_generate(request: SelectionRequest) -> SelectionGenerateResp
     already been generated (identical `recipe_key`) is neither downloaded nor
     built again — the same cache short-circuit as in POST /export/anndata,
     now here too.
-    """
-    alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
-    wrapper = get_gdc_wrapper()
-    levels: list[SelectionLevelResult] = []
-    for level in request.levels:
-        recipe_key = _selection_recipe_key(level, request)
-        result = SelectionLevelResult(
-            selection=level,
-            recipe_key=recipe_key,
-            requested_fields=resolve_case_fields(level.attributes),
-        )
-        try:
-            cached = wrapper.cache.materialized.get(recipe_key)
-            if cached and Path(cached.get("path", "")).exists():
-                result.anndata = cached
-                levels.append(result)
-                continue
 
-            fetched = _fetch_selection_level(level, request, recipe_key, alignment)
-            result.failed_cohorts = fetched.failed_cohorts
-            result.turtle = semantic_mapping.serialize_with_provenance(fetched.graph, fetched.star_annotations)
-            result.triple_count = len(fetched.graph)
-            if request.load:
-                _load_selection_knowledge(result.turtle)
-            anndata_meta = fetched.build_anndata()
-            wrapper.cache.materialized.set(recipe_key, anndata_meta)
-            result.anndata = anndata_meta
-        except (ValueError, HTTPException) as exc:
-            result.status = "error"
-            result.error = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        levels.append(result)
-    return SelectionGenerateResponse(levels=levels)
+    Plain `def`, not `async def` (P1, see
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): same reason as
+    `selection_preview` — the body blocks (download, HTTP, Fuseki), FastAPI
+    now runs it in a worker thread instead of the event loop.
+
+    Progress (P2, see wissensnetz/HANDOFF_pablo_offene_punkte.md): optional
+    `X-DataBridge-Progress-Id` header. Without it, the call behaves exactly
+    as before (the `_progress_*` helpers are no-ops then). With it, the
+    course of the call can be polled via `GET /selection/progress/{id}` —
+    `request_received` here, `wrapper_query`/`download` deeper inside
+    `_fetch_selection_level`/`_build_anndata_from_hits`, `mapping`/
+    `store_load`/`matrix`/`done` here around the respective steps.
+    """
+    progress_id = x_databridge_progress_id
+    _progress_start(progress_id)
+    _progress_event(progress_id, "request_received", "ok")
+    try:
+        alignment = semantic_mapping.load_alignment_table(alignment_path("ncit_primary_diagnosis.json"))
+        wrapper = get_gdc_wrapper()
+        levels: list[SelectionLevelResult] = []
+        for level in request.levels:
+            recipe_key = _selection_recipe_key(level, request)
+            result = SelectionLevelResult(
+                selection=level,
+                recipe_key=recipe_key,
+                requested_fields=resolve_case_fields(level.attributes),
+            )
+            stage = "wrapper_query"  # aktuelle Stufe fuer eine praezise error-Meldung, falls es scheitert / EN: current stage, for a precise error report if this fails
+            try:
+                cached = wrapper.cache.materialized.get(recipe_key)
+                if cached and Path(cached.get("path", "")).exists():
+                    result.anndata = cached
+                    levels.append(result)
+                    continue
+
+                fetched = _fetch_selection_level(level, request, recipe_key, alignment, progress_id)
+                result.failed_cohorts = fetched.failed_cohorts
+                stage = "mapping"
+                result.turtle = semantic_mapping.serialize_with_provenance(fetched.graph, fetched.star_annotations)
+                result.triple_count = len(fetched.graph)
+                _progress_event(progress_id, "mapping", "ok", {"triples": result.triple_count, "level": level.cohorts})
+                if request.load:
+                    stage = "store_load"
+                    _progress_event(progress_id, "store_load", "start")
+                    _load_selection_knowledge(result.turtle)
+                    _progress_event(progress_id, "store_load", "ok")
+                stage = "matrix"
+                _progress_event(progress_id, "matrix", "start")
+                anndata_meta = fetched.build_anndata()
+                _progress_event(
+                    progress_id, "matrix", "ok",
+                    {"n_obs": anndata_meta.get("n_obs"), "n_vars": anndata_meta.get("n_vars")},
+                )
+                wrapper.cache.materialized.set(recipe_key, anndata_meta)
+                result.anndata = anndata_meta
+            except (ValueError, HTTPException) as exc:
+                result.status = "error"
+                result.error = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                _progress_event(progress_id, stage, "error", {"error": result.error, "level": level.cohorts})
+            levels.append(result)
+        return SelectionGenerateResponse(levels=levels)
+    finally:
+        _progress_finish(progress_id)
 
 
 def _build_anndata_from_hits(
@@ -1166,6 +1434,8 @@ def _build_anndata_from_hits(
     compute_tsne: bool = False,
     experimental_strategy: str = "RNA-Seq",
     filename: Optional[str] = None,
+    progress_id: str | None = None,
+    uns: dict[str, str] | None = None,
 ) -> dict:
     """Baut aus Files-Treffern (siehe `fetch_selection_files`, M3) ein
     anndata/.h5ad (M6, siehe wissensnetz/HANDOFF_anndata.md und
@@ -1179,6 +1449,13 @@ def _build_anndata_from_hits(
     unvollständige Matrix zurückzugeben, wenn `gdc-client` fehlt oder Fuseki
     nicht erreichbar ist.
 
+    `progress_id` (P2): meldet den `gdc-client`-Download als einen
+    `download`-Fortschrittseintrag (start/ok/error) — nur gesetzt, wenn
+    `POST /selection/generate` mit `X-DataBridge-Progress-Id` aufgerufen
+    wurde, sonst No-op. `uns` (P3): optionale
+    `uns["databridge_selection"]`-Nutzlast (siehe `_selection_uns`), landet
+    unverändert im geschriebenen `.h5ad`.
+
     English: Builds an anndata/.h5ad from files hits (see
     `fetch_selection_files`, M3) (M6, see wissensnetz/HANDOFF_anndata.md and
     app/semantic/expression.py): download via `gdc-client`, X/var from the
@@ -1189,6 +1466,13 @@ def _build_anndata_from_hits(
     (M3: "one fetch, two serializations"). Aborts with a clear error instead
     of returning an incomplete matrix if `gdc-client` is missing or Fuseki is
     unreachable.
+
+    `progress_id` (P2): reports the `gdc-client` download as one `download`
+    progress entry (start/ok/error) — only set when `POST
+    /selection/generate` was called with `X-DataBridge-Progress-Id`,
+    otherwise a no-op. `uns` (P3): optional
+    `uns["databridge_selection"]` payload (see `_selection_uns`), ends up
+    unchanged in the written `.h5ad`.
     """
     file_ids: list[str] = []
     sample_case_map: dict[str, str] = {}
@@ -1216,8 +1500,10 @@ def _build_anndata_from_hits(
         raise HTTPException(status_code=502, detail=f"GDC-API nicht erreichbar oder Fehler: {exc}") from exc
 
     raw_dir = wrapper.cache.raw.path_for(recipe_key)
+    _progress_event(progress_id, "download", "start", {"files": len(file_ids)})
     download_result = wrapper.download_via_gdc_client(manifest, str(raw_dir))
     if download_result["status"] != "completed":
+        _progress_event(progress_id, "download", "error", {"files": len(file_ids), "download_result": download_result})
         raise HTTPException(
             status_code=503,
             detail={
@@ -1226,6 +1512,7 @@ def _build_anndata_from_hits(
                 "download_result": download_result,
             },
         )
+    _progress_event(progress_id, "download", "ok", {"files": len(file_ids)})
 
     # Zuordnung Datei -> Probe direkt aus den Suchtreffern (dieselbe Regel wie
     # oben beim Aufbau von sample_case_map: sample_id, sonst file_id als Fallback).
@@ -1308,7 +1595,7 @@ def _build_anndata_from_hits(
             obsm_key = "X_tsne_mirna" if experimental_strategy == "miRNA-Seq" else "X_tsne_genes"
             obsm[obsm_key] = tsne
 
-    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None)
+    adata = expression_export.build_anndata(X, obs, var, obsm=obsm or None, uns=uns)
 
     out_filename = filename or f"{recipe_key}.h5ad"
     out_filename = Path(out_filename).name  # nur Basisname, keine Pfad-Traversal / EN: basename only, no path traversal
@@ -1332,7 +1619,7 @@ def _build_anndata_from_hits(
 
 
 @app.post("/export/anndata")
-async def export_anndata(request: AnndataExportRequest) -> dict:
+def export_anndata(request: AnndataExportRequest) -> dict:
     """GDC-Expressionsdateien -> anndata/.h5ad (Teil 3, siehe
     wissensnetz/HANDOFF_anndata.md und app/semantic/expression.py).
 
@@ -1342,6 +1629,12 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     Siehe GET /export/anndata/download/{filename} für den eigentlichen
     Datei-Download.
 
+    Plain `def`, nicht `async def` (P1, siehe
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): derselbe blockierende Kern
+    wie bei `selection_generate` (`_build_anndata_from_hits`: `gdc-client`-
+    Download, HTTP, Fuseki-Lesen) — als `async def` würde er den Event-Loop
+    blockieren und `/health` während des Laufs unerreichbar machen.
+
     English: GDC expression files -> anndata/.h5ad (part 3, see
     wissensnetz/HANDOFF_anndata.md and app/semantic/expression.py).
 
@@ -1350,6 +1643,12 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
     `_build_anndata_from_hits` (M6) — the same core that POST
     /selection/generate also uses. See GET
     /export/anndata/download/{filename} for the actual file download.
+
+    Plain `def`, not `async def` (P1, see
+    wissensnetz/HANDOFF_pablo_offene_punkte.md): the same blocking core as
+    `selection_generate` (`_build_anndata_from_hits`: `gdc-client`
+    download, HTTP, Fuseki reads) — as `async def` it would block the
+    event loop and make `/health` unreachable during the call.
     """
     wrapper = get_gdc_wrapper()
 
@@ -1400,6 +1699,16 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
             f"experimental_strategy={request.experimental_strategy!r}, data_type={request.data_type!r}.",
         )
 
+    uns = _selection_uns(
+        recipe_key=recipe_key,
+        endpoint="/export/anndata",
+        source="gdc",
+        project_id=request.project_id,
+        experimental_strategy=request.experimental_strategy,
+        data_type=request.data_type,
+        size=request.size,
+        per_project_size=request.per_project_size,
+    )
     result = _build_anndata_from_hits(
         wrapper,
         hits,
@@ -1411,6 +1720,7 @@ async def export_anndata(request: AnndataExportRequest) -> dict:
         compute_tsne=request.compute_tsne,
         experimental_strategy=request.experimental_strategy,
         filename=request.filename,
+        uns=uns,
     )
 
     metadata = {

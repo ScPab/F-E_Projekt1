@@ -433,15 +433,29 @@ def build_anndata(
     var: pd.DataFrame,
     *,
     obsm: Optional[dict[str, np.ndarray]] = None,
+    uns: Optional[dict[str, str]] = None,
 ) -> AnnData:
-    """Baut den `anndata.AnnData`-Container aus X/obs/var(/obsm).
+    """Baut den `anndata.AnnData`-Container aus X/obs/var(/obsm/uns).
 
-    English: Builds the `anndata.AnnData` container from X/obs/var(/obsm).
+    `uns` (P3, siehe wissensnetz/HANDOFF_pablo_offene_punkte.md): der
+    Auftrag, der zu dieser Datei führte (`app/main.py::_selection_uns`
+    baut die Nutzlast als JSON-Zeichenkette unter dem Schlüssel
+    `"databridge_selection"`) — ohne das war ein `.h5ad` bisher ein
+    Ergebnis ohne Herkunft.
+
+    English: Builds the `anndata.AnnData` container from X/obs/var(/obsm/uns).
+
+    `uns` (P3, see wissensnetz/HANDOFF_pablo_offene_punkte.md): the
+    request that produced this file (`app/main.py::_selection_uns` builds
+    the payload as a JSON string under the `"databridge_selection"` key)
+    — without it, a `.h5ad` used to be a result without provenance.
     """
     adata = AnnData(X=X, obs=obs, var=var)
     if obsm:
         for key, value in obsm.items():
             adata.obsm[key] = value
+    if uns:
+        adata.uns.update(uns)
     return adata
 
 

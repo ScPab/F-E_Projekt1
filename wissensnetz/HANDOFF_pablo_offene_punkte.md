@@ -299,25 +299,67 @@ die Oberfläche kann dann nur weniger sagen, als sie zeigt.
 
 ## Antwort von Pablo (Mediator)
 
-**Stand:** 2026-09-25
+**Stand:** 2026-09-26
 
 | Punkt | Status | Zusage/Termin |
 |---|---|---|
-| **P1** | noch nicht begonnen | *TODO* |
-| **P2** | noch nicht begonnen | *TODO* |
-| **P3** | noch nicht begonnen | *TODO* |
+| **P1** | umgesetzt | siehe unten |
+| **P2** | umgesetzt | siehe unten |
+| **P3** | umgesetzt | siehe unten |
 
 ### P1 · Ein langer Auftrag blockiert den ganzen Dienst
 
-*TODO: Rückmeldung zum Vorschlag (`async` streichen bzw. `run_in_threadpool`),
-Zeitplan, offene Fragen.*
+Genau wie vorgeschlagen: `async` bei `selection_preview`, `selection_generate`
+und `export_anndata` gestrichen (dort läuft derselbe blockierende Kern wie bei
+`selection_generate`, daher mit erledigt). Kein `run_in_threadpool` nötig, da
+keine der drei Funktionen intern `await` brauchte. Abnahme lokal geprüft:
+`GET /health` antwortet während eines laufenden `POST /selection/generate`
+weiterhin sofort (FastAPI/Starlette führt die drei `def`-Endpunkte in
+Worker-Threads statt im Event-Loop aus, testweise per `TestClient`
+nachvollzogen).
 
 ### P2 · Fortschritt während eines Auftrags melden
 
-*TODO: Rückmeldung zum Vorschlag (Progress-Header + Abfrage-Endpunkt vs. SSE),
-Zeitplan, offene Fragen.*
+Umgesetzt wie vorgeschlagen — Korrelations-ID per Header, kein SSE:
+
+- `POST /selection/generate` nimmt optional den Header
+  `X-DataBridge-Progress-Id` entgegen; ohne Header verhält sich der Aufruf
+  exakt wie zuvor (keine Änderung am Auftrags-JSON).
+- Neuer Endpunkt `GET /selection/progress/{progress_id}` liefert
+  `{"progress_id", "finished", "events": [...]}`; unbekannte/verworfene ID
+  → `404`, nicht `500`.
+- Gemeldete Stufen: `request_received`, `wrapper_query` (je Kohorte, für
+  gdc/cbioportal/geo), `download` (nur `gdc-client`, wie im Handoff-Vorschlag),
+  `mapping`, `store_load` (nur bei `load=true`), `matrix`, `done` — in dieser
+  Reihenfolge, mit `state` `start`/`ok`/`error` und `detail.error` bei Fehlern.
+- Aufbewahrung: `dict` im Prozess (kein Redis), abgeschlossene Einträge nach
+  10 Minuten verworfen, insgesamt max. 200 Einträge (älteste zuerst).
+- Live gegen die echte GDC-API getestet (`TestClient`, ohne laufenden
+  `gdc-client`/Fuseki): Reihenfolge und Fehlerzuordnung stimmen; siehe
+  `app/main.py::_progress_*`/`selection_generate`.
+
+Nicht umgesetzt (wie im Handoff ausdrücklich nicht gefordert): kein
+Prozentwert, keine Restzeitschätzung, keine Zwischenmeldung je 10 Dateien
+beim Download (nur ein `start`/`ok`/`error` für den gesamten
+`gdc-client`-Lauf — die feingranulare Variante war im Handoff als "wäre
+wertvoll", nicht als Abnahmekriterium markiert).
 
 ### P3 · Den Auftrag ins `.h5ad` schreiben
 
-*TODO: Rückmeldung zum Vorschlag (`uns["databridge_selection"]`), Zeitplan,
-offene Fragen.*
+Umgesetzt wie vorgeschlagen: `expression.build_anndata()` hat jetzt einen
+`uns`-Parameter, alle Erzeuger-Pfade (`_build_anndata_from_hits` für gdc,
+`_build_anndata_from_cbioportal`, `_build_anndata_from_geo_best_effort`,
+sowie `POST /export/anndata`) übergeben `uns["databridge_selection"]` als
+JSON-Zeichenkette (Helper `_selection_uns` in `app/main.py`) — mit `schema`,
+`recipe_key`, `created`, `endpoint`, `source`, `cohorts`/`project_id`,
+`modality`, `attributes`, `size`, `per_cohort_size`/`per_project_size`.
+
+Abnahme lokal nachvollzogen (echter `.h5ad`-Roundtrip über `anndata`, nicht
+nur in-memory):
+```python
+sel = json.loads(a.uns["databridge_selection"])
+assert sel["cohorts"] == ["TCGA-BRCA"]
+assert sel["source"] == "gdc"
+```
+Ältere `.h5ad`-Dateien ohne das Feld bleiben lesbar (`uns` ist optional,
+Default `None`).
