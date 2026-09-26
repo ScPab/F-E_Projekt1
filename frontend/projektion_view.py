@@ -208,7 +208,7 @@ class ProjektionPanel(QWidget):
 
         kopf = QHBoxLayout()
         kopf.setContentsMargins(0, 0, 0, 0)
-        self._oeffnen = QPushButton("Datei oeffnen …")
+        self._oeffnen = QPushButton("Datei öffnen …")
         self._oeffnen.clicked.connect(self._waehle_datei)
         kopf.addWidget(self._oeffnen)
         kopf.addStretch(1)
@@ -275,8 +275,8 @@ class ProjektionPanel(QWidget):
         # Meldung statt Karte: leerer Zustand, Ladehinweis, fehlendes Layout.
         # EN: Message instead of map: empty state, loading hint, missing
         # layout.
-        self._hinweis = QLabel("Keine Datei geladen.\nUeber `Datei oeffnen …` eine "
-                               ".h5ad waehlen.")
+        self._hinweis = QLabel("Keine Datei geladen.\nÜber `Datei öffnen …` eine "
+                               ".h5ad wählen.")
         self._hinweis.setObjectName(theme.OBJ_PROJ_HINT)
         self._hinweis.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hinweis.setWordWrap(True)
@@ -360,7 +360,7 @@ class ProjektionPanel(QWidget):
         """
         start = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
         pfad, _ = QFileDialog.getOpenFileName(
-            self, "AnnData oeffnen", str(start), "AnnData (*.h5ad);;Alle Dateien (*)"
+            self, "AnnData öffnen", str(start), "AnnData (*.h5ad);;Alle Dateien (*)"
         )
         if pfad:
             self.datei_gewuenscht.emit(pfad)
@@ -512,7 +512,7 @@ class ProjektionPanel(QWidget):
         self._ausgewaehlt = {int(index)}
         self._zeichne()
         zeile = self._modell.punkte[int(index)]
-        self._auswahl_label.setText("1 Probe ausgewaehlt")
+        self._auswahl_label.setText("1 Probe ausgewählt")
         self.probe_geklickt.emit(str(zeile.get("tumor") or zeile.get("sample_id") or ""))
 
     def _rechteck(self, rechteck: QRectF) -> None:
@@ -533,7 +533,7 @@ class ProjektionPanel(QWidget):
         self._zeichne()
         anzahl = len(self._ausgewaehlt)
         self._auswahl_label.setText(
-            f"{anzahl} {'Probe' if anzahl == 1 else 'Proben'} ausgewaehlt"
+            f"{anzahl} {'Probe' if anzahl == 1 else 'Proben'} ausgewählt"
             if anzahl else ""
         )
 

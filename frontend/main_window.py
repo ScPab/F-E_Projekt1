@@ -140,7 +140,7 @@ def _kontext_aus_store(barcode: str) -> dict[str, Any] | None:
     if not sr.is_reachable(store):
         raise RuntimeError(
             f"Fuseki unter {sr.store_url(store)} nicht erreichbar. "
-            "Laeuft `docker compose up`? Die Karte bleibt bedienbar."
+            "Läuft `docker compose up`? Die Karte bleibt bedienbar."
         )
     return case_context(store, barcode)
 
@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
         # scripts/run_selection.py or start_all.ps1 -FullLoad. Without this
         # entry the picture would silently go stale.
         view_menu = self.menuBar().addMenu("&Ansicht")
-        refresh = QAction("Netz aktualisieren", self)
+        refresh = QAction("Suchauftrag aktualisieren", self)
         refresh.setShortcut("F5")
         refresh.triggered.connect(self._netz_aktualisieren)
         view_menu.addAction(refresh)
@@ -360,7 +360,7 @@ class MainWindow(QMainWindow):
         The user can change this in the dialog at any time.
         """
         if self._dl_thread is not None:
-            self.set_status("Es laeuft bereits ein Download — bitte warten.", "warning")
+            self.set_status("Es läuft bereits ein Download — bitte warten.", "warning")
             return
 
         default_dir = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
@@ -468,7 +468,7 @@ class MainWindow(QMainWindow):
         self._output.setPlainText(
             "Noch keine Anfrage gestellt.\n\n"
             "Rechts eine Auswahl zusammenstellen, dann 'Vorschau' (nur Metadaten)\n"
-            "oder 'Generieren' (zusaetzlich Rohdaten und .h5ad).\n\n"
+            "oder 'Generieren' (zusätzlich Rohdaten und .h5ad).\n\n"
             "Angezeigt wird genau die Antwort des Mediators."
         )
         # Senkrechter Splitter statt der einen Zeile: oben die Ansichten, unten
@@ -557,7 +557,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(2, 0, 2, 0)
         layout.setSpacing(0)
 
-        self._knopf_netz = QPushButton("Wissensnetz")
+        self._knopf_netz = QPushButton("Suchauftrag")
         self._knopf_netz.setObjectName(theme.OBJ_SWITCH_LEFT)
         self._knopf_projektion = QPushButton("Projektion")
         self._knopf_projektion.setObjectName(theme.OBJ_SWITCH_RIGHT)
@@ -575,7 +575,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._knopf_projektion)
         layout.addStretch(1)
 
-        self._ansicht_hinweis = QLabel("Struktur und Zaehlungen, keine Messdaten")
+        self._ansicht_hinweis = QLabel("Struktur und Zählungen, keine Messdaten")
         self._ansicht_hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
         layout.addWidget(self._ansicht_hinweis)
         return zeile
@@ -629,7 +629,7 @@ class MainWindow(QMainWindow):
         wenn man ihn gerade nicht sieht."""
         self._unten.setCurrentIndex(index)
         self._unten_hinweis.setText("Was im Hintergrund passiert" if index == 0
-                                    else "Die Antwort des Mediators, unveraendert")
+                                    else "Die Antwort des Mediators, unverändert")
 
     # -- Projektion ----------------------------------------------------------
     # EN: Projection (translated)
@@ -637,7 +637,7 @@ class MainWindow(QMainWindow):
         self._ansichten.setCurrentIndex(index)
         self._raum_fuer_projektion(index == 1)
         if index == 0:
-            self._ansicht_hinweis.setText("Struktur und Zaehlungen, keine Messdaten")
+            self._ansicht_hinweis.setText("Struktur und Zählungen, keine Messdaten")
             return
         self._ansicht_hinweis.setText(self._projektion_hinweis())
         # Erst beim Umschalten laden, nicht vorher: 44 MB sollen nicht ungefragt
@@ -747,10 +747,10 @@ class MainWindow(QMainWindow):
             teile.append(f"Nicht im Panel: {', '.join(fremd)}.")
         # Ehrlich bleiben: sagen, woher die Auswahl kommt.
         if auftrag.get("gelesen"):
-            teile.append("Die Datei fuehrt den Auftrag selbst mit"
+            teile.append("Die Datei führt den Auftrag selbst mit"
                          + (f" (Datenquelle: {', '.join(quellen)})." if quellen else "."))
         else:
-            teile.append("Aus den Daten abgeleitet: Datenquelle bleibt unveraendert, "
+            teile.append("Aus den Daten abgeleitet: Datenquelle bleibt unverändert, "
                          "leer gebliebene Attribute sind nicht rekonstruierbar.")
         self.set_status("  ".join(teile), "success" if bekannt else "warning")
 
@@ -784,7 +784,7 @@ class MainWindow(QMainWindow):
             # EN: No 2D layout: no crash, but no success either.
             self._projektion.zeige_modell(modell)
             self.set_status(
-                f"{modell.dateiname} enthaelt kein 2D-Layout — keine Karte.",
+                f"{modell.dateiname} enthält kein 2D-Layout — keine Karte.",
                 "warning")
         self._ansicht_hinweis.setText(self._projektion_hinweis())
 
@@ -837,7 +837,7 @@ class MainWindow(QMainWindow):
             # EN: The .h5ad can be older than the store content or come
             # from a different selection. That is normal, not an error.
             return (f"{schluessel}: Dieser Fall liegt nicht im Store. "
-                    "Eine Vorschau mit dieser Kohorte laedt ihn nachtraeglich.")
+                    "Eine Vorschau mit dieser Kohorte lädt ihn nachträglich.")
         teile = [str(schluessel)]
         projekt = kontext.get("project_id")
         if projekt:
@@ -889,8 +889,8 @@ class MainWindow(QMainWindow):
         self._cohort_select = MultiSelect(
             self._cohort_entries(),
             mit_suche=True,
-            platzhalter="Kuerzel suchen, z. B. BRCA …",
-            leer_text="Kein Kuerzel passt",
+            platzhalter="Kürzel suchen, z. B. BRCA …",
+            leer_text="Kein Kürzel passt",
             mit_punkt=True,
         )
 
@@ -1266,7 +1266,7 @@ class MainWindow(QMainWindow):
             # EN: Not reachable does NOT mean blocked: preview and generate
             # talk to the mediator, not to Fuseki.
             self.set_status(
-                f"Fuseki unter {url} nicht erreichbar. Laeuft `docker compose up`?",
+                f"Fuseki unter {url} nicht erreichbar. Läuft `docker compose up`?",
                 "error",
             )
             return
@@ -1274,7 +1274,7 @@ class MainWindow(QMainWindow):
             self._letzter_abzug = sr.snapshot(store)
         except Exception as fehler:          # noqa: BLE001 - jede Stoerung gleich / EN: every disturbance treated alike
             self._netz_zeigen(None)
-            self.set_status(f"Netz konnte nicht gelesen werden: {fehler}", "error")
+            self.set_status(f"Der Store konnte nicht gelesen werden: {fehler}", "error")
             return
         self._netz_zeigen(self._letzter_abzug)
 
@@ -1296,8 +1296,8 @@ class MainWindow(QMainWindow):
             # "empty" would falsely imply here that the store holds
             # nothing.
             self._netz.zeige_hinweis(
-                "Noch nichts ausgewaehlt.\n"
-                "Rechts Kohorten anhaken und Attribute waehlen."
+                "Noch nichts ausgewählt.\n"
+                "Rechts Kohorten anhaken und Attribute wählen."
             )
             self._store_label.setText(self._store_stand(abzug))
             return
@@ -1328,7 +1328,7 @@ class MainWindow(QMainWindow):
     def _store_stand(abzug: dict[str, Any]) -> str:
         faelle = abzug.get("cases", 0)
         kohorten = len(abzug.get("cohorts") or {})
-        return (f"Store: {faelle} {'Fall' if faelle == 1 else 'Faelle'} · "
+        return (f"Store: {faelle} {'Fall' if faelle == 1 else 'Fälle'} · "
                 f"{kohorten} {'Kohorte' if kohorten == 1 else 'Kohorten'}")
 
     # -- Aufruf -------------------------------------------------------------
@@ -1359,15 +1359,15 @@ class MainWindow(QMainWindow):
             # Dateien je Minute. Wer 250 anstoesst, soll vorher wissen, dass das
             # eine Viertelstunde und mehr dauert.
             dateien = len(kohorten) * payload["size"] * len(payload["levels"])
-            hinweis = (f" Etwa {dateien} Dateien, erfahrungsgemaess rund "
+            hinweis = (f" Etwa {dateien} Dateien, erfahrungsgemäß rund "
                        f"{max(1, round(dateien / 13)) } Minuten.")
         self.set_status(
-            f"{was} laeuft … {', '.join(kohorten)}, "
+            f"{was} läuft … {', '.join(kohorten)}, "
             f"{payload['size']} Proben je Kohorte, Quelle(n): {quellen}."
             f"{hinweis} Das Fenster bleibt bedienbar.",
             "busy",
         )
-        self._output.setPlainText(f"{was} laeuft, bitte warten …")
+        self._output.setPlainText(f"{was} läuft, bitte warten …")
         # Die Architektur zeigt ab jetzt, was unterwegs ist.
         self._architektur.zeige(ablauf.laufend(payload, mode))
         self._laufender_auftrag = payload
@@ -1501,7 +1501,7 @@ class MainWindow(QMainWindow):
         levels = result.levels()
         if not levels:
             self._output.setPlainText(
-                "Der Mediator hat keine Auswahl-Ebene zurueckgegeben.\n\n"
+                "Der Mediator hat keine Auswahl-Ebene zurückgegeben.\n\n"
                 + json.dumps(result.data, indent=2, ensure_ascii=False)[:4000]
             )
             self.set_status("Antwort ohne Ebenen.", "warning")

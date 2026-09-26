@@ -90,8 +90,8 @@ GRUND_MARKER = "Marker nicht in var"
 # is the tool used for research, and a fabricated point cloud would be a lie
 # there.
 TEXT_OHNE_LAYOUT = (
-    f"Die Datei enthaelt kein 2D-Layout (obsm '{KEY_GENES}').\n"
-    "Erzeuge sie mit compute_tsne=true, etwa ueber\n"
+    f"Die Datei enthält kein 2D-Layout (obsm '{KEY_GENES}').\n"
+    "Erzeuge sie mit compute_tsne=true, etwa über\n"
     "`start_all.ps1 -DemoGenerate` oder `scripts/fetch_pancancer_h5ad.py`."
 )
 
@@ -121,7 +121,7 @@ def text_ohne_layout(anzahl: int = 0) -> str:
     """
     if 0 < anzahl < TSNE_MIN_PROBEN:
         probe = "Probe" if anzahl == 1 else "Proben"
-        return (f"Diese Datei enthaelt nur {anzahl} {probe}. Unter "
+        return (f"Diese Datei enthält nur {anzahl} {probe}. Unter "
                 f"{TSNE_MIN_PROBEN} Proben rechnet der Mediator keine tSNE,\n"
                 "auch mit compute_tsne=true — mehr Proben abrufen.\n\n"
                 + TEXT_OHNE_LAYOUT)
@@ -487,7 +487,7 @@ def lade_modell(pfad: str | Path | None = None) -> tuple[Morphmodell | None, str
     adata = load_h5ad(ziel)
     if adata is None:
         return None, (f"{ziel.name} konnte nicht gelesen werden. "
-                      "Fehlt anndata, oder ist die Datei keine gueltige .h5ad?")
+                      "Fehlt anndata, oder ist die Datei keine gültige .h5ad?")
     try:
         return baue_encodings(adata, dateiname=ziel.name), ""
     except Exception as fehler:      # noqa: BLE001 - jede Stoerung gleich melden / EN: report every disruption alike

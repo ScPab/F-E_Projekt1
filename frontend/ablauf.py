@@ -166,13 +166,13 @@ def laufend(payload: dict[str, Any], mode: str) -> Ablauf:
 
     was = "preview" if mode == "preview" else "generate"
     stationen[1].zustand = LAEUFT
-    stationen[1].detail = f"POST /selection/{was} laeuft"
+    stationen[1].detail = f"POST /selection/{was} läuft"
     stationen[2].zustand = LAEUFT
     stationen[2].detail = ", ".join(_quellen(payload)) or "—"
 
     return Ablauf(stationen=stationen,
-                  ueberschrift="Der Aufruf laeuft. Die Zwischenschritte belegt "
-                               "erst die Antwort — die Oberflaeche hoert den "
+                  ueberschrift="Der Aufruf läuft. Die Zwischenschritte belegt "
+                               "erst die Antwort — die Oberfläche hört den "
                                "Mediator nicht mit.")
 
 
@@ -295,7 +295,7 @@ def fertig(payload: dict[str, Any], mode: str, ok: bool,
         neue = [k for k, z in (unterschied.get("cohorts") or {}).items()
                 if z.get("state") == "neu"]
         stationen[5].zustand = OK
-        stationen[5].detail = (f"+{zuwachs} Faelle" if zuwachs else "unveraendert")
+        stationen[5].detail = (f"+{zuwachs} Fälle" if zuwachs else "unverändert")
         if neue:
             stationen[5].detail += f" · neu: {', '.join(sorted(neue))}"
         stationen[5].beleg = "eigener Abzug vorher/nachher"
@@ -307,13 +307,13 @@ def fertig(payload: dict[str, Any], mode: str, ok: bool,
         ablauf.ueberschrift = "Alle Ebenen sind gescheitert."
     elif gescheitert:
         ablauf.ueberschrift = (f"{len(gelungen)} von {len(levels)} Ebenen gelungen — "
-                               "die uebrigen stehen unten im Text.")
+                               "die übrigen stehen unten im Text.")
     elif gemeldet is not None:
         ablauf.ueberschrift = ("Durchgelaufen. Die Zwischenschritte hat der "
                                "Mediator selbst gemeldet.")
     else:
         ablauf.ueberschrift = ("Durchgelaufen. Die Zwischenschritte sind aus der "
-                               "Antwort belegt, nicht mitgehoert.")
+                               "Antwort belegt, nicht mitgehört.")
     return _uebernehme_meldungen(ablauf, gemeldet)
 
 
@@ -348,11 +348,11 @@ def _detail_text(stufe: str, state: str, detail: dict[str, Any]) -> str:
     if stufe == "download":
         dateien = detail.get("files")
         if state == "start":
-            return f"{dateien} Dateien werden geholt" if dateien else "Download laeuft"
+            return f"{dateien} Dateien werden geholt" if dateien else "Download läuft"
         return f"{dateien} Dateien geholt" if dateien else "Download fertig"
     if stufe == "mapping":
         tripel = detail.get("triples")
-        return f"{tripel} Tripel erzeugt" if tripel is not None else "uebersetzt"
+        return f"{tripel} Tripel erzeugt" if tripel is not None else "übersetzt"
     if stufe == "store_load":
         return "wird geladen" if state == "start" else "in den Default-Graph geladen"
     if stufe == "request_received":
@@ -408,6 +408,6 @@ def aus_ereignissen(payload: dict[str, Any], mode: str,
     ablauf.ueberschrift = (
         "Der Mediator meldet seinen Fortschritt."
         if gesehen else
-        "Der Aufruf laeuft. Auf die erste Meldung des Mediators warten …"
+        "Der Aufruf läuft. Auf die erste Meldung des Mediators warten …"
     )
     return ablauf

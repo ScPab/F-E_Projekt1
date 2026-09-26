@@ -225,7 +225,7 @@ Name, muss er in `panel.json` nachgezogen werden.
 
 ## Projektion
 
-Über der Anzeigefläche stehen zwei Schaltflächen, **Wissensnetz** und **Projektion**.
+Über der Anzeigefläche stehen zwei Schaltflächen, **Suchauftrag** und **Projektion**.
 Umschalten stößt keinen Abruf an, lädt keine Datei und verwirft keinen Zustand.
 
 **Die Projektion bekommt das ganze Fenster.** Auswahlpanel, Antworttext und die drei

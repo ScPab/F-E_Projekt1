@@ -18,14 +18,14 @@
       "label": "GEO",
       "enabled": true,
       "note": "Generieren: Best-Effort",
-      "detail": "Vorschau (RDF) ist real angebunden. Generieren (.h5ad) ist Best-Effort: GEO hat kein einheitliches Dateiformat je Serie und kann fuer eine Ebene sauber scheitern, ohne die anderen Ebenen zu beeintraechtigen."
+      "detail": "Vorschau (RDF) ist real angebunden. Generieren (.h5ad) ist Best-Effort: GEO hat kein einheitliches Dateiformat je Serie und kann für eine Ebene sauber scheitern, ohne die anderen Ebenen zu beeinträchtigen."
     },
     {
       "value": "ena",
       "label": "ENA",
       "enabled": false,
       "note": "nicht angebunden",
-      "detail": "ENA organisiert Daten nicht nach Krankheits-/Krebsart (allgemeines Rohsequenz-Archiv) und der Wrapper hat keine Freitextsuche - eine Kohorten-Anfrage waere hier nicht sinnvoll beantwortbar."
+      "detail": "ENA organisiert Daten nicht nach Krankheits-/Krebsart (allgemeines Rohsequenz-Archiv) und der Wrapper hat keine Freitextsuche - eine Kohorten-Anfrage wäre hier nicht sinnvoll beantwortbar."
     }
   ],
   "_default_hinweis": "Bewusst leer: die Oberflaeche trifft keine Vorauswahl, der Forscher waehlt Kohorte, Attribute und Quelle selbst. Die beiden Listen bleiben als Schalter stehen - wer wieder vorbelegen will, traegt hier Werte ein, ohne Code zu aendern.",

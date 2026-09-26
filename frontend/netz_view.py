@@ -81,7 +81,7 @@ EDGE_ENTITY = "db:hasDemographic | db:hasDiagnosis | db:hasSample"
 # different things: an empty store is the normal starting point after
 # `docker compose down -v`, not an error.
 TEXT_LEER = ("Zu dieser Auswahl liegt noch nichts im Store.\n"
-             "Jede Vorschau erweitert das Netz.")
+             "Jede Vorschau erweitert den Store.")
 
 
 def _anzahl(zahl: int, einzahl: str, mehrzahl: str) -> str:
@@ -295,7 +295,7 @@ class NetzView(QGraphicsView):
         self._unterschied = {}
         self._offene_kohorte = None
         self._meldung = (f"Fuseki unter {url} nicht erreichbar.\n"
-                         "Laeuft `docker compose up`?")
+                         "Läuft `docker compose up`?")
         self._meldung_fehler = True
         self.zeichne()
 
@@ -341,7 +341,7 @@ class NetzView(QGraphicsView):
         wurzel = self._neuer_knoten(
             "Auswahl",
             f"{_anzahl(len(self._abzug.get('cohorts') or {}), 'Kohorte', 'Kohorten')} · "
-            f"{_anzahl(self._abzug.get('cases', 0), 'Fall', 'Faelle')}",
+            f"{_anzahl(self._abzug.get('cases', 0), 'Fall', 'Fälle')}",
             zustand=self._zustand_wurzel(),
             kind=KIND_ROOT,
             key="",
@@ -377,7 +377,7 @@ class NetzView(QGraphicsView):
                     self._male_kante(elternknoten, knoten)
             self._male_kantenetikett(EDGE_ENTITY, y3 - theme.NETZ_ROW_GAP + 8)
             hinweis = ("" if self._offene_kohorte
-                       else "Attribute gelten fuer alle gewaehlten Kohorten")
+                       else "Attribute gelten für alle gewählten Kohorten")
             self._male_rest(len(attribute) - len(gezeigte_attribute), "Attribute",
                             y3 + theme.NETZ_NODE_HEIGHT_3 + 4, breite,
                             zusatz=hinweis)
@@ -458,7 +458,7 @@ class NetzView(QGraphicsView):
         daten = (self._abzug.get("cohorts") or {}).get(projekt) or {}
         zustand = (self._unterschied.get("cohorts") or {}).get(projekt) or {}
         return (projekt,
-                f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')}"
+                f"{_anzahl(daten.get('cases', 0), 'Fall', 'Fälle')}"
                 f"{self._zusatz(zustand)}",
                 "",
                 zustand.get("state", sr.UNVERAENDERT))
@@ -486,7 +486,7 @@ class NetzView(QGraphicsView):
         if not self._offene_kohorte:
             daten = sr.gesamt_attribute(self._abzug).get(name) or {}
             zustand = sr.gesamt_zustand(self._unterschied, name)
-            zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')} · "
+            zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Fälle')} · "
                           f"{_anzahl(daten.get('kohorten', 0), 'Kohorte', 'Kohorten')}"
                           f"{self._zusatz(zustand)}")
             return name, panel, zaehlungen, zustand.get("state", sr.UNVERAENDERT)
@@ -495,7 +495,7 @@ class NetzView(QGraphicsView):
         daten = (kohorte.get("attributes") or {}).get(name) or {}
         zustand = ((self._unterschied.get("attributes") or {})
                    .get(self._offene_kohorte) or {}).get(name) or {}
-        zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')} · "
+        zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Fälle')} · "
                       f"{_anzahl(daten.get('values', 0), 'Wert', 'Werte')}"
                       f"{self._zusatz(zustand)}")
         return name, panel, zaehlungen, zustand.get("state", sr.UNVERAENDERT)
@@ -641,7 +641,7 @@ class NetzPanel(QWidget):
         kopf.setContentsMargins(2, 2, 2, 0)
         self._oeffnen = QPushButton("Auftrag aus .h5ad …")
         self._oeffnen.setToolTip(
-            "Eine fertige .h5ad oeffnen und die Auswahl daraus wiederherstellen"
+            "Eine fertige .h5ad öffnen und die Auswahl daraus wiederherstellen"
         )
         self._oeffnen.clicked.connect(self._waehle_datei)
         kopf.addWidget(self._oeffnen)

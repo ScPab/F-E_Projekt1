@@ -647,8 +647,8 @@ class SearchableSelect(_AufklappAuswahl):
             # EN: The placeholder names the search pattern explicitly: since
             # the search only matches the code, "lung" would otherwise come
             # back empty without explanation.
-            platzhalter="Kuerzel suchen, z. B. BRCA …",
-            leer_text="Kein Kuerzel passt",
+            platzhalter="Kürzel suchen, z. B. BRCA …",
+            leer_text="Kein Kürzel passt",
             mit_punkt=True,
             parent=parent,
         )

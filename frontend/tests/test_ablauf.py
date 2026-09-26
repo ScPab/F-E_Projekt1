@@ -97,7 +97,7 @@ def test_fertig_belegt_jede_station_aus_der_antwort() -> None:
     assert _zustand(a, ablauf.MEDIATOR) == ablauf.OK
     assert "485 Tripel" in _detail(a, ablauf.MAPPING)
     assert _zustand(a, ablauf.FUSEKI) == ablauf.OK
-    assert "+19 Faelle" in _detail(a, ablauf.WISSENSNETZ)
+    assert "+19 Fälle" in _detail(a, ablauf.WISSENSNETZ)
     assert "TCGA-LUAD" in _detail(a, ablauf.WISSENSNETZ)
 
 
@@ -243,4 +243,4 @@ def test_gemeldete_details_bleiben_im_endstand_stehen() -> None:
 def test_ohne_meldungen_bleibt_der_endstand_wie_zuvor() -> None:
     """Die Vorschau meldet nichts - dort wird weiter aus der Antwort abgeleitet."""
     a = ablauf.fertig(AUFTRAG, "preview", ok=True, levels=[_ebene()])
-    assert "nicht mitgehoert" in a.ueberschrift
+    assert "nicht mitgehört" in a.ueberschrift
