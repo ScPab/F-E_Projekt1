@@ -363,3 +363,28 @@ assert sel["source"] == "gdc"
 ```
 Ältere `.h5ad`-Dateien ohne das Feld bleiben lesbar (`uns` ist optional,
 Default `None`).
+
+---
+
+## Abschluss (Marcel, 26.09.2026) — Oberfläche hängt dran, Handoff geschlossen
+
+Alle drei Punkte sind mediator- **und** frontendseitig durch. Damit ist dieses
+Dokument abgeschlossen; neue Wünsche gehören in ein neues.
+
+| Punkt | Was die Oberfläche jetzt tut | Belegt durch |
+| --- | --- | --- |
+| **P1** Mediator bleibt ansprechbar | Wartezeit auf 30 Minuten hoch (`DATABRIDGE_GENERATE_TIMEOUT`); bei Ablauf sagt sie, dass der Mediator weiterarbeitet, statt Fehlschlag zu behaupten | `/health` 23× in ≤ 0,05 s während eines laufenden `generate` |
+| **P2** Fortschrittskanal | Kennung im Kopf `X-DataBridge-Progress-Id`, Abfrage von `GET /selection/progress/{id}` im Sekundentakt in eigenem Thread; jede Meldung setzt genau eine Station der Architekturkette, und die Zeile darunter sagt „Der Mediator meldet seinen Fortschritt." statt „aus der Antwort belegt" | echter Lauf: 2 Kohorten, 4 Attribute, 7 Proben, 69 s — gemeldet wurden u. a. „14 Dateien werden geholt", „228 Tripel erzeugt", „in den Default-Graph geladen" |
+| **P3** Auftrag im `.h5ad` | `uns["databridge_selection"]` wird gelesen und ins Panel gesetzt, **samt Datenquelle**; die Statuszeile unterscheidet „Die Datei führt den Auftrag selbst mit" von „Aus den Daten abgeleitet" | dieselbe Datei ergibt gelesen 4 Attribute + `gdc`, abgeleitet 5 Attribute + keine Quelle |
+
+**Zwei Anmerkungen, keine Forderungen.**
+
+1. Die Reihenfolge in `attributes` wird normalisiert: angefragt war
+   `sex_at_birth, race, tumor_stage, vital_status`, in der Datei steht
+   `sex_at_birth, race, vital_status, tumor_stage`. Für die Oberfläche
+   unerheblich — sie ordnet nach dem Panel, nicht nach der Datei. Nur, damit es
+   niemand später als Fehler sucht.
+2. Die feingranulare Download-Meldung (alle *n* Dateien) fehlt bewusst und wird
+   nicht nachgefordert: bei 14 Dateien reichen `start`/`ok`, und die Kette zeigt
+   ohnehin keinen Prozentwert. Erst wenn wieder 245 Dateien am Stück laufen,
+   wäre sie mehr als Kosmetik.
