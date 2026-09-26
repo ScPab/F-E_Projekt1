@@ -51,6 +51,7 @@ touched; the two helper modules are read, not modified.
 from __future__ import annotations
 
 import importlib.util
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -231,6 +232,9 @@ class Morphmodell:
     # obs-Spalten, die mindestens einen Wert tragen — Grundlage dafuer, aus einer
     # fertigen Datei wieder den Auftrag zu lesen (siehe auftrag_aus_modell).
     obs_spalten: list[str] = field(default_factory=list)
+    # Der vom Mediator mitgeschriebene Auftrag aus ``uns`` (P3), falls die Datei
+    # ihn fuehrt — dann ist die Auswahl **gelesen** und nicht abgeleitet.
+    gemeldete_auswahl: dict[str, Any] | None = None
     dateiname: str = ""
     hat_basis: bool = False
 
@@ -373,6 +377,37 @@ def _basis(adata: Any, key: str, titel: str, anzahl: int, start: float) -> Eintr
     return Eintrag(titel, start=start, encoding=skaliere_layout(arr))
 
 
+# Schluessel, unter dem der Mediator den Auftrag in die Datei schreibt (P3,
+# umgesetzt am 26.09.). Der Wert ist ein JSON-**String**, nicht ein dict —
+# h5ad speichert in ``uns`` keine verschachtelten Objekte mit gemischten Typen.
+UNS_AUSWAHL = "databridge_selection"
+
+
+def gemeldete_auswahl(adata: Any) -> dict[str, Any] | None:
+    """Den mitgeschriebenen Auftrag aus ``uns`` lesen, falls vorhanden.
+
+    Aeltere Dateien fuehren ihn nicht (``uns`` leer) — dann ``None``, und der
+    Aufrufer leitet die Auswahl weiter aus den Daten ab. Unlesbares wird
+    genauso behandelt: eine kaputte Angabe ist schlechter als keine.
+
+    English: Read the recorded request from ``uns``, if present.
+    """
+    roh = getattr(adata, "uns", None)
+    if not roh:
+        return None
+    wert = roh.get(UNS_AUSWAHL) if hasattr(roh, "get") else None
+    if wert is None:
+        return None
+    if isinstance(wert, (bytes, bytearray)):
+        wert = wert.decode("utf-8", "replace")
+    if isinstance(wert, str):
+        try:
+            wert = json.loads(wert)
+        except ValueError:
+            return None
+    return dict(wert) if isinstance(wert, dict) else None
+
+
 def baue_encodings(adata: Any, dateiname: str = "") -> Morphmodell:
     """Aus einer geladenen ``AnnData`` das Morphmodell bauen.
 
@@ -432,6 +467,7 @@ def baue_encodings(adata: Any, dateiname: str = "") -> Morphmodell:
     hat_basis = any(e.nutzbar for e in eintraege[:2])
     return Morphmodell(eintraege=eintraege, punkte=punkte, kohorten=kohorten,
                        obs_spalten=belegte_spalten(adata),
+                       gemeldete_auswahl=gemeldete_auswahl(adata),
                        dateiname=dateiname, hat_basis=hat_basis)
 
 
@@ -521,12 +557,42 @@ def belegte_spalten(adata: Any) -> list[str]:
     return spalten
 
 
+def _auftrag_aus_uns(auswahl: dict[str, Any], modell: Morphmodell,
+                     panel_namen: list[str]) -> dict[str, Any]:
+    """Den mitgeschriebenen Auftrag in die Felder des Panels uebersetzen.
+
+    Die Reihenfolge der Attribute kommt aus dem **Panel**, nicht aus der Datei:
+    der Mediator normalisiert sie, und das Panel hat eine feste Ordnung, die
+    sich nicht nach der Datei richten soll. Welche Attribute drin sind, sagt
+    aber die Datei — und nur sie weiss es sicher.
+
+    English: Translate the recorded request into the panel's fields.
+    """
+    kohorten = [str(k) for k in (auswahl.get("cohorts") or [])]
+    gelesen = {str(a) for a in (auswahl.get("attributes") or [])}
+    gelesen |= {neu for alt, neu in LEGACY_SPALTEN.items() if alt in gelesen}
+    quelle = auswahl.get("source")
+    groesse = auswahl.get("per_cohort_size") or auswahl.get("size") or 0
+    return {
+        "cohorts": sorted(kohorten),
+        "attributes": [name for name in panel_namen if name in gelesen],
+        "sources": [str(quelle)] if quelle else [],
+        "size": int(groesse) if groesse else 0,
+        "proben": len(modell.punkte),
+        "gelesen": True,
+    }
+
+
 def auftrag_aus_modell(modell: Morphmodell,
                        panel_namen: list[str]) -> dict[str, Any]:
-    """Aus einer geladenen ``.h5ad`` die Auswahl rekonstruieren, die zu ihr fuehrte.
+    """Aus einer geladenen ``.h5ad`` die Auswahl holen, die zu ihr fuehrte.
 
-    **Das ist eine Rekonstruktion, keine Aufzeichnung.** Die Datei fuehrt den
-    Auftrag nicht mit (``uns`` ist leer), also wird er aus den Daten abgeleitet:
+    Seit dem Mediator-Stand vom 26.09. schreibt die Datei den Auftrag selbst mit
+    (``uns["databridge_selection"]``, P3) — dann wird er **gelesen**, samt
+    Datenquelle, und ``gelesen`` ist ``True``.
+
+    Aeltere Dateien fuehren ihn nicht. Dann bleibt es bei einer
+    **Rekonstruktion aus den Daten** (``gelesen`` ist ``False``):
 
     - **Kohorten** aus ``obs["project_id"]`` — verlaesslich.
     - **Attribute** aus den belegten ``obs``-Spalten. Ein Attribut, das
@@ -536,8 +602,11 @@ def auftrag_aus_modell(modell: Morphmodell,
     - **Proben** aus der groessten Fallzahl je Kohorte — der Mediator holt
       ``size`` Proben je Kohorte.
 
-    Die **Datenquelle** steht nicht in der Datei und bleibt unangetastet.
+    Die **Datenquelle** steht in solchen Dateien nicht und bleibt unangetastet.
     """
+    if modell.gemeldete_auswahl:
+        return _auftrag_aus_uns(modell.gemeldete_auswahl, modell, panel_namen)
+
     kohorten: list[str] = []
     je_kohorte: dict[str, int] = {}
     for punkt in modell.punkte:
@@ -556,6 +625,8 @@ def auftrag_aus_modell(modell: Morphmodell,
     return {
         "cohorts": sorted(kohorten),
         "attributes": attribute,
+        "sources": [],
         "size": max(je_kohorte.values(), default=0),
         "proben": len(modell.punkte),
+        "gelesen": False,
     }

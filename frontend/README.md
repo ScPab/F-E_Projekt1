@@ -63,7 +63,7 @@ vorbelegen will, trägt Werte in `default_attributes` / `default_sources` in
 | | |
 | --- | --- |
 | **Vorschau** | `POST /selection/preview` — Abruf, Übersetzung, Laden in den Store. Keine Rohdaten, keine Matrix. Billig. |
-| **Generieren** | `POST /selection/generate` — dasselbe, plus Rohdaten-Download und `.h5ad`. Dauert Minuten. |
+| **Generieren** | `POST /selection/generate` — dasselbe, plus Rohdaten-Download und `.h5ad`. Dauert Minuten; große Aufträge auch eine halbe Stunde. Das Fenster wartet bis zu 30 Minuten (`DATABRIDGE_GENERATE_TIMEOUT`) und sagt bei Ablauf ehrlich, dass der Mediator weiterarbeitet. |
 
 Nicht angebundene Werte (DNA-Methylierung, Mutationen, ENA, GEO) stehen sichtbar
 in der Liste, sind aber deaktiviert und tragen den Grund als Hinweistext und
@@ -178,19 +178,29 @@ Zwei leere Zustände, die Verschiedenes bedeuten und deshalb verschieden aussehe
 
 **Eine fertige `.h5ad` bringt ihren Auftrag zurück.** Über `Auftrag aus .h5ad …` links
 über dem Netz lässt sich eine früher erzeugte Datei öffnen; die Oberfläche stellt daraus
-die Auswahl wieder her und zeichnet das Netz dazu. Das ist eine **Rekonstruktion, keine
-Aufzeichnung**: die Datei führt den Auftrag nicht mit (`uns` ist leer), er wird aus den
-Daten abgeleitet —
+die Auswahl wieder her und zeichnet das Netz dazu. **Woher die Auswahl kommt, sagt die
+Statuszeile** — und das sind zwei verschiedene Dinge:
+
+**Gelesen.** Seit dem Mediator-Stand vom 26.09. schreibt die Datei ihren Auftrag selbst mit,
+als JSON-Zeichenkette unter `uns["databridge_selection"]` (Kohorten, Attribute, `size`,
+`per_cohort_size`, `source`, `recipe_key`). Dann wird er **gelesen, nicht geraten** —
+einschließlich der **Datenquelle**, die vorher überhaupt nicht zu holen war. Die Reihenfolge
+der Attribute richtet sich trotzdem nach dem Panel: der Mediator normalisiert sie, und das
+Panel hat seine eigene feste Ordnung.
+
+**Abgeleitet.** Ältere Dateien führen den Auftrag nicht mit (`uns` leer). Dann bleibt es bei
+einer **Rekonstruktion aus den Daten** —
 
 | woraus | wie verlässlich |
 | --- | --- |
 | Kohorten aus `obs["project_id"]` | verlässlich |
-| Attribute aus den belegten `obs`-Spalten | ein angefragtes Attribut, das für **jede** Probe leer blieb, ist von einem nie angefragten nicht zu unterscheiden und fehlt |
+| Attribute aus den belegten `obs`-Spalten | ein angefragtes Attribut, das für **jede** Probe leer blieb, ist von einem nie angefragten nicht zu unterscheiden und fehlt; umgekehrt zählt eine Spalte mit, die der Mediator ungefragt füllt |
 | `Proben` aus der größten Fallzahl je Kohorte | verlässlich, solange nicht nachträglich gefiltert wurde |
 | Datenquelle | steht nicht in der Datei und bleibt unangetastet |
 
-Ältere Dateien tragen noch die Spalte `gender`; sie wird auf `sex_at_birth` gezogen. Die
-Statuszeile nennt nach dem Lesen, was gesetzt wurde und was nicht.
+Der Unterschied ist messbar: dieselbe Datei ergibt gelesen 4 Attribute und `gdc`, abgeleitet
+5 Attribute und keine Quelle. Ältere Dateien tragen noch die Spalte `gender`; sie wird auf
+`sex_at_birth` gezogen.
 
 Aktualisiert wird beim Start, nach jedem Aufruf und über **`Ansicht > Netz aktualisieren`
 (F5)** — nötig, weil der Store sich auch ohne diese Oberfläche ändert, etwa durch
@@ -322,10 +332,17 @@ die später jemand anders bedient. Die
 Textausgabe bleibt einen Klick entfernt und unverändert — sie ist das Rohmaterial, wenn man
 einer Station nicht glaubt.
 
-**Was die Ansicht ehrlich zeigen kann.** Die Oberfläche hört den Mediator **nicht** mit: es
-gibt keinen Fortschrittskanal, nur einen HTTP-Aufruf, der läuft, und eine Antwort, die
-kommt. Während des Aufrufs steht deshalb nur fest, *dass* Mediator und Wrapper arbeiten,
-nicht wie weit sie sind. Alles Genauere ist **Beleg aus der Antwort**:
+**Was die Ansicht ehrlich zeigen kann.** Beim **Generieren** hört die Oberfläche jetzt mit:
+sie schickt eine selbst erzeugte Kennung im Kopf `X-DataBridge-Progress-Id` und fragt
+daneben `GET /selection/progress/{id}` im Sekundentakt ab (Mediator-Stand vom 26.09.). Was
+dort ankommt, ist **gemeldet, nicht abgeleitet** — welche Kohorte gerade geholt wird, wie
+viele Dateien, wie viele Tripel. Eine Station, über die nichts gemeldet ist, bleibt stehen,
+wo sie war; es wird nichts dazugedichtet. Nach der Antwort **bleiben die gemeldeten Zeilen
+stehen** (die Antwort sagt nur, *dass* der Weg gegangen wurde), außer beim Mediator, wo sie
+mehr weiß (`recipe_key`), und beim Wissensnetz, wo die Oberfläche selbst gemessen hat.
+
+Die **Vorschau** dauert Sekunden und wird nicht verfolgt; dort — und bei älteren Dateien
+ohne Meldungen — ist alles Genauere **Beleg aus der Antwort**:
 
 | Station | woraus belegt |
 | --- | --- |
@@ -341,8 +358,12 @@ Generierens und bei jeder Vorschau grau, also meistens Rauschen. Was aus ihr wur
 die Statuszeile und die Textausgabe.
 
 Ohne Beleg bleibt eine Station grau statt grün — eine erfundene Fortschrittsanzeige wäre
-genau die Sorte Behauptung, die man später glaubt. Die Zeile unter der Kette sagt das
-ebenfalls.
+genau die Sorte Behauptung, die man später glaubt. Die Zeile unter der Kette sagt, woher der
+Stand kommt: „Der Mediator meldet seinen Fortschritt." gegen „Die Zwischenschritte sind aus
+der Antwort belegt, nicht mitgehört."
+
+Der Lichtschweif bleibt auch bei gemeldetem Fortschritt **kein Balken**: die Meldungen sagen,
+*was* zuletzt passiert ist, nicht *wie weit* es noch ist.
 
 ## Aufbau
 

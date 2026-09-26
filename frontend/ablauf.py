@@ -180,10 +180,36 @@ def _zahl(levels: list[dict[str, Any]], feld: str) -> int:
     return sum(int(lvl.get(feld) or 0) for lvl in levels)
 
 
+def _uebernehme_meldungen(ablauf: Ablauf, gemeldet: Ablauf | None) -> Ablauf:
+    """Gemeldete Zwischenstationen behalten, statt sie abzuleiten.
+
+    Die Antwort sagt nur, **dass** der Weg gegangen wurde; die Meldungen des
+    Mediators sagen, was auf ihm passiert ist ("8 Dateien werden geholt"). Wo
+    eine Station etwas gemeldet hat, bleibt ihr Text also stehen. Mediator und
+    Wissensnetz bleiben unberuehrt: dort weiss die Antwort mehr (recipe_key)
+    bzw. hat die Oberflaeche selbst gemessen (Store-Abzug).
+
+    English: Keep reported intermediate stations instead of deriving them.
+    """
+    if gemeldet is None:
+        return ablauf
+    gemeldete = {s.name: s for s in gemeldet.stationen}
+    for station in ablauf.stationen:
+        if station.name in (AUFTRAG, MEDIATOR, WISSENSNETZ):
+            continue
+        quelle = gemeldete.get(station.name)
+        if quelle is None or quelle.zustand == WARTET:
+            continue
+        station.zustand, station.detail, station.beleg = (
+            quelle.zustand, quelle.detail, quelle.beleg)
+    return ablauf
+
+
 def fertig(payload: dict[str, Any], mode: str, ok: bool,
            levels: list[dict[str, Any]] | None = None,
            fehler: str = "",
-           unterschied: dict[str, Any] | None = None) -> Ablauf:
+           unterschied: dict[str, Any] | None = None,
+           ereignisse: list[dict[str, Any]] | None = None) -> Ablauf:
     """Nach der Antwort: jede Station bekommt, was die Antwort ueber sie hergibt.
 
     ``unterschied`` ist der Vergleich der beiden Store-Abzuege (siehe
@@ -200,6 +226,9 @@ def fertig(payload: dict[str, Any], mode: str, ok: bool,
     ablauf = laufend(payload, mode)
     stationen = ablauf.stationen
     levels = levels or []
+    # Was der Mediator unterwegs gemeldet hat (P2) — leer bei der Vorschau.
+    gemeldet = (aus_ereignissen(payload, mode, ereignisse, fertig_gemeldet=True)
+                if ereignisse else None)
 
     if not ok:
         stationen[1].zustand = FEHLER
@@ -207,7 +236,7 @@ def fertig(payload: dict[str, Any], mode: str, ok: bool,
         stationen[2].zustand = WARTET
         stationen[2].detail = "nicht erreicht"
         ablauf.ueberschrift = "Der Aufruf ist fehlgeschlagen."
-        return ablauf
+        return _uebernehme_meldungen(ablauf, gemeldet)
 
     gelungen = [lvl for lvl in levels if lvl.get("status") == "ok"]
     gescheitert = [lvl for lvl in levels if lvl.get("status") != "ok"]
@@ -279,7 +308,106 @@ def fertig(payload: dict[str, Any], mode: str, ok: bool,
     elif gescheitert:
         ablauf.ueberschrift = (f"{len(gelungen)} von {len(levels)} Ebenen gelungen — "
                                "die uebrigen stehen unten im Text.")
+    elif gemeldet is not None:
+        ablauf.ueberschrift = ("Durchgelaufen. Die Zwischenschritte hat der "
+                               "Mediator selbst gemeldet.")
     else:
         ablauf.ueberschrift = ("Durchgelaufen. Die Zwischenschritte sind aus der "
                                "Antwort belegt, nicht mitgehoert.")
+    return _uebernehme_meldungen(ablauf, gemeldet)
+
+
+# --- Gemeldeter Fortschritt (P2) ---------------------------------------------
+# Seit dem Mediator-Stand vom 26.09. gibt es einen Fortschrittskanal: die
+# Oberflaeche schickt eine Korrelations-ID im Header und fragt daneben
+# ``GET /selection/progress/{id}`` ab. Was hier ankommt, ist damit **gemeldet
+# und nicht mehr abgeleitet** — der Unterschied steht in der Ueberschrift, damit
+# man den beiden Faellen ansieht, woher sie kommen.
+#
+# Welche Stufe zu welcher Station gehoert. ``matrix`` fehlt bewusst: die
+# Messmatrix ist keine Station mehr (sie war bei jeder Vorschau grau), ihr Stand
+# steht in der Statuszeile.
+STUFE_ZU_STATION = {
+    "request_received": MEDIATOR,
+    "wrapper_query": WRAPPER,
+    "download": WRAPPER,
+    "mapping": MAPPING,
+    "store_load": FUSEKI,
+    "done": MEDIATOR,
+}
+
+
+def _detail_text(stufe: str, state: str, detail: dict[str, Any]) -> str:
+    """Eine knappe Zeile aus dem ``detail`` eines Ereignisses."""
+    if stufe == "wrapper_query":
+        quelle = detail.get("source") or "?"
+        kohorte = detail.get("cohort") or ""
+        if state == "ok" and detail.get("hits") is not None:
+            return f"{quelle} · {kohorte}: {detail['hits']} Treffer"
+        return f"{quelle} · {kohorte}".strip(" ·")
+    if stufe == "download":
+        dateien = detail.get("files")
+        if state == "start":
+            return f"{dateien} Dateien werden geholt" if dateien else "Download laeuft"
+        return f"{dateien} Dateien geholt" if dateien else "Download fertig"
+    if stufe == "mapping":
+        tripel = detail.get("triples")
+        return f"{tripel} Tripel erzeugt" if tripel is not None else "uebersetzt"
+    if stufe == "store_load":
+        return "wird geladen" if state == "start" else "in den Default-Graph geladen"
+    if stufe == "request_received":
+        return "Auftrag angenommen"
+    if stufe == "done":
+        return "fertig"
+    return detail.get("error") or ""
+
+
+def aus_ereignissen(payload: dict[str, Any], mode: str,
+                    ereignisse: list[dict[str, Any]],
+                    fertig_gemeldet: bool = False) -> Ablauf:
+    """Die Kette aus den **gemeldeten** Ereignissen des Mediators bauen.
+
+    Jedes Ereignis setzt genau eine Station: ``start`` auf laufend, ``ok`` auf
+    fertig, ``error`` auf fehlgeschlagen. Stationen, ueber die nichts gemeldet
+    wurde, bleiben stehen, wo sie waren — es wird nichts dazugedichtet.
+    """
+    ablauf = laufend(payload, mode)
+    stationen = {s.name: s for s in ablauf.stationen}
+    gesehen = False
+
+    for ereignis in ereignisse or []:
+        stufe = ereignis.get("stage") or ""
+        state = ereignis.get("state") or ""
+        detail = ereignis.get("detail") or {}
+        name = STUFE_ZU_STATION.get(stufe)
+        if name is None:              # z. B. "matrix" - keine Station mehr
+            continue
+        station = stationen[name]
+        gesehen = True
+
+        if state == "error":
+            station.zustand = FEHLER
+            station.detail = detail.get("error") or f"{stufe} fehlgeschlagen"
+        elif state == "start":
+            # Ein spaeteres "start" darf ein schon gemeldetes "ok" derselben
+            # Station nicht zuruecksetzen (der Wrapper meldet je Kohorte).
+            if station.zustand != FEHLER:
+                station.zustand = LAEUFT
+                station.detail = _detail_text(stufe, state, detail)
+        elif state == "ok" and station.zustand != FEHLER:
+            station.zustand = OK
+            station.detail = _detail_text(stufe, state, detail)
+        station.beleg = f"gemeldet: {stufe}"
+
+    # Solange der Mediator noch arbeitet, bleibt er selbst auf "laeuft" —
+    # "request_received ok" heisst nur, dass er den Auftrag hat.
+    mediator = stationen[MEDIATOR]
+    if not fertig_gemeldet and mediator.zustand == OK:
+        mediator.zustand = LAEUFT
+
+    ablauf.ueberschrift = (
+        "Der Mediator meldet seinen Fortschritt."
+        if gesehen else
+        "Der Aufruf laeuft. Auf die erste Meldung des Mediators warten …"
+    )
     return ablauf

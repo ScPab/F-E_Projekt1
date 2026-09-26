@@ -352,6 +352,12 @@ class ArchitekturView(QGraphicsView):
     # EN: -- Drawing --
     def zeichne(self) -> None:
         szene = self.scene()
+        # Erst die Liste leeren, dann die Szene: ``clear()`` loescht die
+        # C++-Objekte, und der Takt der Animation greift sonst auf Kaesten zu,
+        # die es nicht mehr gibt ("Internal C++ object already deleted"). Das
+        # fiel erst auf, als die Kette waehrend eines Auftrags oft neu gezeichnet
+        # wurde — vorher geschah das nur zweimal je Aufruf.
+        self._kaesten = []
         szene.clear()
 
         # Zwei Zeilen: erst der Weg zur Datenquelle, dann der Weg ins

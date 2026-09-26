@@ -164,3 +164,83 @@ def test_generieren_zeigt_dieselbe_kette_wie_die_vorschau() -> None:
     generieren = [s.name for s in ablauf.fertig(AUFTRAG, "generate", ok=True,
                                                 levels=[_ebene()]).stationen]
     assert vorschau == generieren
+
+
+# --- Gemeldeter Fortschritt (P2) ---------------------------------------------
+# Seit dem Mediator-Stand vom 26.09. meldet der Mediator seinen Fortschritt.
+# Geprueft wird dieselbe Regel wie oben, nur andersherum: eine Station steht auf
+# "ok", weil sie **gemeldet** wurde — und keine, ueber die nichts gemeldet ist.
+def _ereignis(stufe: str, state: str, **detail):
+    return {"stage": stufe, "state": state, "detail": detail}
+
+
+def test_ohne_meldung_steht_die_kette_wie_beim_start() -> None:
+    """Noch keine Meldung: dieselbe Kette wie ``laufend`` — nichts dazugedichtet."""
+    a = ablauf.aus_ereignissen(AUFTRAG, "generate", [])
+    start = ablauf.laufend(AUFTRAG, "generate")
+    assert ([(s.zustand, s.detail) for s in a.stationen]
+            == [(s.zustand, s.detail) for s in start.stationen])
+    assert "warten" in a.ueberschrift
+
+
+def test_gemeldete_stufen_setzen_ihre_station() -> None:
+    a = ablauf.aus_ereignissen(AUFTRAG, "generate", [
+        _ereignis("request_received", "ok"),
+        _ereignis("wrapper_query", "ok", source="gdc", cohort="TCGA-BRCA", hits=20),
+        _ereignis("download", "start", files=14),
+        _ereignis("mapping", "ok", triples=228),
+    ])
+    assert _zustand(a, ablauf.WRAPPER) == ablauf.LAEUFT
+    assert "14 Dateien werden geholt" == _detail(a, ablauf.WRAPPER)
+    assert _detail(a, ablauf.MAPPING) == "228 Tripel erzeugt"
+    # Ueber Fuseki ist nichts gemeldet - also wird nichts behauptet.
+    assert _zustand(a, ablauf.FUSEKI) == ablauf.WARTET
+    assert a.station(ablauf.MAPPING).beleg == "gemeldet: mapping"
+
+
+def test_der_mediator_bleibt_laufend_bis_er_fertig_meldet() -> None:
+    """``request_received ok`` heisst nur: er hat den Auftrag."""
+    ereignisse = [_ereignis("request_received", "ok")]
+    laeuft = ablauf.aus_ereignissen(AUFTRAG, "generate", ereignisse)
+    assert _zustand(laeuft, ablauf.MEDIATOR) == ablauf.LAEUFT
+    durch = ablauf.aus_ereignissen(AUFTRAG, "generate",
+                                   ereignisse + [_ereignis("done", "ok")],
+                                   fertig_gemeldet=True)
+    assert _zustand(durch, ablauf.MEDIATOR) == ablauf.OK
+
+
+def test_ein_spaeteres_start_setzt_ein_gemeldetes_ok_nicht_zurueck() -> None:
+    """Der Wrapper meldet je Kohorte - die zweite darf die erste nicht loeschen."""
+    a = ablauf.aus_ereignissen(AUFTRAG, "generate", [
+        _ereignis("wrapper_query", "error", error="GDC nicht erreichbar"),
+        _ereignis("wrapper_query", "start", source="gdc", cohort="TCGA-LUAD"),
+    ])
+    assert _zustand(a, ablauf.WRAPPER) == ablauf.FEHLER
+    assert _detail(a, ablauf.WRAPPER) == "GDC nicht erreichbar"
+
+
+def test_die_messmatrix_ist_keine_station_mehr() -> None:
+    a = ablauf.aus_ereignissen(AUFTRAG, "generate", [_ereignis("matrix", "ok")])
+    assert [s.name for s in a.stationen if s.zustand == ablauf.OK] == [ablauf.AUFTRAG]
+
+
+def test_gemeldete_details_bleiben_im_endstand_stehen() -> None:
+    """Die Antwort sagt *dass*, die Meldung sagt *was* - die Meldung gewinnt.
+
+    Nur bei den Zwischenstationen: beim Mediator weiss die Antwort mehr
+    (recipe_key), beim Wissensnetz hat die Oberflaeche selbst gemessen.
+    """
+    ereignisse = [_ereignis("download", "ok", files=14),
+                  _ereignis("done", "ok")]
+    a = ablauf.fertig(AUFTRAG, "generate", ok=True, levels=[_ebene()],
+                      ereignisse=ereignisse)
+    assert _detail(a, ablauf.WRAPPER) == "14 Dateien geholt"
+    assert _zustand(a, ablauf.MEDIATOR) == ablauf.OK
+    assert "recipe" in _detail(a, ablauf.MEDIATOR) or "Ebene" in _detail(a, ablauf.MEDIATOR)
+    assert "gemeldet" in a.ueberschrift
+
+
+def test_ohne_meldungen_bleibt_der_endstand_wie_zuvor() -> None:
+    """Die Vorschau meldet nichts - dort wird weiter aus der Antwort abgeleitet."""
+    a = ablauf.fertig(AUFTRAG, "preview", ok=True, levels=[_ebene()])
+    assert "nicht mitgehoert" in a.ueberschrift

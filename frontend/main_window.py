@@ -27,6 +27,7 @@ loading script, MP-Lite, and the UI all use the same source of truth
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +188,15 @@ class MainWindow(QMainWindow):
         # Der Auftrag, der gerade unterwegs ist — die Architekturansicht zeigt
         # ihn, und nach der Antwort wird er gegen das Ergebnis gehalten.
         self._laufender_auftrag: dict[str, Any] | None = None
+        # Fortschrittsabfrage (P2): Kennung des laufenden Auftrags und der
+        # Thread, der sie verfolgt. Gleiche Haltepflicht wie bei den anderen
+        # Threads (siehe _release_thread).
+        self._fortschritt_id = ""
+        self._fortschritt_thread = None
+        self._fortschritt_worker = None
+        self._fortschritt_steht = False
+        # Der letzte gemeldete Stand — die Endanzeige baut darauf auf.
+        self._gemeldete_ereignisse: list[dict[str, Any]] = []
         # Ebenen des letzten erfolgreichen 'Generieren'-Laufs mit .h5ad —
         # Grundlage fuer das Download-Menue (siehe _update_download_menu).
         # EN: Levels of the last successful 'Generieren' (generate) run with
@@ -696,12 +706,13 @@ class MainWindow(QMainWindow):
         self._h5_thread.finished.connect(self._release_h5_thread)
 
     def _auftrag_fertig(self, modell, fehler: str) -> None:
-        """Die rekonstruierte Auswahl ins Panel uebernehmen.
+        """Die Auswahl aus der Datei ins Panel uebernehmen.
 
-        **Rekonstruktion, keine Aufzeichnung**: die Datei fuehrt den Auftrag
-        nicht mit (``uns`` ist leer), er wird aus den Daten abgeleitet (siehe
-        ``morph.auftrag_aus_modell``). Die Datenquelle steht nicht in der Datei
-        und bleibt deshalb unangetastet.
+        Zwei Faelle, und die Statuszeile sagt welcher (siehe
+        ``morph.auftrag_aus_modell``): neuere Dateien fuehren den Auftrag selbst
+        mit (``uns``, P3) — dann wird er **gelesen**, samt Datenquelle. Aeltere
+        fuehren ihn nicht; dann wird er aus den Daten **abgeleitet**, die
+        Datenquelle bleibt unangetastet und leer gebliebene Attribute fehlen.
         """
         if modell is None:
             self.set_status(fehler, "error")
@@ -715,6 +726,14 @@ class MainWindow(QMainWindow):
 
         self._cohort_select.set_checked(bekannt)
         self._attribute_select.set_checked(auftrag["attributes"])
+        # Nur anschaltbare Quellen setzen: eine abgeschaltete (siehe
+        # config/panel.json) laesst sich nicht ankreuzen, und ein stiller
+        # Fehlschlag waere schlimmer als eine unveraenderte Auswahl.
+        moeglich = {e.get("value") for e in (self._config.get("sources") or [])
+                    if e.get("enabled", True)}
+        quellen = [q for q in auftrag.get("sources") or [] if q in moeglich]
+        if quellen:
+            self._source_select.set_checked(quellen)
         if auftrag["size"]:
             self._size_spin.setValue(
                 max(mc.SIZE_MIN, min(mc.SIZE_MAX, auftrag["size"])))
@@ -726,9 +745,13 @@ class MainWindow(QMainWindow):
         ]
         if fremd:
             teile.append(f"Nicht im Panel: {', '.join(fremd)}.")
-        # Ehrlich bleiben: was die Datei nicht hergibt, wurde auch nicht gesetzt.
-        teile.append("Datenquelle bleibt unveraendert; leer gebliebene Attribute "
-                     "sind nicht rekonstruierbar.")
+        # Ehrlich bleiben: sagen, woher die Auswahl kommt.
+        if auftrag.get("gelesen"):
+            teile.append("Die Datei fuehrt den Auftrag selbst mit"
+                         + (f" (Datenquelle: {', '.join(quellen)})." if quellen else "."))
+        else:
+            teile.append("Aus den Daten abgeleitet: Datenquelle bleibt unveraendert, "
+                         "leer gebliebene Attribute sind nicht rekonstruierbar.")
         self.set_status("  ".join(teile), "success" if bekannt else "warning")
 
     def _lade_h5ad(self, pfad: str) -> None:
@@ -1348,11 +1371,74 @@ class MainWindow(QMainWindow):
         # Die Architektur zeigt ab jetzt, was unterwegs ist.
         self._architektur.zeige(ablauf.laufend(payload, mode))
         self._laufender_auftrag = payload
+
+        # Beim Generieren meldet der Mediator seinen Fortschritt, wenn man ihm
+        # eine Kennung mitgibt (P2). Die Vorschau dauert Sekunden und kennt den
+        # Header nicht — dort bleibt es beim Ableiten aus der Antwort.
+        self._fortschritt_id = str(uuid.uuid4()) if mode == "generate" else ""
+        self._fortschritt_steht = False
         self._thread, self._worker = worker.start_call(
             payload, mode, self._on_finished,
             vorher=self._abzug_vorher, nachher=self._abzug_nachher,
+            progress_id=self._fortschritt_id,
         )
+        self._gemeldete_ereignisse = []
+        if self._fortschritt_id:
+            self._fortschritt_thread, self._fortschritt_worker = (
+                worker.start_fortschritt(self._fortschritt_id, self._fortschritt_stand))
+            self._fortschritt_thread.finished.connect(self._release_fortschritt)
         self._thread.finished.connect(self._release_thread)
+
+    def _fortschritt_stand(self, ereignisse: list, fertig: bool) -> None:
+        """Gemeldete Ereignisse in die Architekturansicht uebernehmen.
+
+        Laeuft im GUI-Thread (Signal aus dem Fortschritts-Thread). Solange der
+        Auftrag laeuft, zeigt die Kette **Gemeldetes**; das Endergebnis setzt
+        danach ``_on_finished`` aus der Antwort.
+        """
+        if self._laufender_auftrag is None or self._thread is None:
+            return
+        # Merken: nach der Antwort bleiben diese Meldungen stehen, statt durch
+        # aus der Antwort Abgeleitetes ersetzt zu werden (ablauf.fertig).
+        self._gemeldete_ereignisse = list(ereignisse)
+        self._architektur.zeige(ablauf.aus_ereignissen(
+            self._laufender_auftrag, "generate", ereignisse, fertig_gemeldet=fertig))
+
+    def _release_fortschritt(self) -> None:
+        """Vermerken, dass der Fortschritts-Thread von selbst steht.
+
+        Der Worker beendet seinen Thread, sobald der Mediator ``finished``
+        meldet. Danach darf ihn niemand mehr anfassen — hier wird deshalb nur
+        ein Merker gesetzt. Die **Referenzen bleiben stehen**: sie hier fallen
+        zu lassen wuerde den QThread mitten in seiner eigenen
+        ``finished``-Emission zerstoeren (beobachtet als 0xC0000374,
+        Heap-Korruption). Ersetzt werden sie beim naechsten Aufruf in _start.
+        """
+        self._fortschritt_steht = True
+
+    def _stoppe_fortschritt(self) -> None:
+        """Die Abfrage beenden — der Auftrag ist durch, es gibt nichts mehr zu
+        holen."""
+        if self._fortschritt_thread is not None and not self._fortschritt_steht:
+            if self._fortschritt_worker is not None:
+                self._fortschritt_worker.stoppen()
+            self._fortschritt_thread.quit()
+            # Auf das Ende warten, nicht nur darum bitten: faellt die letzte
+            # Referenz auf einen laufenden QThread, beendet Qt den Prozess hart.
+            self._fortschritt_thread.wait(3000)
+            self._fortschritt_steht = True
+        self._fortschritt_id = ""
+
+    def closeEvent(self, event) -> None:      # noqa: N802
+        """Beim Schliessen die Fortschrittsabfrage beenden.
+
+        Ohne das laeuft sie weiter, waehrend Python den Prozess abbaut — Qt
+        beendet ihn dann hart ("QThread: Destroyed while thread is still
+        running"). Die uebrigen Threads haengen an einem laufenden
+        Mediator-Aufruf und raeumen sich selbst ab (siehe _release_thread).
+        """
+        self._stoppe_fortschritt()
+        super().closeEvent(event)
 
     def _on_finished(self, result: mc.Result, mode: str, unterschied=None) -> None:
         """Ergebnis anzeigen. Gibt die Thread-Referenz **nicht** frei.
@@ -1372,6 +1458,7 @@ class MainWindow(QMainWindow):
         Qt would kill the process (0xC0000409). The cleanup is handled by
         :meth:`_release_thread` on the thread's ``finished`` signal.
         """
+        self._stoppe_fortschritt()
         self._set_busy(False)
         self._render(result, mode)
         self._netz_zeigen(self._letzter_abzug, unterschied)
@@ -1379,6 +1466,7 @@ class MainWindow(QMainWindow):
             self._laufender_auftrag or self.current_payload(), mode,
             ok=result.ok, levels=result.levels() if result.ok else [],
             fehler=result.error or "", unterschied=unterschied,
+            ereignisse=self._gemeldete_ereignisse,
         ))
 
     def _release_thread(self) -> None:
