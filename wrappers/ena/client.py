@@ -9,16 +9,12 @@ anndata/.h5ad ist bewusst NICHT Teil dieses Wrappers — das ist ein
 separater, späterer Schritt auf Mediator-Seite (siehe `wrappers/gdc/client.py`
 für dasselbe Prinzip beim ersten Wrapper).
 
-Zwei-Tier-Zugriffsmuster, analog zum GDC-Wrapper:
-  - Metadaten-Tier (`query`, `search`, `get_schema`): ein einzelner
-    JSON-Endpunkt (`/search`), sehr ähnlich zu GDC — Suchquery + Feldliste +
-    `limit`/`offset`-Pagination. Feldnamen/Schema-Introspektion über
-    `/returnFields` (statt `_mapping` bei GDC).
-  - Bulk-Tier (`get_download_links`, `download_fastq_files`): ENA hat keinen
-    separaten Manifest-Endpunkt und kein externes Tool wie `gdc-client` —
-    `/search` liefert für einen Read-Run bereits die fertigen FASTQ-Download-
-    URLs im Feld `fastq_ftp` (mehrere Dateien Semikolon-getrennt) mit,
-    erreichbar direkt per HTTPS (live verifiziert).
+Nur Metadaten-Tier (`query`, `search`, `get_schema`): ein einzelner
+JSON-Endpunkt (`/search`), sehr ähnlich zu GDC — Suchquery + Feldliste +
+`limit`/`offset`-Pagination. Feldnamen/Schema-Introspektion über
+`/returnFields` (statt `_mapping` bei GDC). Ein Bulk-Tier (FASTQ-Download)
+gibt es bewusst nicht, weil ENA nicht an die Auswahl-Pipeline angebunden ist
+(siehe `wrappers/CLEANUP_LOG_unused_code.md` zum Wiederherstellen).
 
 WICHTIGER UNTERSCHIED ZU GDC/GEO: Die ENA-`/search`-Antwort enthält KEINE
 Gesamttrefferzahl (kein "total" wie bei GDC, kein "count" wie bei GEOs
@@ -47,16 +43,12 @@ anndata/.h5ad is deliberately NOT part of this wrapper — that is a separate,
 later step on the mediator side (see `wrappers/gdc/client.py` for the same
 principle in the first wrapper).
 
-Two-tier access pattern, analogous to the GDC wrapper:
-  - Metadata tier (`query`, `search`, `get_schema`): a single JSON endpoint
-    (`/search`), very similar to GDC — search query + field list +
-    `limit`/`offset` pagination. Field-name/schema introspection via
-    `/returnFields` (instead of `_mapping` for GDC).
-  - Bulk tier (`get_download_links`, `download_fastq_files`): ENA has no
-    separate manifest endpoint and no external tool like `gdc-client` —
-    `/search` already delivers the finished FASTQ download URLs for a read
-    run in the `fastq_ftp` field (multiple files semicolon-separated),
-    reachable directly via HTTPS (verified live).
+Metadata tier only (`query`, `search`, `get_schema`): a single JSON
+endpoint (`/search`), very similar to GDC — search query + field list +
+`limit`/`offset` pagination. Field-name/schema introspection via
+`/returnFields` (instead of `_mapping` for GDC). There is deliberately no
+bulk tier (FASTQ download), because ENA is not connected to the selection
+pipeline (see `wrappers/CLEANUP_LOG_unused_code.md` to restore it).
 
 IMPORTANT DIFFERENCE FROM GDC/GEO: the ENA `/search` response contains NO
 total hit count (no "total" as with GDC, no "count" as with GEO's
@@ -77,7 +69,6 @@ where a mapping table or ontology connection would dock in.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
 import requests
@@ -317,119 +308,3 @@ class ENAWrapper:
         response.raise_for_status()
         fields = response.json()
         return sorted(field["columnId"] for field in fields if "columnId" in field)
-
-    # ------------------------------------------------------------------
-    # Bulk-Tier
-    # ------------------------------------------------------------------
-
-    def get_download_links(self, run_accession: str) -> dict:
-        """Liefert die FASTQ-Download-URLs (+ Dateigrößen) für einen
-        Read-Run, aus den Feldern `fastq_ftp`/`fastq_bytes` einer
-        `read_run`-Suche.
-
-        ENA hat keinen eigenständigen Manifest-Endpunkt wie GDC
-        (`/files?return_type=manifest`); die Download-Adressen kommen direkt
-        aus der Metadaten-Suche mit. `fastq_ftp` liefert Host-relative
-        Pfade ohne Schema (z. B. "ftp.sra.ebi.ac.uk/vol1/..."), die live
-        verifiziert auch per HTTPS abrufbar sind — ohne Auth-Token, da nur
-        offen zugängliche Read-Runs ein `fastq_ftp`-Feld liefern (kontrollierte
-        Daten liefern hier einen leeren Wert).
-
-        English: Returns the FASTQ download URLs (+ file sizes) for a read
-        run, from the `fastq_ftp`/`fastq_bytes` fields of a `read_run`
-        search.
-
-        ENA has no standalone manifest endpoint like GDC
-        (`/files?return_type=manifest`); the download addresses come
-        directly along with the metadata search. `fastq_ftp` delivers
-        host-relative paths without a scheme (e.g.
-        "ftp.sra.ebi.ac.uk/vol1/..."), which are verified live to also be
-        fetchable via HTTPS — without an auth token, since only openly
-        accessible read runs deliver a `fastq_ftp` field (controlled data
-        delivers an empty value here).
-        """
-        result = self.query(
-            result="read_run",
-            query=f'run_accession="{run_accession}"',
-            fields=["run_accession", "fastq_ftp", "fastq_bytes"],
-            size=1,
-        )
-        hits = result["results"]
-        if not hits:
-            return {"run_accession": run_accession, "files": []}
-
-        raw_urls = [u for u in hits[0].get("fastq_ftp", "").split(";") if u]
-        raw_sizes = [s for s in hits[0].get("fastq_bytes", "").split(";") if s]
-
-        files = []
-        for i, url in enumerate(raw_urls):
-            full_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
-            files.append({"url": full_url, "bytes": int(raw_sizes[i]) if i < len(raw_sizes) else None})
-
-        return {"run_accession": run_accession, "files": files}
-
-    def download_fastq_files(self, run_accession: str, output_dir: str) -> dict:
-        """Lädt die FASTQ-Dateien eines Read-Runs direkt per HTTP herunter.
-
-        Anders als beim GDC-Wrapper (`download_via_gdc_client`, externes
-        Tool `gdc-client` per Subprocess) gibt es für ENA kein
-        vergleichbares externes Bulk-Download-Tool — die von der Suche
-        gelieferten Adressen sind vollständige, direkt abrufbare
-        Datei-URLs (kein Verzeichnis-Listing wie beim GEO-Wrapper nötig).
-
-        Rohdaten gehören konzeptionell in den Tier-3-Cache (`self.cache.raw`,
-        siehe cache.py) und sollten nach Verarbeitung via `purge()` wieder
-        entfernt werden — wie im GDC-Wrapper nur als Hinweis, der eigentliche
-        Zielpfad wird vom Aufrufer vorgegeben.
-
-        English: Downloads the FASTQ files of a read run directly via HTTP.
-
-        Unlike the GDC wrapper (`download_via_gdc_client`, external
-        `gdc-client` tool via subprocess), there is no comparable external
-        bulk-download tool for ENA — the addresses delivered by the search
-        are complete, directly fetchable file URLs (no directory listing
-        needed as with the GEO wrapper).
-
-        Raw data conceptually belongs in the tier-3 cache (`self.cache.raw`,
-        see cache.py) and should be removed again after processing via
-        `purge()` — as in the GDC wrapper, only a hint here, the actual
-        target path is supplied by the caller.
-        """
-        links = self.get_download_links(run_accession)
-        if not links["files"]:
-            return {"status": "not_found", "run_accession": run_accession, "files": []}
-
-        out_dir = Path(output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        downloaded: list[str] = []
-        for entry in links["files"]:
-            url = entry["url"]
-            name = url.rsplit("/", 1)[-1]
-            response = self.session.get(url, timeout=self.timeout, stream=True)
-            response.raise_for_status()
-            with open(out_dir / name, "wb") as fh:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    fh.write(chunk)
-            downloaded.append(name)
-
-        return {"status": "completed", "run_accession": run_accession, "files": downloaded}
-
-    def to_anndata(self, raw_response: object) -> None:
-        """Überführt eine ENA-Antwort in das Zielformat anndata/.h5ad.
-
-        Bewusst nicht Teil dieses Wrappers (siehe Modul-Docstring) — der
-        Wrapper liefert strukturierte Metadaten/Rohdaten-Referenzen, die
-        Transformation nach anndata ist ein separater Mediator-seitiger
-        Schritt.
-
-        English: Converts an ENA response into the target format anndata/.h5ad.
-
-        Deliberately not part of this wrapper (see module docstring) — the
-        wrapper delivers structured metadata/raw-data references, the
-        transformation to anndata is a separate mediator-side step.
-        """
-        raise NotImplementedError(
-            "Transformation nach anndata ist bewusst kein Teil des Wrappers, "
-            "siehe Modul-Docstring."
-        )
