@@ -153,7 +153,7 @@ Info "Projekt-Root: $PSScriptRoot"
 if (-not $SkipInstall) {
     $need = $false
     if (-not (Get-Command wissensnetz -ErrorAction SilentlyContinue)) { $need = $true }
-    python -c "import bokeh, pyvis, requests, rdflib" *> $null
+    python -c "import bokeh, pyvis, requests, rdflib, pyqtgraph" *> $null
     if ($LASTEXITCODE -ne 0) { $need = $true }
     if ($need) {
         Step "Installiere/aktualisiere Abhaengigkeiten (pip install -r requirements.txt) ..."

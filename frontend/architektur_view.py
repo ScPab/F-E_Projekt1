@@ -41,6 +41,26 @@ from PySide6.QtWidgets import (
 
 import ablauf
 import theme
+from i18n import tr
+
+# Anzeige-Uebersetzung der Stationsnamen (siehe i18n.py, Abschnitt
+# "Architekturansicht"). Die Werte von ablauf.AUFTRAG/MEDIATOR/... bleiben
+# als Identitaet unveraendert — nur die Anzeige laeuft hier durch tr().
+# EN: Display translation of the station names (see i18n.py, "Architecture
+# view" section). The values of ablauf.AUFTRAG/MEDIATOR/... stay unchanged
+# as identity — only the display runs through tr() here.
+_STATION_LABEL_KEYS = {
+    ablauf.AUFTRAG: "station_auftrag",
+    ablauf.MEDIATOR: "station_mediator",
+    ablauf.WRAPPER: "station_wrapper",
+    ablauf.MAPPING: "station_mapping",
+    ablauf.FUSEKI: "station_fuseki",
+    ablauf.WISSENSNETZ: "station_wissensnetz",
+}
+
+
+def _stationsname(name: str) -> str:
+    return tr(_STATION_LABEL_KEYS.get(name, name))
 
 
 def _farben(zustand: str) -> tuple[str, str, bool]:
@@ -171,7 +191,7 @@ class _Kasten(QGraphicsItem):
         self._station = station
         self._phase = 0.0
         self.setToolTip(
-            f"{station.name}\n{station.komponente}"
+            f"{_stationsname(station.name)}\n{station.komponente}"
             + (f"\n{station.detail}" if station.detail else "")
             + (f"\nBeleg: {station.beleg}" if station.beleg else "")
         )
@@ -280,7 +300,7 @@ class _Kasten(QGraphicsItem):
         painter.drawText(
             QRectF(links, 8, innen, 18),
             int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-            metrik.elidedText(self._station.name, Qt.TextElideMode.ElideRight, innen),
+            metrik.elidedText(_stationsname(self._station.name), Qt.TextElideMode.ElideRight, innen),
         )
 
         schrift.setBold(False)
@@ -332,6 +352,17 @@ class ArchitekturView(QGraphicsView):
 
     def zeige(self, neuer: ablauf.Ablauf) -> None:
         self._ablauf = neuer
+        self.zeichne()
+
+    def retranslate(self) -> None:
+        """Bei einem Sprachwechsel (``i18n.py``) neu zeichnen — dieselben
+        Stationen wie zuvor, nur mit den Stationsnamen (siehe
+        ``_stationsname``) und Tooltips frisch in der neuen Sprache.
+
+        English: Redraws on a language change (``i18n.py``) — the same
+        stations as before, just with the station names (see
+        ``_stationsname``) and tooltips fresh in the new language.
+        """
         self.zeichne()
 
     def _tick(self) -> None:
@@ -508,3 +539,6 @@ class ArchitekturPanel(QWidget):
 
     def zeige(self, neuer: ablauf.Ablauf) -> None:
         self.view.zeige(neuer)
+
+    def retranslate(self) -> None:
+        self.view.retranslate()

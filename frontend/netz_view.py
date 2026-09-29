@@ -59,6 +59,7 @@ from PySide6.QtWidgets import (
 
 import store_reader as sr
 import theme
+from i18n import tr
 
 # Rollen, unter denen ein Knoten weiss, was er ist.
 # EN: Roles by which a node knows what it is.
@@ -80,8 +81,14 @@ EDGE_ENTITY = "db:hasDemographic | db:hasDiagnosis | db:hasSample"
 # EN: The two empty states. They would otherwise look identical yet mean
 # different things: an empty store is the normal starting point after
 # `docker compose down -v`, not an error.
-TEXT_LEER = ("Zu dieser Auswahl liegt noch nichts im Store.\n"
-             "Jede Vorschau erweitert das Netz.")
+def _text_leer() -> str:
+    """Als Funktion statt Konstante, damit sie bei jedem Zeichnen frisch in
+    der aktuellen Sprache aufgeloest wird (siehe ``i18n.py``).
+
+    English: A function instead of a constant, so it is resolved fresh in
+    the current language on every draw (see ``i18n.py``).
+    """
+    return tr("net_store_empty")
 
 
 def _anzahl(zahl: int, einzahl: str, mehrzahl: str) -> str:
@@ -91,6 +98,24 @@ def _anzahl(zahl: int, einzahl: str, mehrzahl: str) -> str:
     appears in every second line.
     """
     return f"{zahl} {einzahl if zahl == 1 else mehrzahl}"
+
+
+# Uebersetzte Kurzform von _anzahl fuer die drei im Netz gezaehlten Dinge
+# (Kohorten/Faelle/Werte) — je frisch in der aktuellen Sprache aufgeloest
+# (siehe i18n.py), damit ein Sprachwechsel nur ein erneutes zeichne() braucht.
+# EN: Translated shorthand of _anzahl for the three things counted in the
+# net (cohorts/cases/values) — resolved fresh in the current language each
+# time (see i18n.py), so a language change only needs a fresh zeichne().
+def _anzahl_kohorten(zahl: int) -> str:
+    return _anzahl(zahl, tr("count_cohort_1"), tr("count_cohort_n"))
+
+
+def _anzahl_faelle(zahl: int) -> str:
+    return _anzahl(zahl, tr("count_case_1"), tr("count_case_n"))
+
+
+def _anzahl_werte(zahl: int) -> str:
+    return _anzahl(zahl, tr("count_value_1"), tr("count_value_n"))
 
 
 class _Knoten(QGraphicsItem):
@@ -311,7 +336,7 @@ class NetzView(QGraphicsView):
         if not (self._abzug.get("cohorts") or self._abzug.get("cases")):
             # Leer, aber erreichbar: gedaempft, KEINE Fehlerfarbe.
             # EN: Empty but reachable: muted, NOT an error color.
-            self._male_meldung(TEXT_LEER, fehler=False)
+            self._male_meldung(_text_leer(), fehler=False)
             return
 
         kohorten = sr.sortierte_kohorten(self._abzug, self._unterschied)
@@ -339,9 +364,9 @@ class NetzView(QGraphicsView):
         # EN: Row 1: root. Wider than the other nodes — it carries two
         # numbers, and cut off ("18 Fa…") the second one is useless.
         wurzel = self._neuer_knoten(
-            "Auswahl",
-            f"{_anzahl(len(self._abzug.get('cohorts') or {}), 'Kohorte', 'Kohorten')} · "
-            f"{_anzahl(self._abzug.get('cases', 0), 'Fall', 'Faelle')}",
+            tr("net_root_title"),
+            f"{_anzahl_kohorten(len(self._abzug.get('cohorts') or {}))} · "
+            f"{_anzahl_faelle(self._abzug.get('cases', 0))}",
             zustand=self._zustand_wurzel(),
             kind=KIND_ROOT,
             key="",
@@ -357,7 +382,7 @@ class NetzView(QGraphicsView):
             self._male_kante(wurzel, knoten)
         if knoten2:
             self._male_kantenetikett(EDGE_PROJECT, y2 - theme.NETZ_ROW_GAP + 8)
-        self._male_rest(len(kohorten) - len(gezeigt), "Kohorten",
+        self._male_rest(len(kohorten) - len(gezeigt), tr("count_cohort_n"),
                         y2 + theme.NETZ_NODE_HEIGHT + 4, breite)
 
         # Reihe 3: die Attribute. Ohne aufgeklappte Kohorte haengen sie an
@@ -377,8 +402,8 @@ class NetzView(QGraphicsView):
                     self._male_kante(elternknoten, knoten)
             self._male_kantenetikett(EDGE_ENTITY, y3 - theme.NETZ_ROW_GAP + 8)
             hinweis = ("" if self._offene_kohorte
-                       else "Attribute gelten fuer alle gewaehlten Kohorten")
-            self._male_rest(len(attribute) - len(gezeigte_attribute), "Attribute",
+                       else tr("net_attributes_apply_hint"))
+            self._male_rest(len(attribute) - len(gezeigte_attribute), tr("count_attribute_n"),
                             y3 + theme.NETZ_NODE_HEIGHT_3 + 4, breite,
                             zusatz=hinweis)
 
@@ -458,7 +483,7 @@ class NetzView(QGraphicsView):
         daten = (self._abzug.get("cohorts") or {}).get(projekt) or {}
         zustand = (self._unterschied.get("cohorts") or {}).get(projekt) or {}
         return (projekt,
-                f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')}"
+                f"{_anzahl_faelle(daten.get('cases', 0))}"
                 f"{self._zusatz(zustand)}",
                 "",
                 zustand.get("state", sr.UNVERAENDERT))
@@ -486,8 +511,8 @@ class NetzView(QGraphicsView):
         if not self._offene_kohorte:
             daten = sr.gesamt_attribute(self._abzug).get(name) or {}
             zustand = sr.gesamt_zustand(self._unterschied, name)
-            zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')} · "
-                          f"{_anzahl(daten.get('kohorten', 0), 'Kohorte', 'Kohorten')}"
+            zaehlungen = (f"{_anzahl_faelle(daten.get('cases', 0))} · "
+                          f"{_anzahl_kohorten(daten.get('kohorten', 0))}"
                           f"{self._zusatz(zustand)}")
             return name, panel, zaehlungen, zustand.get("state", sr.UNVERAENDERT)
 
@@ -495,8 +520,8 @@ class NetzView(QGraphicsView):
         daten = (kohorte.get("attributes") or {}).get(name) or {}
         zustand = ((self._unterschied.get("attributes") or {})
                    .get(self._offene_kohorte) or {}).get(name) or {}
-        zaehlungen = (f"{_anzahl(daten.get('cases', 0), 'Fall', 'Faelle')} · "
-                      f"{_anzahl(daten.get('values', 0), 'Wert', 'Werte')}"
+        zaehlungen = (f"{_anzahl_faelle(daten.get('cases', 0))} · "
+                      f"{_anzahl_werte(daten.get('values', 0))}"
                       f"{self._zusatz(zustand)}")
         return name, panel, zaehlungen, zustand.get("state", sr.UNVERAENDERT)
 
@@ -541,7 +566,7 @@ class NetzView(QGraphicsView):
         nothing to report — e.g. the note that the attributes apply to all
         cohorts.
         """
-        text = f"… {anzahl} weitere {was}" if anzahl > 0 else ""
+        text = tr("net_more_items").format(n=anzahl, items=was) if anzahl > 0 else ""
         if zusatz:
             text = f"{text}   ·   {zusatz}" if text else zusatz
         if not text:
@@ -639,10 +664,8 @@ class NetzPanel(QWidget):
 
         kopf = QHBoxLayout()
         kopf.setContentsMargins(2, 2, 2, 0)
-        self._oeffnen = QPushButton("Auftrag aus .h5ad …")
-        self._oeffnen.setToolTip(
-            "Eine fertige .h5ad oeffnen und die Auswahl daraus wiederherstellen"
-        )
+        self._oeffnen = QPushButton(tr("button_open_job_from_h5ad"))
+        self._oeffnen.setToolTip(tr("button_open_job_from_h5ad_tooltip"))
         self._oeffnen.clicked.connect(self._waehle_datei)
         kopf.addWidget(self._oeffnen)
         kopf.addStretch(1)
@@ -651,12 +674,21 @@ class NetzPanel(QWidget):
         self.view = NetzView(panel_namen)
         layout.addWidget(self.view, stretch=1)
 
+    def retranslate(self) -> None:
+        """Bei einem Sprachwechsel (``i18n.py``) den Oeffnen-Knopf neu
+        beschriften — immer sicher, sein Text haengt von keinem Zustand ab.
+
+        English: On a language change (``i18n.py``), relabel the open
+        button — always safe, its text does not depend on any state.
+        """
+        self._oeffnen.setText(tr("button_open_job_from_h5ad"))
+        self._oeffnen.setToolTip(tr("button_open_job_from_h5ad_tooltip"))
+
     def _waehle_datei(self) -> None:
         """Dateidialog; Startordner wie beim Speichern eines ``.h5ad``."""
         start = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
         pfad, _ = QFileDialog.getOpenFileName(
-            self, "Auftrag aus AnnData lesen", str(start),
-            "AnnData (*.h5ad);;Alle Dateien (*)"
+            self, tr("dialog_open_job_title"), str(start), tr("dialog_file_filter")
         )
         if pfad:
             self.datei_gewuenscht.emit(pfad)

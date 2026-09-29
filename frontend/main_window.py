@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -58,6 +58,7 @@ import store_reader as sr
 import theme
 import worker
 from architektur_view import ArchitekturPanel
+from i18n import LANGUAGE_NAMES, tr, translator
 from netz_view import NetzPanel
 from projektion_view import ProjektionPanel
 from searchable_select import KIND_HEADER, MultiSelect
@@ -113,10 +114,7 @@ def load_cohorts(config: dict[str, Any]) -> tuple[list[str], str | None]:
         return list(COHORT_PROJECT_IDS), None
     except ImportError:
         fallback = list(config.get("cohorts") or [])
-        return fallback, (
-            "wissensnetz nicht installiert — Kohorten aus config/panel.json "
-            "(pip install -e ./wissensnetz)"
-        )
+        return fallback, tr("wissensnetz_not_installed")
 
 
 def _kontext_aus_store(barcode: str) -> dict[str, Any] | None:
@@ -224,6 +222,82 @@ class MainWindow(QMainWindow):
         self._cohort_select.selection_changed.connect(self._auswahl_geaendert)
         self._attribute_select.selection_changed.connect(self._auswahl_geaendert)
 
+        # Sprachwechsel (i18n.py): jede feste Beschriftung im Fenster neu
+        # aufbauen. Das Signal kommt vom Singleton, nicht von diesem Fenster
+        # selbst — bei mehreren Fenstern zoegen alle gleichzeitig nach.
+        # EN: Language change (i18n.py): rebuild every fixed label in the
+        # window. The signal comes from the singleton, not from this window
+        # itself — with several windows, all of them would follow at once.
+        translator.language_changed.connect(self.retranslate_ui)
+
+    def retranslate_ui(self) -> None:
+        """Alle festen Oberflaechen-Texte des Fensters neu aus ``i18n.tr()``
+        setzen (siehe ``i18n.py``). Die Netzansicht rechnet ihre Knotentexte
+        bei jedem ``zeichne()`` ohnehin frisch aus ``tr()`` — ein erneuter
+        ``_netz_zeigen(self._letzter_abzug)`` reicht dafuer, ohne Fuseki neu
+        zu fragen. Lauftext, der echte Laufzeitwerte einbettet (Statuszeile,
+        Ausgabefeld nach einem Aufruf, Fehlermeldungen mit Server-Antworten),
+        bleibt dagegen unangetastet — er entsteht ohnehin frisch beim
+        naechsten Aufruf (siehe Modul-Docstring von ``i18n.py``).
+
+        English: Resets every fixed UI text of the window from ``i18n.tr()``
+        (see ``i18n.py``). The net view recomputes its node text from
+        ``tr()`` on every ``zeichne()`` anyway — calling
+        ``_netz_zeigen(self._letzter_abzug)`` again is enough, without
+        re-querying Fuseki. Running text that embeds real runtime values
+        (status line, output pane after a call, error messages with server
+        responses), by contrast, is left untouched — it is regenerated
+        fresh on the next call anyway (see the ``i18n.py`` module
+        docstring).
+        """
+        self._language_button.setText(LANGUAGE_NAMES[translator.language()])
+        self._language_button.setToolTip(tr("language_button_tooltip"))
+        for action in self._language_group.actions():
+            action.setChecked(action.text() == LANGUAGE_NAMES[translator.language()])
+
+        self._file_menu.setTitle(tr("menu_file"))
+        self._download_menu.setTitle(tr("menu_save_h5ad"))
+        self._view_menu.setTitle(tr("menu_view"))
+        self._refresh_action.setText(tr("menu_refresh_net"))
+
+        self._preview_button.setText(tr("button_preview"))
+        self._generate_button.setText(tr("button_generate"))
+        self._download_button.setText(tr("button_save_h5ad"))
+
+        self._knopf_netz.setText(tr("view_net"))
+        self._knopf_projektion.setText(tr("view_projection"))
+        self._knopf_architektur.setText(tr("bottom_architecture"))
+        self._knopf_text.setText(tr("bottom_text_output"))
+
+        # Die beiden Hinweise haengen vom aktuell sichtbaren Zustand ab —
+        # dieselbe Fallunterscheidung wie in _wechsle_ansicht/_wechsle_unten.
+        # EN: The two hints depend on the currently visible state — the same
+        # branching as in _wechsle_ansicht/_wechsle_unten.
+        if self._ansichten.currentIndex() == 0:
+            self._ansicht_hinweis.setText(tr("view_net_hint"))
+        else:
+            self._ansicht_hinweis.setText(self._projektion_hinweis())
+        self._unten_hinweis.setText(
+            tr("bottom_hint_architecture") if self._unten.currentIndex() == 0
+            else tr("bottom_hint_text")
+        )
+
+        for caption, key in self._panel_captions:
+            caption.setText(tr(key))
+
+        self._cohort_select.retranslate(
+            platzhalter=tr("cohort_search_placeholder"), leer_text=tr("cohort_search_empty"),
+        )
+        self._attribute_select.retranslate(
+            platzhalter=tr("attribute_search_placeholder"), leer_text=tr("attribute_search_empty"),
+        )
+        self._source_select.retranslate()
+
+        self._netz.retranslate()
+        self._netz_zeigen(self._letzter_abzug)
+        self._projektion.retranslate()
+        self._architektur.retranslate()
+
     # -- Menue ---------------------------------------------------------------
     # EN: Menu (translated)
     def _build_menu(self) -> None:
@@ -251,8 +325,8 @@ class MainWindow(QMainWindow):
         'Generieren' (generate) run produces something downloadable (see
         ``_update_download_menu``).
         """
-        file_menu = self.menuBar().addMenu("&Datei")
-        self._download_menu = QMenu("Als .h5ad speichern", self)
+        self._file_menu = file_menu = self.menuBar().addMenu(tr("menu_file"))
+        self._download_menu = QMenu(tr("menu_save_h5ad"), self)
         self._download_menu.setEnabled(False)
         file_menu.addMenu(self._download_menu)
 
@@ -262,8 +336,8 @@ class MainWindow(QMainWindow):
         # EN: The store also changes without this UI, e.g. through
         # scripts/run_selection.py or start_all.ps1 -FullLoad. Without this
         # entry the picture would silently go stale.
-        view_menu = self.menuBar().addMenu("&Ansicht")
-        refresh = QAction("Netz aktualisieren", self)
+        self._view_menu = view_menu = self.menuBar().addMenu(tr("menu_view"))
+        self._refresh_action = refresh = QAction(tr("menu_refresh_net"), self)
         refresh.setShortcut("F5")
         refresh.triggered.connect(self._netz_aktualisieren)
         view_menu.addAction(refresh)
@@ -350,13 +424,13 @@ class MainWindow(QMainWindow):
         The user can change this in the dialog at any time.
         """
         if self._dl_thread is not None:
-            self.set_status("Es laeuft bereits ein Download — bitte warten.", "warning")
+            self.set_status(tr("status_download_running"), "warning")
             return
 
         default_dir = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
         suggested = str(default_dir / entry["filename"])
         path, _ = QFileDialog.getSaveFileName(
-            self, "Als .h5ad speichern", suggested, "AnnData (*.h5ad);;Alle Dateien (*)"
+            self, tr("dialog_save_h5ad_title"), suggested, tr("dialog_file_filter")
         )
         if not path:
             return
@@ -376,7 +450,7 @@ class MainWindow(QMainWindow):
             self._offene_h5ad = str(result.data.get("path") or "")
             self.set_status(f"Gespeichert: {result.data.get('path')}", "success")
         else:
-            self.set_status(result.error or "Download fehlgeschlagen.", "error")
+            self.set_status(result.error or tr("status_download_failed"), "error")
 
     def _release_download_thread(self) -> None:
         """Wie ``_release_thread``, aber fuer den Download-Thread (siehe dort).
@@ -413,14 +487,62 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         self._status = QStatusBar()
+        # Sprachumschalter unten links (siehe _build_language_button) — als
+        # NICHT-dauerhaftes Widget zuerst hinzugefuegt, damit es links steht.
+        # set_status() schrieb frueher per showMessage(), das normale
+        # Statusleisten-Widgets waehrend einer Meldung automatisch versteckt
+        # (Qt-Verhalten) — mit einem staendig gesetzten Status waere der
+        # Sprachknopf also praktisch nie sichtbar gewesen. Deshalb laeuft die
+        # Meldung jetzt ueber ein eigenes, gewoehnliches Label.
+        # EN: Language switcher at the bottom left (see
+        # _build_language_button) — added first as a NON-permanent widget so
+        # it stays on the left. set_status() used to go through
+        # showMessage(), which automatically hides normal status bar widgets
+        # while a message is shown (Qt behavior) — with a status set almost
+        # constantly, the language button would practically never have been
+        # visible. So the message now runs through its own plain label
+        # instead.
+        self._language_button = self._build_language_button()
+        self._status.addWidget(self._language_button)
+        self._status_message = QLabel()
+        self._status.addWidget(self._status_message, 1)
         # Zusaetzlich rechts ein dauerhaftes Feld mit dem Stand des Stores:
         # set_status() schreibt weiterhin links, die beiden kollidieren nicht.
         # EN: Additionally, a permanent field on the right with the store's
         # status: set_status() continues to write on the left, the two do
         # not collide.
-        self._store_label = QLabel("Store: —")
+        self._store_label = QLabel(tr("store_prefix"))
         self._status.addPermanentWidget(self._store_label)
         self.setStatusBar(self._status)
+
+    def _build_language_button(self) -> QPushButton:
+        """Sprachumschalter (Deutsch/Englisch/Spanisch, siehe ``i18n.py``):
+        ein flacher Knopf, der die aktuelle Sprache zeigt und beim Klick ein
+        Menue mit allen dreien aufklappt.
+
+        English: Language switcher (German/English/Spanish, see
+        ``i18n.py``): a flat button showing the current language, which
+        expands a menu with all three on click.
+        """
+        button = QPushButton(LANGUAGE_NAMES[translator.language()])
+        button.setFlat(True)
+        button.setToolTip(tr("language_button_tooltip"))
+
+        menu = QMenu(button)
+        group = QActionGroup(menu)
+        group.setExclusive(True)
+        for code, name in LANGUAGE_NAMES.items():
+            action = QAction(name, menu)
+            action.setCheckable(True)
+            action.setChecked(code == translator.language())
+            action.triggered.connect(lambda checked=False, c=code: translator.set_language(c))
+            group.addAction(action)
+            menu.addAction(action)
+        button.setMenu(menu)
+
+        self._language_menu = menu
+        self._language_group = group
+        return button
 
     def _build_header(self) -> QWidget:
         header = QFrame()
@@ -455,12 +577,7 @@ class MainWindow(QMainWindow):
         self._output.setObjectName(theme.OBJ_OUTPUT)
         self._output.setReadOnly(True)
         self._output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._output.setPlainText(
-            "Noch keine Anfrage gestellt.\n\n"
-            "Rechts eine Auswahl zusammenstellen, dann 'Vorschau' (nur Metadaten)\n"
-            "oder 'Generieren' (zusaetzlich Rohdaten und .h5ad).\n\n"
-            "Angezeigt wird genau die Antwort des Mediators."
-        )
+        self._output.setPlainText(tr("output_placeholder"))
         # Senkrechter Splitter statt der einen Zeile: oben die Ansichten, unten
         # unveraendert self._output (dasselbe Widget, nicht neu gebaut). Ein
         # Splitter im Splitter — gewollt und der kleinstmoegliche Eingriff.
@@ -500,9 +617,9 @@ class MainWindow(QMainWindow):
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(10)
 
-        self._preview_button = QPushButton("Vorschau")
+        self._preview_button = QPushButton(tr("button_preview"))
         self._preview_button.clicked.connect(lambda: self._start("preview"))
-        self._generate_button = QPushButton("Generieren")
+        self._generate_button = QPushButton(tr("button_generate"))
         self._generate_button.setObjectName(theme.OBJ_PRIMARY_BUTTON)
         self._generate_button.clicked.connect(lambda: self._start("generate"))
         # Sichtbarer Button statt nur des "Datei"-Menues: ein Menueintrag
@@ -517,7 +634,7 @@ class MainWindow(QMainWindow):
         # button sits directly next to the other two actions and is
         # therefore hard to miss. Disabled until a 'Generieren' (generate)
         # run produces something downloadable (see _update_download_menu).
-        self._download_button = QPushButton("Als .h5ad speichern")
+        self._download_button = QPushButton(tr("button_save_h5ad"))
         self._download_button.setEnabled(False)
         self._download_button.clicked.connect(self._on_download_button_clicked)
 
@@ -547,9 +664,9 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(2, 0, 2, 0)
         layout.setSpacing(0)
 
-        self._knopf_netz = QPushButton("Wissensnetz")
+        self._knopf_netz = QPushButton(tr("view_net"))
         self._knopf_netz.setObjectName(theme.OBJ_SWITCH_LEFT)
-        self._knopf_projektion = QPushButton("Projektion")
+        self._knopf_projektion = QPushButton(tr("view_projection"))
         self._knopf_projektion.setObjectName(theme.OBJ_SWITCH_RIGHT)
         for knopf in (self._knopf_netz, self._knopf_projektion):
             knopf.setCheckable(True)
@@ -565,7 +682,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._knopf_projektion)
         layout.addStretch(1)
 
-        self._ansicht_hinweis = QLabel("Struktur und Zaehlungen, keine Messdaten")
+        self._ansicht_hinweis = QLabel(tr("view_net_hint"))
         self._ansicht_hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
         layout.addWidget(self._ansicht_hinweis)
         return zeile
@@ -585,9 +702,9 @@ class MainWindow(QMainWindow):
         zeile = QHBoxLayout()
         zeile.setContentsMargins(2, 0, 2, 0)
         zeile.setSpacing(0)
-        self._knopf_architektur = QPushButton("Architektur")
+        self._knopf_architektur = QPushButton(tr("bottom_architecture"))
         self._knopf_architektur.setObjectName(theme.OBJ_SWITCH_LEFT)
-        self._knopf_text = QPushButton("Textausgabe")
+        self._knopf_text = QPushButton(tr("bottom_text_output"))
         self._knopf_text.setObjectName(theme.OBJ_SWITCH_RIGHT)
         for knopf in (self._knopf_architektur, self._knopf_text):
             knopf.setCheckable(True)
@@ -602,7 +719,7 @@ class MainWindow(QMainWindow):
         zeile.addWidget(self._knopf_architektur)
         zeile.addWidget(self._knopf_text)
         zeile.addStretch(1)
-        self._unten_hinweis = QLabel("Was im Hintergrund passiert")
+        self._unten_hinweis = QLabel(tr("bottom_hint_architecture"))
         self._unten_hinweis.setObjectName(theme.OBJ_NETZ_NOTE)
         zeile.addWidget(self._unten_hinweis)
         layout.addLayout(zeile)
@@ -618,8 +735,8 @@ class MainWindow(QMainWindow):
         """Umschalten ist rein optisch — der Antworttext bleibt stehen, auch
         wenn man ihn gerade nicht sieht."""
         self._unten.setCurrentIndex(index)
-        self._unten_hinweis.setText("Was im Hintergrund passiert" if index == 0
-                                    else "Die Antwort des Mediators, unveraendert")
+        self._unten_hinweis.setText(tr("bottom_hint_architecture") if index == 0
+                                    else tr("bottom_hint_text"))
 
     # -- Projektion ----------------------------------------------------------
     # EN: Projection (translated)
@@ -627,7 +744,7 @@ class MainWindow(QMainWindow):
         self._ansichten.setCurrentIndex(index)
         self._raum_fuer_projektion(index == 1)
         if index == 0:
-            self._ansicht_hinweis.setText("Struktur und Zaehlungen, keine Messdaten")
+            self._ansicht_hinweis.setText(tr("view_net_hint"))
             return
         self._ansicht_hinweis.setText(self._projektion_hinweis())
         # Erst beim Umschalten laden, nicht vorher: 44 MB sollen nicht ungefragt
@@ -676,7 +793,7 @@ class MainWindow(QMainWindow):
 
     def _projektion_hinweis(self) -> str:
         name = self._projektion.dateiname()
-        return f"Messdaten aus {name}" if name else "Keine Datei geladen"
+        return f"Messdaten aus {name}" if name else tr("view_no_file_loaded")
 
     def _lade_auftrag(self, pfad: str) -> None:
         """Eine fertige ``.h5ad`` oeffnen und die Auswahl daraus wiederherstellen.
@@ -685,8 +802,7 @@ class MainWindow(QMainWindow):
         Datei und derselbe Grund: 44 MB duerfen das Fenster nicht einfrieren.
         """
         if self._h5_thread is not None:
-            self.set_status("Es wird bereits eine Datei geladen — bitte warten.",
-                            "warning")
+            self.set_status(tr("status_file_loading"), "warning")
             return
         name = Path(pfad).name
         self.set_status(f"Lese Auftrag aus {name} … Das Fenster bleibt bedienbar.",
@@ -738,8 +854,7 @@ class MainWindow(QMainWindow):
         ``worker.H5adWorker``).
         """
         if self._h5_thread is not None:
-            self.set_status("Es wird bereits eine Datei geladen — bitte warten.",
-                            "warning")
+            self.set_status(tr("status_file_loading"), "warning")
             return
         self._offene_h5ad = pfad
         name = Path(pfad).name
@@ -866,8 +981,8 @@ class MainWindow(QMainWindow):
         self._cohort_select = MultiSelect(
             self._cohort_entries(),
             mit_suche=True,
-            platzhalter="Kuerzel suchen, z. B. BRCA …",
-            leer_text="Kein Kuerzel passt",
+            platzhalter=tr("cohort_search_placeholder"),
+            leer_text=tr("cohort_search_empty"),
             mit_punkt=True,
         )
 
@@ -887,8 +1002,8 @@ class MainWindow(QMainWindow):
         self._attribute_select = MultiSelect(
             self._attribute_entries(),
             mit_suche=True,
-            platzhalter="Attribut oder Knoten suchen, z. B. stage …",
-            leer_text="Kein Attribut passt",
+            platzhalter=tr("attribute_search_placeholder"),
+            leer_text=tr("attribute_search_empty"),
             max_hoehe=_ATTRIBUTE_CARD_HEIGHT,
         )
         self._source_select = MultiSelect(self._source_entries())
@@ -904,15 +1019,17 @@ class MainWindow(QMainWindow):
         # goes to the display area on the left via the splitter — not a
         # growing panel; that's why there is a stretch field at the bottom
         # and no row stretches itself.
-        for label, widgets, stretch in (
-            ("Krebs", (self._cohort_select,), 0),
-            ("Var", (self._modality_box,), 0),
-            ("Obj", (self._attribute_select,), 0),
-            ("Datenquelle", (self._source_select,), 0),
-            ("Proben", (self._size_spin,), 0),
+        self._panel_captions: list[tuple[QLabel, str]] = []
+        for key, widgets, stretch in (
+            ("panel_cancer", (self._cohort_select,), 0),
+            ("panel_variable", (self._modality_box,), 0),
+            ("panel_object", (self._attribute_select,), 0),
+            ("panel_data_source", (self._source_select,), 0),
+            ("panel_samples", (self._size_spin,), 0),
         ):
-            caption = QLabel(label)
+            caption = QLabel(tr(key))
             caption.setObjectName(theme.OBJ_PANEL_LABEL)
+            self._panel_captions.append((caption, key))
             layout.addWidget(caption)
             for i, widget in enumerate(widgets):
                 # Nur das letzte Widget einer Zeile darf wachsen (bei "Krebs"
@@ -1264,7 +1381,7 @@ class MainWindow(QMainWindow):
         """
         if abzug is None:
             self._netz.zeige_nicht_erreichbar(sr.store_url(sr.default_store()))
-            self._store_label.setText("Store: nicht erreichbar")
+            self._store_label.setText(tr("status_store_unreachable"))
             return
         if not self.current_cohorts():
             # Ohne Auswahl hat das Netz nichts zu zeigen — und "leer" hiesse
@@ -1272,10 +1389,7 @@ class MainWindow(QMainWindow):
             # EN: Without a selection the net has nothing to show — and
             # "empty" would falsely imply here that the store holds
             # nothing.
-            self._netz.zeige_hinweis(
-                "Noch nichts ausgewaehlt.\n"
-                "Rechts Kohorten anhaken und Attribute waehlen."
-            )
+            self._netz.zeige_hinweis(tr("net_nothing_selected"))
             self._store_label.setText(self._store_stand(abzug))
             return
         # Das Netz zeigt die Auswahl aus dem Panel, nicht den ganzen Store —
@@ -1312,15 +1426,15 @@ class MainWindow(QMainWindow):
     # EN: Call (translated)
     def _start(self, mode: str) -> None:
         if not self.current_cohorts():
-            self.set_status("Keine Kohorte angehakt.", "warning")
+            self.set_status(tr("status_no_cohort"), "warning")
             return
         if not self.checked_sources():
-            self.set_status("Keine Datenquelle angehakt.", "warning")
+            self.set_status(tr("status_no_source"), "warning")
             self._output.setPlainText("\n".join([
-                "Keine Datenquelle angehakt.",
+                tr("status_no_source"),
                 "",
-                "Rechts unter 'Datenquelle' mindestens eine Quelle ankreuzen.",
-                "Je angehakter Quelle entsteht eine eigene Ebene im Auftrag.",
+                tr("status_no_source_hint_1"),
+                tr("status_no_source_hint_2"),
             ]))
             return
         payload = self.current_payload()
@@ -1397,7 +1511,7 @@ class MainWindow(QMainWindow):
     # EN: Display (translated)
     def set_status(self, message: str, state: str = "info") -> None:
         self._status.setStyleSheet(theme.status_style(state))
-        self._status.showMessage(message)
+        self._status_message.setText(message)
 
     def _render(self, result: mc.Result, mode: str) -> None:
         """Antwort des Mediators anzeigen — Fehler sichtbar, nie stille Leere.
@@ -1407,16 +1521,16 @@ class MainWindow(QMainWindow):
         """
         if not result.ok:
             self._output.setPlainText(f"FEHLER\n\n{result.error}")
-            self.set_status((result.error or "Fehler").splitlines()[0], "error")
+            self.set_status((result.error or tr("status_error_fallback")).splitlines()[0], "error")
             return
 
         levels = result.levels()
         if not levels:
             self._output.setPlainText(
-                "Der Mediator hat keine Auswahl-Ebene zurueckgegeben.\n\n"
+                tr("status_no_levels_body") + "\n\n"
                 + json.dumps(result.data, indent=2, ensure_ascii=False)[:4000]
             )
-            self.set_status("Antwort ohne Ebenen.", "warning")
+            self.set_status(tr("status_no_levels"), "warning")
             return
 
         # Download-Menue nur nach 'Generieren' aktualisieren: eine Vorschau

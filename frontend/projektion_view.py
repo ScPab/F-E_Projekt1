@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
 
 import morph
 import theme
+from i18n import tr
 
 # Der Regler arbeitet in ganzen Schritten; 0..100 entspricht 0,00..1,00.
 # EN: The slider works in whole steps; 0..100 corresponds to 0.00..1.00.
@@ -208,7 +209,7 @@ class ProjektionPanel(QWidget):
 
         kopf = QHBoxLayout()
         kopf.setContentsMargins(0, 0, 0, 0)
-        self._oeffnen = QPushButton("Datei oeffnen …")
+        self._oeffnen = QPushButton(tr("button_open_file"))
         self._oeffnen.clicked.connect(self._waehle_datei)
         kopf.addWidget(self._oeffnen)
         kopf.addStretch(1)
@@ -275,8 +276,7 @@ class ProjektionPanel(QWidget):
         # Meldung statt Karte: leerer Zustand, Ladehinweis, fehlendes Layout.
         # EN: Message instead of map: empty state, loading hint, missing
         # layout.
-        self._hinweis = QLabel("Keine Datei geladen.\nUeber `Datei oeffnen …` eine "
-                               ".h5ad waehlen.")
+        self._hinweis = QLabel(tr("view_projection_empty_hint"))
         self._hinweis.setObjectName(theme.OBJ_PROJ_HINT)
         self._hinweis.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hinweis.setWordWrap(True)
@@ -360,10 +360,25 @@ class ProjektionPanel(QWidget):
         """
         start = Path(__file__).resolve().parent.parent / "wissensnetz" / "data"
         pfad, _ = QFileDialog.getOpenFileName(
-            self, "AnnData oeffnen", str(start), "AnnData (*.h5ad);;Alle Dateien (*)"
+            self, tr("dialog_open_h5ad_title"), str(start), tr("dialog_file_filter")
         )
         if pfad:
             self.datei_gewuenscht.emit(pfad)
+
+    def retranslate(self) -> None:
+        """Bei einem Sprachwechsel (``i18n.py``) den Oeffnen-Knopf immer und
+        den Leer-Hinweis nur neu beschriften, solange noch keine Datei
+        geladen ist — danach zeigt ``self._hinweis`` ohnehin nur noch
+        Lade-/Fehlertext, der nicht Teil dieser Uebersetzung ist.
+
+        English: On a language change (``i18n.py``), always relabel the
+        open button, and relabel the empty-state hint only while no file
+        has been loaded yet — after that ``self._hinweis`` only ever shows
+        loading/error text, which is not part of this translation.
+        """
+        self._oeffnen.setText(tr("button_open_file"))
+        if self._modell is None:
+            self._hinweis.setText(tr("view_projection_empty_hint"))
 
     def zeige_laden(self, dateiname: str) -> None:
         self._zeige_hinweis(f"Lade {dateiname} …")

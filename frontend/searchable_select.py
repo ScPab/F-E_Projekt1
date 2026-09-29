@@ -69,6 +69,7 @@ from PySide6.QtWidgets import (
 )
 
 import theme
+from i18n import tr
 
 # Rollen je Listeneintrag.
 # EN: Roles per list entry.
@@ -347,7 +348,7 @@ class _AufklappAuswahl(QWidget):
         *,
         mit_suche: bool,
         platzhalter: str = "",
-        leer_text: str = "Kein Eintrag passt",
+        leer_text: str = "",
         mit_punkt: bool = True,
         mit_kaestchen: bool = False,
         max_hoehe: int = MAX_CARD_HEIGHT,
@@ -406,11 +407,46 @@ class _AufklappAuswahl(QWidget):
         # kaputt aus, nicht wie "nichts gefunden".
         # EN: A dedicated message instead of an empty list: a box with no
         # content looks broken, not like "nothing found".
-        self._empty = QLabel(leer_text)
+        self._empty = QLabel(leer_text or tr("select_no_entry_matches"))
         self._empty.setObjectName(theme.OBJ_ROW_CODE)
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty.hide()
         popup_layout.addWidget(self._empty)
+
+    def retranslate(self, *, platzhalter: str | None = None, leer_text: str | None = None) -> None:
+        """Suchfeld-Platzhalter, Leer-Hinweis und Schaltflaechentext bei einem
+        Sprachwechsel neu setzen (siehe ``i18n.py``). ``None`` laesst das
+        jeweilige Feld unveraendert — nur wer ein Suchfeld hat, hat auch
+        einen Platzhalter dafuer.
+
+        Der Schaltflaechentext selbst ist Sache der Unterklasse
+        (:meth:`_retranslate_beschriftung`): bei :class:`MultiSelect` immer
+        sicher neu aufbaubar, bei :class:`SearchableSelect` nur, solange
+        nichts gewaehlt ist — sonst stuende dort ploetzlich wieder "Keine
+        Auswahl", obwohl ein Wert gesetzt ist.
+
+        English: Resets the search field placeholder, empty-state hint and
+        button text on a language change (see ``i18n.py``). ``None`` leaves
+        that field unchanged — only a widget with a search field has a
+        placeholder for it.
+
+        The button text itself is the subclass's job
+        (:meth:`_retranslate_beschriftung`): for :class:`MultiSelect` always
+        safe to rebuild, for :class:`SearchableSelect` only while nothing is
+        selected — otherwise it would suddenly show "No selection" again
+        even though a value is set.
+        """
+        if platzhalter is not None and self._search is not None:
+            self._search.setPlaceholderText(platzhalter)
+        if leer_text is not None:
+            self._empty.setText(leer_text)
+        self._retranslate_beschriftung()
+
+    def _retranslate_beschriftung(self) -> None:
+        """Von den Unterklassen ueberschrieben; hier ein No-op.
+
+        English: Overridden by the subclasses; a no-op here.
+        """
 
     # -- Aufbau ------------------------------------------------------------
     @staticmethod
@@ -708,8 +744,20 @@ class SearchableSelect(_AufklappAuswahl):
         English: Label the button — muted without a selection, as with the
         multi-select.
         """
-        self._button.setText(text or "Keine Auswahl")
+        self._button.setText(text or tr("select_no_selection"))
         self._button.setStyleSheet(theme.select_button_style(not text))
+
+    def _retranslate_beschriftung(self) -> None:
+        """Nur ohne Auswahl neu beschriften — sonst stuende dort wieder "Keine
+        Auswahl", obwohl ``self._value`` gesetzt ist (siehe
+        ``_AufklappAuswahl.retranslate``).
+
+        English: Only re-label while nothing is selected — otherwise it
+        would show "No selection" again even though ``self._value`` is set
+        (see ``_AufklappAuswahl.retranslate``).
+        """
+        if not self._value:
+            self._beschrifte()
 
     def _aktiviere(self, item: QListWidgetItem) -> None:
         self.set_value(item.data(VALUE_ROLE) or "")
@@ -759,7 +807,7 @@ class MultiSelect(_AufklappAuswahl):
         *,
         mit_suche: bool = False,
         platzhalter: str = "",
-        leer_text: str = "Kein Eintrag passt",
+        leer_text: str = "",
         mit_punkt: bool = False,
         max_hoehe: int = MAX_CARD_HEIGHT,
         parent: QWidget | None = None,
@@ -904,7 +952,7 @@ class MultiSelect(_AufklappAuswahl):
                 kurz.append(item.data(CODE_ROLE) or name)
 
         if not namen:
-            self._button.setText("Keine Auswahl")
+            self._button.setText(tr("select_no_selection"))
             self._button.setToolTip("")
         elif len(kurz) <= 2:
             self._button.setText(" · ".join(kurz))
@@ -914,6 +962,15 @@ class MultiSelect(_AufklappAuswahl):
             self._button.setToolTip(", ".join(namen))
         self._button.setStyleSheet(theme.select_button_style(not namen))
         self.selection_changed.emit(self.checked_values())
+
+    def _retranslate_beschriftung(self) -> None:
+        """Immer sicher: rechnet die Beschriftung komplett aus dem aktuellen
+        Haekchenstand neu (siehe ``_AufklappAuswahl.retranslate``).
+
+        English: Always safe: fully recomputes the label from the current
+        checkbox state (see ``_AufklappAuswahl.retranslate``).
+        """
+        self._beschrifte()
 
     # -- Filtern -----------------------------------------------------------
     def _ueberschriften_nachziehen(self) -> None:
