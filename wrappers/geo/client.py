@@ -80,7 +80,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Iterable, Optional, Union
+from typing import Iterable, Optional, Union
 
 import requests
 
@@ -505,22 +505,3 @@ class GEOWrapper:
             downloaded.append(name)
 
         return {"status": "completed", "accession": accession, "source_dir": base, "files": downloaded}
-
-    def to_anndata(self, raw_response: object) -> None:
-        """Überführt eine GEO-Antwort in das Zielformat anndata/.h5ad.
-
-        Bewusst nicht Teil dieses Wrappers (siehe Modul-Docstring) — der
-        Wrapper liefert strukturierte Metadaten/Rohdaten-Referenzen, die
-        Transformation nach anndata ist ein separater Mediator-seitiger
-        Schritt.
-
-        English: Converts a GEO response into the target format anndata/.h5ad.
-
-        Deliberately not part of this wrapper (see module docstring) — the
-        wrapper delivers structured metadata/raw-data references, the
-        transformation to anndata is a separate mediator-side step.
-        """
-        raise NotImplementedError(
-            "Transformation nach anndata ist bewusst kein Teil des Wrappers, "
-            "siehe Modul-Docstring."
-        )

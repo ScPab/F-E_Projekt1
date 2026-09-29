@@ -285,4 +285,79 @@ def test_auftrag_uebersetzt_das_alte_feld_gender() -> None:
 
 def test_auftrag_aus_leerem_modell_ist_leer() -> None:
     auftrag = morph.auftrag_aus_modell(_modell([], []), PANEL_ATTRIBUTE)
-    assert auftrag == {"cohorts": [], "attributes": [], "size": 0, "proben": 0}
+    assert auftrag == {"cohorts": [], "attributes": [], "sources": [], "size": 0,
+                       "proben": 0, "gelesen": False}
+
+
+# --- Der mitgeschriebene Auftrag aus uns (P3) ---------------------------------
+# Seit dem Mediator-Stand vom 26.09. fuehrt die Datei ihren eigenen Auftrag mit.
+# Der Wert ist ein JSON-**String**; die Tests halten das fest, weil ein dict
+# hier nur scheinbar dasselbe waere.
+AUSWAHL = {
+    "schema": 1, "recipe_key": "d81f31fca87b", "endpoint": "/selection/generate",
+    "source": "gdc", "cohorts": ["TCGA-DLBC", "TCGA-MESO"],
+    "modality": "gene_expression",
+    "attributes": ["sex_at_birth", "race", "vital_status"],
+    "size": 7, "per_cohort_size": None,
+}
+
+
+def _modell_mit_uns(auswahl, punkte=None, spalten=None):
+    return morph.Morphmodell(punkte=punkte or [{"project_id": "TCGA-DLBC"}],
+                             obs_spalten=spalten or [],
+                             gemeldete_auswahl=auswahl, dateiname="test.h5ad")
+
+
+def test_gemeldete_auswahl_liest_den_json_string() -> None:
+    import json
+
+    class Fake:
+        uns = {"databridge_selection": json.dumps(AUSWAHL)}
+
+    assert morph.gemeldete_auswahl(Fake())["cohorts"] == ["TCGA-DLBC", "TCGA-MESO"]
+
+
+def test_gemeldete_auswahl_bei_leerem_uns_ist_none() -> None:
+    class Fake:
+        uns = {}
+
+    assert morph.gemeldete_auswahl(Fake()) is None
+
+
+def test_kaputte_angabe_gilt_wie_keine() -> None:
+    """Eine unlesbare Angabe ist schlechter als keine - also wird sie verworfen."""
+    class Fake:
+        uns = {"databridge_selection": "{kein json"}
+
+    assert morph.gemeldete_auswahl(Fake()) is None
+
+
+def test_auftrag_bevorzugt_den_mitgeschriebenen_auftrag() -> None:
+    """Steht der Auftrag in der Datei, wird er gelesen - nicht abgeleitet.
+
+    ``obs_spalten`` nennt hier absichtlich etwas anderes: die Ableitung wuerde
+    ``tumor_stage`` sehen, die Datei sagt aber, was wirklich angefragt war.
+    """
+    modell = _modell_mit_uns(AUSWAHL, spalten=["tumor_stage"])
+    auftrag = morph.auftrag_aus_modell(modell, PANEL_ATTRIBUTE)
+    assert auftrag["gelesen"] is True
+    assert auftrag["attributes"] == [a for a in PANEL_ATTRIBUTE
+                                     if a in {"sex_at_birth", "race", "vital_status"}]
+    assert "tumor_stage" not in auftrag["attributes"]
+    # Die Datenquelle steht jetzt in der Datei - vorher war sie nicht zu holen.
+    assert auftrag["sources"] == ["gdc"]
+    assert auftrag["size"] == 7
+
+
+def test_attribute_stehen_in_der_reihenfolge_des_panels() -> None:
+    """Der Mediator normalisiert die Reihenfolge; das Panel hat seine eigene."""
+    verdreht = dict(AUSWAHL, attributes=["vital_status", "sex_at_birth", "race"])
+    auftrag = morph.auftrag_aus_modell(_modell_mit_uns(verdreht), PANEL_ATTRIBUTE)
+    reihenfolge = [PANEL_ATTRIBUTE.index(a) for a in auftrag["attributes"]]
+    assert reihenfolge == sorted(reihenfolge)
+
+
+def test_per_cohort_size_geht_vor_size() -> None:
+    auswahl = dict(AUSWAHL, size=100, per_cohort_size=5)
+    assert morph.auftrag_aus_modell(_modell_mit_uns(auswahl),
+                                    PANEL_ATTRIBUTE)["size"] == 5

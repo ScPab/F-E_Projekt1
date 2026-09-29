@@ -196,13 +196,22 @@ def preview(payload: dict[str, Any], *, base_url: str = "", timeout: float = PRE
     return _post("/selection/preview", payload, base_url=base_url, timeout=timeout)
 
 
-def generate(payload: dict[str, Any], *, base_url: str = "", timeout: float = GENERATE_TIMEOUT) -> Result:
+# Kopfzeile, unter der der Mediator den Fortschritt eines Auftrags fuehrt
+# (P2). Eine vom Aufrufer erzeugte ID — der ``recipe_key`` taugt nicht, den
+# kennt die Oberflaeche erst nach der Antwort.
+PROGRESS_HEADER = "X-DataBridge-Progress-Id"
+
+
+def generate(payload: dict[str, Any], *, base_url: str = "",
+             timeout: float = GENERATE_TIMEOUT, progress_id: str = "") -> Result:
     """``POST /selection/generate`` — dasselbe, plus Download und ``.h5ad``.
 
     English: ``POST /selection/generate`` — the same, plus download and
     ``.h5ad``.
     """
-    return _post("/selection/generate", payload, base_url=base_url, timeout=timeout)
+    kopf = {PROGRESS_HEADER: progress_id} if progress_id else None
+    return _post("/selection/generate", payload, base_url=base_url, timeout=timeout,
+                 headers=kopf)
 
 
 def download(download_url: str, dest_path: str, *, base_url: str = "", timeout: float = GENERATE_TIMEOUT) -> Result:
@@ -255,10 +264,30 @@ def download(download_url: str, dest_path: str, *, base_url: str = "", timeout: 
     return Result(ok=True, status_code=200, data={"path": str(dest_path)})
 
 
-def _post(path: str, payload: dict[str, Any], *, base_url: str, timeout: float) -> Result:
+def progress(progress_id: str, *, base_url: str = "", timeout: float = 10.0) -> Result:
+    """Den gemeldeten Stand eines laufenden Auftrags holen (P2).
+
+    ``{"progress_id", "finished", "events"}``. Eine unbekannte oder bereits
+    verworfene ID beantwortet der Mediator mit 404 — das ist **kein Fehler der
+    Oberflaeche**, sondern heisst schlicht: zu dieser ID liegt (noch) nichts
+    vor. Der Aufrufer behandelt beides gleich und zeigt einfach nichts an.
+    """
+    url = (base_url or default_base_url()).rstrip("/") + f"/selection/progress/{progress_id}"
+    try:
+        resp = requests.get(url, timeout=timeout)
+        if resp.status_code == 404:
+            return Result(ok=False, error="Zu dieser Kennung liegt noch nichts vor.")
+        resp.raise_for_status()
+        return Result(ok=True, data=resp.json())
+    except requests.RequestException as exc:
+        return Result(ok=False, error=f"Fortschritt nicht abrufbar: {exc}")
+
+
+def _post(path: str, payload: dict[str, Any], *, base_url: str, timeout: float,
+          headers: dict[str, str] | None = None) -> Result:
     url = (base_url or default_base_url()).rstrip("/") + path
     try:
-        resp = requests.post(url, json=payload, timeout=timeout)
+        resp = requests.post(url, json=payload, timeout=timeout, headers=headers)
     except requests.Timeout:
         # Wichtig: der Mediator bricht dabei NICHT ab. Nachgemessen an einem
         # Auftrag, der hier auflief — `gdc-client` lud im Container ungestört

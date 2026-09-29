@@ -76,7 +76,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     # -- Menue / EN: Menu -----------------------------------------------
     "menu_file": {ENGLISH: "&File", GERMAN: "&Datei", SPANISH: "&Archivo"},
     "menu_view": {ENGLISH: "&View", GERMAN: "&Ansicht", SPANISH: "&Ver"},
-    "menu_refresh_net": {ENGLISH: "Refresh net", GERMAN: "Netz aktualisieren", SPANISH: "Actualizar red"},
+    "menu_refresh_net": {ENGLISH: "Refresh job", GERMAN: "Suchauftrag aktualisieren", SPANISH: "Actualizar solicitud"},
     "menu_save_h5ad": {ENGLISH: "Save as .h5ad", GERMAN: "Als .h5ad speichern", SPANISH: "Guardar como .h5ad"},
     "menu_language": {ENGLISH: "Language", GERMAN: "Sprache", SPANISH: "Idioma"},
 
@@ -99,11 +99,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "button_save_h5ad": {ENGLISH: "Save as .h5ad", GERMAN: "Als .h5ad speichern", SPANISH: "Guardar como .h5ad"},
 
     # -- Ansichts-Umschalter / EN: View switch -----------------------------
-    "view_net": {ENGLISH: "Knowledge net", GERMAN: "Wissensnetz", SPANISH: "Red de conocimiento"},
+    "view_net": {ENGLISH: "Job", GERMAN: "Suchauftrag", SPANISH: "Solicitud"},
     "view_projection": {ENGLISH: "Projection", GERMAN: "Projektion", SPANISH: "Proyección"},
     "view_net_hint": {
         ENGLISH: "Structure and counts, no measurement data",
-        GERMAN: "Struktur und Zaehlungen, keine Messdaten",
+        GERMAN: "Struktur und Zählungen, keine Messdaten",
         SPANISH: "Estructura y recuentos, sin datos de medición",
     },
     "view_no_file_loaded": {
@@ -111,18 +111,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "view_projection_empty_hint": {
         ENGLISH: "No file loaded.\nChoose a .h5ad via `Open file …`.",
-        GERMAN: "Keine Datei geladen.\nUeber `Datei oeffnen …` eine .h5ad waehlen.",
+        GERMAN: "Keine Datei geladen.\nÜber `Datei öffnen …` eine .h5ad wählen.",
         SPANISH: "Ningún archivo cargado.\nElige un .h5ad con `Abrir archivo …`.",
     },
     "button_open_file": {
-        ENGLISH: "Open file …", GERMAN: "Datei oeffnen …", SPANISH: "Abrir archivo …",
+        ENGLISH: "Open file …", GERMAN: "Datei öffnen …", SPANISH: "Abrir archivo …",
     },
     "button_open_job_from_h5ad": {
         ENGLISH: "Job from .h5ad …", GERMAN: "Auftrag aus .h5ad …", SPANISH: "Solicitud desde .h5ad …",
     },
     "button_open_job_from_h5ad_tooltip": {
         ENGLISH: "Open a finished .h5ad and restore the selection from it",
-        GERMAN: "Eine fertige .h5ad oeffnen und die Auswahl daraus wiederherstellen",
+        GERMAN: "Eine fertige .h5ad öffnen und die Auswahl daraus wiederherstellen",
         SPANISH: "Abrir un .h5ad terminado y restaurar la selección a partir de él",
     },
     "dialog_open_job_title": {
@@ -131,7 +131,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         SPANISH: "Leer solicitud desde AnnData",
     },
     "dialog_open_h5ad_title": {
-        ENGLISH: "Open AnnData", GERMAN: "AnnData oeffnen", SPANISH: "Abrir AnnData",
+        ENGLISH: "Open AnnData", GERMAN: "AnnData öffnen", SPANISH: "Abrir AnnData",
     },
 
     # -- Unterer Umschalter / EN: Bottom switch ----------------------------
@@ -144,7 +144,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "bottom_hint_text": {
         ENGLISH: "The mediator's response, unchanged",
-        GERMAN: "Die Antwort des Mediators, unveraendert",
+        GERMAN: "Die Antwort des Mediators, unverändert",
         SPANISH: "La respuesta del mediador, sin cambios",
     },
 
@@ -156,7 +156,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
                  "Exactly the mediator's response is shown.",
         GERMAN: "Noch keine Anfrage gestellt.\n\n"
                 "Rechts eine Auswahl zusammenstellen, dann 'Vorschau' (nur Metadaten)\n"
-                "oder 'Generieren' (zusaetzlich Rohdaten und .h5ad).\n\n"
+                "oder 'Generieren' (zusätzlich Rohdaten und .h5ad).\n\n"
                 "Angezeigt wird genau die Antwort des Mediators.",
         SPANISH: "Aún no se ha realizado ninguna solicitud.\n\n"
                  "Monta una selección a la derecha, luego 'Vista previa' (solo metadatos)\n"
@@ -174,11 +174,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     # -- Auswahlpanel: Suchfelder/Leerzustaende / EN: Selection panel: search fields/empty states --
     "cohort_search_placeholder": {
         ENGLISH: "Search code, e.g. BRCA …",
-        GERMAN: "Kuerzel suchen, z. B. BRCA …",
+        GERMAN: "Kürzel suchen, z. B. BRCA …",
         SPANISH: "Buscar código, p. ej. BRCA …",
     },
     "cohort_search_empty": {
-        ENGLISH: "No code matches", GERMAN: "Kein Kuerzel passt", SPANISH: "Ningún código coincide",
+        ENGLISH: "No code matches", GERMAN: "Kein Kürzel passt", SPANISH: "Ningún código coincide",
     },
     "attribute_search_placeholder": {
         ENGLISH: "Search attribute or node, e.g. stage …",
@@ -199,19 +199,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # -- Sprachauswahl selbst / EN: The language picker itself ------------
     "language_button_tooltip": {
-        ENGLISH: "Change language", GERMAN: "Sprache aendern", SPANISH: "Cambiar idioma",
+        ENGLISH: "Change language", GERMAN: "Sprache ändern", SPANISH: "Cambiar idioma",
     },
 
     # -- Netzansicht (netz_view.py) — die gezeichneten Knoten / EN: Net view — the drawn nodes --
     "net_root_title": {ENGLISH: "Selection", GERMAN: "Auswahl", SPANISH: "Selección"},
     "net_store_empty": {
-        ENGLISH: "Nothing in the store for this selection yet.\nEvery preview extends the net.",
-        GERMAN: "Zu dieser Auswahl liegt noch nichts im Store.\nJede Vorschau erweitert das Netz.",
-        SPANISH: "Aún no hay nada en el store para esta selección.\nCada vista previa amplía la red.",
+        ENGLISH: "Nothing in the store for this selection yet.\nEvery preview extends the store.",
+        GERMAN: "Zu dieser Auswahl liegt noch nichts im Store.\nJede Vorschau erweitert den Store.",
+        SPANISH: "Aún no hay nada en el store para esta selección.\nCada vista previa amplía el store.",
     },
     "net_attributes_apply_hint": {
         ENGLISH: "Attributes apply to all selected cohorts",
-        GERMAN: "Attribute gelten fuer alle gewaehlten Kohorten",
+        GERMAN: "Attribute gelten für alle gewählten Kohorten",
         SPANISH: "Los atributos se aplican a todas las cohortes seleccionadas",
     },
     "net_more_items": {
@@ -220,7 +220,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "count_cohort_1": {ENGLISH: "cohort", GERMAN: "Kohorte", SPANISH: "cohorte"},
     "count_cohort_n": {ENGLISH: "cohorts", GERMAN: "Kohorten", SPANISH: "cohortes"},
     "count_case_1": {ENGLISH: "case", GERMAN: "Fall", SPANISH: "caso"},
-    "count_case_n": {ENGLISH: "cases", GERMAN: "Faelle", SPANISH: "casos"},
+    "count_case_n": {ENGLISH: "cases", GERMAN: "Fälle", SPANISH: "casos"},
     "count_value_1": {ENGLISH: "value", GERMAN: "Wert", SPANISH: "valor"},
     "count_value_n": {ENGLISH: "values", GERMAN: "Werte", SPANISH: "valores"},
     "count_attribute_1": {ENGLISH: "attribute", GERMAN: "Attribut", SPANISH: "atributo"},
@@ -264,7 +264,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "status_download_running": {
         ENGLISH: "A download is already running — please wait.",
-        GERMAN: "Es laeuft bereits ein Download — bitte warten.",
+        GERMAN: "Es läuft bereits ein Download — bitte warten.",
         SPANISH: "Ya hay una descarga en curso — espera, por favor.",
     },
     "status_file_loading": {
@@ -280,7 +280,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "status_no_levels_body": {
         ENGLISH: "The mediator returned no selection level.",
-        GERMAN: "Der Mediator hat keine Auswahl-Ebene zurueckgegeben.",
+        GERMAN: "Der Mediator hat keine Auswahl-Ebene zurückgegeben.",
         SPANISH: "El mediador no devolvió ningún nivel de selección.",
     },
     "status_error_fallback": {
@@ -291,7 +291,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "net_nothing_selected": {
         ENGLISH: "Nothing selected yet.\nCheck cohorts and choose attributes on the right.",
-        GERMAN: "Noch nichts ausgewaehlt.\nRechts Kohorten anhaken und Attribute waehlen.",
+        GERMAN: "Noch nichts ausgewählt.\nRechts Kohorten anhaken und Attribute wählen.",
         SPANISH: "Aún no se ha seleccionado nada.\nMarca cohortes y elige atributos a la derecha.",
     },
     "wissensnetz_not_installed": {

@@ -320,7 +320,7 @@ class NetzView(QGraphicsView):
         self._unterschied = {}
         self._offene_kohorte = None
         self._meldung = (f"Fuseki unter {url} nicht erreichbar.\n"
-                         "Laeuft `docker compose up`?")
+                         "Läuft `docker compose up`?")
         self._meldung_fehler = True
         self.zeichne()
 

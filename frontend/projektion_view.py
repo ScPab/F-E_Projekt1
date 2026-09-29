@@ -527,7 +527,7 @@ class ProjektionPanel(QWidget):
         self._ausgewaehlt = {int(index)}
         self._zeichne()
         zeile = self._modell.punkte[int(index)]
-        self._auswahl_label.setText("1 Probe ausgewaehlt")
+        self._auswahl_label.setText("1 Probe ausgewählt")
         self.probe_geklickt.emit(str(zeile.get("tumor") or zeile.get("sample_id") or ""))
 
     def _rechteck(self, rechteck: QRectF) -> None:
@@ -548,7 +548,7 @@ class ProjektionPanel(QWidget):
         self._zeichne()
         anzahl = len(self._ausgewaehlt)
         self._auswahl_label.setText(
-            f"{anzahl} {'Probe' if anzahl == 1 else 'Proben'} ausgewaehlt"
+            f"{anzahl} {'Probe' if anzahl == 1 else 'Proben'} ausgewählt"
             if anzahl else ""
         )
 

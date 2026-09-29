@@ -395,22 +395,3 @@ class CBioPortalWrapper:
             "recipe_key": recipe_key,
             "results": data,
         }
-
-    def to_anndata(self, raw_response: object) -> None:
-        """Überführt eine cBioPortal-Antwort in das Zielformat anndata/.h5ad.
-
-        Bewusst nicht Teil dieses Wrappers (siehe Modul-Docstring) — der
-        Wrapper liefert strukturierte Metadaten-/Profildaten, die
-        Transformation nach anndata ist ein separater Mediator-seitiger
-        Schritt.
-
-        English: Converts a cBioPortal response into the target format anndata/.h5ad.
-
-        Deliberately not part of this wrapper (see module docstring) — the
-        wrapper delivers structured metadata/profile data, the
-        transformation to anndata is a separate mediator-side step.
-        """
-        raise NotImplementedError(
-            "Transformation nach anndata ist bewusst kein Teil des Wrappers, "
-            "siehe Modul-Docstring."
-        )

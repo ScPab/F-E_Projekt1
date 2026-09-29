@@ -30,11 +30,10 @@ gegen die echte EBI-API verifiziert (siehe unten):
 - `ENAWrapper.get_schema()` — ruft `/returnFields` ab und liefert die
   verfügbaren Feldnamen (`columnId`) je Ergebnistyp; Grundlage für die
   spätere Ontologie-/Mapping-Schicht, analog zum GDC-Wrapper (`_mapping`).
-- `ENAWrapper.get_download_links()` / `.download_fastq_files()` —
-  Bulk-Tier: ENA hat keinen Manifest-Endpunkt und kein externes
-  Download-Tool wie `gdc-client`; die Metadaten-Suche liefert die
-  FASTQ-Download-URLs (Feld `fastq_ftp`) direkt mit, live per HTTPS
-  verifiziert abrufbar.
+- Kein Bulk-Tier: Die FASTQ-Download-Funktionen (`get_download_links()` /
+  `download_fastq_files()`) wurden entfernt, weil ENA nicht an die
+  Auswahl-Pipeline angebunden ist und niemand sie aufrief. Originalcode
+  zum Wiederherstellen: [`wrappers/CLEANUP_LOG_unused_code.md`](../CLEANUP_LOG_unused_code.md).
 - `cache.py` — dieselbe drei-Tier-Cache-Struktur wie bei den anderen
   Wrappern (Recipes / materialisierte anndata-Referenzen / transiente
   Rohdaten), eigenständige Kopie (kein Import aus `wrappers/gdc` oder
@@ -57,11 +56,6 @@ Die Transformation nach anndata/.h5ad ist — wie bei den anderen Wrappern —
 - **`extra`-Query-Fragmente sind ungeprüfter Rohtext** (kein
   Escaping/Validierung) — bewusst analog zur `extra`-Erweiterung von
   `build_filters()` im GDC-Wrapper, dort ebenfalls unvalidiert.
-- **Kontrollierte (nicht offene) Daten** liefern ein leeres `fastq_ftp`-Feld
-  — `get_download_links()` gibt dafür aktuell nur eine leere Dateiliste
-  zurück, ohne das explizit als "kontrollierter Zugriff" zu kennzeichnen
-  (anders als GDCs `access`-Parameter, der offene/kontrollierte Daten
-  unterscheidet).
 - Kein Rate-Limiting/Retry-Handling — bei sehr vielen Requests
   hintereinander ungetestet.
 

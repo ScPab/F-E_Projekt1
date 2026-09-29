@@ -84,9 +84,6 @@ class _FileBackedCache:
         self._path(key).write_text(json.dumps(value, default=str), encoding="utf-8")
         return key
 
-    def has(self, key: str) -> bool:
-        return self._path(key).exists()
-
 
 class RecipeCache(_FileBackedCache):
     """Tier 1: Query-Spezifikationen ("Recipes"). Klein, immer gecacht.

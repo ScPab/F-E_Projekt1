@@ -45,10 +45,14 @@ class SelectionWorker(QObject):
     finished = Signal(object, str, object)  # (Result, mode, diff | None)
 
     def __init__(self, payload: dict[str, Any], mode: str, *,
-                 vorher=None, nachher=None) -> None:
+                 vorher=None, nachher=None, progress_id: str = "") -> None:
         super().__init__()
         self._payload = payload
         self._mode = mode
+        # Kennung, unter der der Mediator seinen Fortschritt fuehrt (P2). Nur
+        # beim Generieren; die Vorschau ist zu kurz, um sie zu verfolgen, und
+        # der Mediator nimmt den Header dort auch nicht entgegen.
+        self._progress_id = progress_id
         # Zwei parameterlose Rueckrufe, die das Fenster uebergibt. Der Worker
         # ruft sie auf und weiss nicht, was sie tun — damit bleibt der Grundsatz
         # oben in Kraft: er entscheidet nichts und kennt den Store nicht.
@@ -72,7 +76,7 @@ class SelectionWorker(QObject):
         self._rufe(self._vorher)
 
         if self._mode == "generate":
-            result = mc.generate(self._payload)
+            result = mc.generate(self._payload, progress_id=self._progress_id)
         else:
             result = mc.preview(self._payload)
 
@@ -102,7 +106,8 @@ class SelectionWorker(QObject):
 
 
 def start_call(payload: dict[str, Any], mode: str, on_finished, *,
-               vorher=None, nachher=None) -> tuple[QThread, SelectionWorker]:
+               vorher=None, nachher=None,
+               progress_id: str = "") -> tuple[QThread, SelectionWorker]:
     """Worker in einem neuen Thread starten und beides zurueckgeben.
 
     Der Aufrufer muss die Rueckgabe festhalten, **bis der Thread sein
@@ -122,7 +127,8 @@ def start_call(payload: dict[str, Any], mode: str, on_finished, *,
     themselves up afterward (``quit``/``deleteLater``).
     """
     thread = QThread()
-    worker = SelectionWorker(payload, mode, vorher=vorher, nachher=nachher)
+    worker = SelectionWorker(payload, mode, vorher=vorher, nachher=nachher,
+                             progress_id=progress_id)
     worker.moveToThread(thread)
 
     thread.started.connect(worker.run)
@@ -296,3 +302,65 @@ def start_kontext(schluessel: str, holen, on_finished) -> tuple[QThread, Kontext
 
     thread.start()
     return thread, kontext_worker
+
+
+class FortschrittWorker(QObject):
+    """Fragt waehrend eines Auftrags wiederholt den gemeldeten Stand ab (P2).
+
+    Eigener Thread, weil daneben der eigentliche Aufruf laeuft und der
+    GUI-Thread fuer die Anzeige frei bleiben muss. Der Worker entscheidet
+    nichts: er holt die Ereignisliste und reicht sie weiter — was daraus wird,
+    rechnet ``ablauf.aus_ereignissen`` aus.
+
+    Er endet von selbst, sobald der Mediator ``finished`` meldet; ausserdem
+    laesst er sich ueber :meth:`stoppen` abbrechen, wenn der Aufruf vorbei ist.
+    """
+
+    stand = Signal(list, bool)      # (Ereignisse, fertig)
+
+    def __init__(self, progress_id: str, takt_ms: int = 700) -> None:
+        super().__init__()
+        self._progress_id = progress_id
+        self._takt = takt_ms / 1000.0
+        self._laeuft = True
+
+    def stoppen(self) -> None:
+        self._laeuft = False
+
+    def run(self) -> None:
+        import time
+
+        while self._laeuft:
+            ergebnis = mc.progress(self._progress_id)
+            if ergebnis.ok:
+                daten = ergebnis.data or {}
+                fertig = bool(daten.get("finished"))
+                self.stand.emit(list(daten.get("events") or []), fertig)
+                if fertig:
+                    break
+            # 404 heisst nur: noch nichts da. Weiterfragen, nicht aufgeben.
+            time.sleep(self._takt)
+        # Die Ereignisschleife des eigenen Threads beenden, sonst lebt er
+        # weiter und Qt beendet den Prozess beim Schliessen hart (siehe die
+        # Hinweise bei start_call).
+        thread = self.thread()
+        if thread is not None:
+            thread.quit()
+
+
+def start_fortschritt(progress_id: str, on_stand) -> tuple[QThread, FortschrittWorker]:
+    """Wie :func:`start_call`, aber fuer die Fortschrittsabfrage (siehe dort fuer
+    die Regeln zum Freigeben der Rueckgabe)."""
+    thread = QThread()
+    fortschritt = FortschrittWorker(progress_id)
+    fortschritt.moveToThread(thread)
+
+    thread.started.connect(fortschritt.run)
+    fortschritt.stand.connect(on_stand)
+    # **Kein** deleteLater hier: dieser Worker beendet seinen Thread selbst,
+    # sobald der Mediator ``finished`` meldet. Wuerden Thread und Worker sich
+    # dabei gleich mitloeschen, griffe der Aufrufer danach auf geloeschte
+    # C++-Objekte ("Internal C++ object already deleted"). Er gibt seine
+    # Referenzen am ``finished``-Signal frei, dann raeumt Python beide ab.
+    thread.start()
+    return thread, fortschritt

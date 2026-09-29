@@ -135,13 +135,13 @@ def build_filters(
 # RNA-Seq-Gene-Counts bzw. miRNA-Seq-Quantifizierung je Probe. Der Wrapper
 # beschafft nur die Rohdateien + Proben/Case-Zuordnung — der Zusammenbau zur
 # anndata-Matrix (`X`/`obs`/`var`) ist bewusst Mediator-Aufgabe (siehe
-# `to_anndata` unten sowie `mediator/app/semantic/expression.py`).
+# Modul-Docstring sowie `mediator/app/semantic/expression.py`).
 #
 # EN: Expression data (HANDOFF part 3/3a, wissensnetz/HANDOFF_anndata.md):
 # RNA-Seq gene counts or miRNA-Seq quantification per sample. The wrapper
 # only obtains the raw files + sample/case mapping — assembling the anndata
-# matrix (`X`/`obs`/`var`) is deliberately the mediator's job (see
-# `to_anndata` below as well as `mediator/app/semantic/expression.py`).
+# matrix (`X`/`obs`/`var`) is deliberately the mediator's job (see the
+# module docstring as well as `mediator/app/semantic/expression.py`).
 # ----------------------------------------------------------------------
 
 # assay -> GDC-Filterwerte (`files.data_type` / `files.experimental_strategy`).
@@ -570,7 +570,7 @@ class GDCWrapper:
         `build_obs` direkt entgegennehmen (`sample_files`/`sample_case_map`/
         `sample_types`).
 
-        Baut bewusst KEIN anndata (siehe `to_anndata`/Modul-Docstring) —
+        Baut bewusst KEIN anndata (siehe Modul-Docstring) —
         das bleibt der separate Mediator-Schritt. Liefert neben
         `sample_case_map`/`sample_types` auch `sample_project_map` (W2):
         Probe -> Kohorte/`project_id`, in derselben Form wie
@@ -585,8 +585,8 @@ class GDCWrapper:
         that `mediator/app/semantic/expression.assemble_matrix`/`build_obs`
         directly accept (`sample_files`/`sample_case_map`/`sample_types`).
 
-        Deliberately builds NO anndata (see `to_anndata`/module docstring)
-        — that remains the separate mediator step. Besides
+        Deliberately builds NO anndata (see module docstring) — that
+        remains the separate mediator step. Besides
         `sample_case_map`/`sample_types`, also delivers `sample_project_map`
         (W2): sample -> cohort/`project_id`, in the same shape that
         `mediator/app/main.py::fetch_selection_files` builds inline and that
@@ -633,22 +633,3 @@ class GDCWrapper:
             "sample_project_map": sample_project_map,
             "sample_files": sample_files,
         }
-
-    def to_anndata(self, raw_response: object) -> None:
-        """Überführt eine GDC-Antwort in das Zielformat anndata/.h5ad.
-
-        Bewusst nicht Teil dieses Wrappers (siehe Modul-Docstring) — der
-        Wrapper liefert strukturierte Metadaten/Rohdaten-Referenzen, die
-        Transformation nach anndata ist ein separater Mediator-seitiger
-        Schritt.
-
-        English: Converts a GDC response into the target format anndata/.h5ad.
-
-        Deliberately not part of this wrapper (see module docstring) — the
-        wrapper delivers structured metadata/raw-data references, the
-        transformation to anndata is a separate mediator-side step.
-        """
-        raise NotImplementedError(
-            "Transformation nach anndata ist bewusst kein Teil des Wrappers, "
-            "siehe Modul-Docstring."
-        )
