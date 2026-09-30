@@ -105,6 +105,11 @@ function Info($m) { Write-Host $m -ForegroundColor Cyan }
 function Step($m) { Write-Host "-> $m" -ForegroundColor Yellow }
 function Good($m) { Write-Host "   OK: $m" -ForegroundColor Green }
 function Fail($m) { Write-Host "   FEHLER: $m" -ForegroundColor Red }
+function Invoke-Quiet([scriptblock]$Cmd) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $Cmd *> $null } finally { $ErrorActionPreference = $old }
+}
 
 function Wait-Url([string]$Url, [int]$TimeoutSec = 90) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -142,7 +147,7 @@ function Stop-All {
     # darauf wuerde Docker Desktop selbst beenden. "docker compose down" stoppt
     # Mediator + graph-db sauber. Nur der Bokeh-Server ist ein Host-Prozess.
     Stop-PortProcess $UiPort            # Bokeh-Server (Host-Prozess, falls aktiv)
-    docker compose down *> $null
+    Invoke-Quiet { docker compose down }
     Good "Alles gestoppt (Mediator, graph-db, Oberflaeche)."
 }
 
@@ -153,7 +158,7 @@ Info "Projekt-Root: $PSScriptRoot"
 if (-not $SkipInstall) {
     $need = $false
     if (-not (Get-Command wissensnetz -ErrorAction SilentlyContinue)) { $need = $true }
-    python -c "import bokeh, pyvis, requests, rdflib, pyqtgraph" *> $null
+    Invoke-Quiet { python -c "import bokeh, pyvis, requests, rdflib, pyqtgraph" }
     if ($LASTEXITCODE -ne 0) { $need = $true }
     if ($need) {
         Step "Installiere/aktualisiere Abhaengigkeiten (pip install -r requirements.txt) ..."
@@ -167,7 +172,7 @@ if (-not $SkipInstall) {
 
 # --- 2) Docker pruefen / starten -------------------------------------------
 Step "Pruefe Docker-Engine ..."
-docker info *> $null
+Invoke-Quiet { docker info }
 if ($LASTEXITCODE -ne 0) {
     Step "Docker laeuft nicht - versuche Docker Desktop zu starten ..."
     $dd = Join-Path $Env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
@@ -180,7 +185,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "   Warte auf Docker-Engine " -NoNewline
     $ready = $false
     for ($i = 0; $i -lt 60; $i++) {
-        docker info *> $null
+        Invoke-Quiet { docker info }
         if ($LASTEXITCODE -eq 0) { $ready = $true; break }
         Start-Sleep -Seconds 3; Write-Host "." -NoNewline
     }
