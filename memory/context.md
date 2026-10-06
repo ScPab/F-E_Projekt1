@@ -10,20 +10,20 @@ Onkologie/Genetik (Kooperation Hochschule Karlsruhe / Universität Oviedo,
 26ss_CB_DataBridge). Testfall: TCGA-Daten über die GDC Developer API.
 Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 
-## Architektur (Grundgerüst, Stand siehe /docs/adr)
+## Architektur (Grundgerüst)
 
 - **Muster:** Mediator-Wrapper. Zentraler Mediator-Service (Python/FastAPI,
   `/mediator`) nimmt Anfragen entgegen; Wrapper-Module je Datenquelle
   (`/wrappers`, erste Quelle: `gdc`).
 - **Wrapper-Platzierung:** als Python-Package im Mediator-Container, nicht
-  als eigener Docker-Service — siehe [ADR-0001](../docs/adr/0001-wrapper-als-python-package.md).
+  als eigener Docker-Service, siehe ADR-0001 im Abschnitt
+  "Architekturentscheidungen".
 - **Zielformat der Ausgabe:** anndata (`.h5ad`) für Messmatrizen, RDF/OWL
   (Turtle) für die semantische Schicht (Wissensnetz).
 - **Graph-Speicherung:** entschieden für RDF-Triple-Store mit OWL (Apache
   Jena Fuseki/TDB2), Kanten-Metadaten via RDF-star; Property-Graph und
   hybrides Modell verworfen — siehe
-  [ADR-0002](../docs/adr/0002-graph-db-wahl-offen.md) (Status: Angenommen,
-  2026-08-15).
+  ADR-0002 (angenommen am 2026-08-15).
 - **Wissensnetz/Semantic ETL:** Teilbereich von Marcel, siehe
   `wissensnetz/Wissensnetz_Konzept-Entwurf` (übergeordnetes Konzept) und
   `wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL` (konkretes GDC→RDF-Mapping).
@@ -32,7 +32,7 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - **Auftragsrichtung:** die Auswahl in der Oberfläche IST der Auftrag; sie
   stößt die Kette an, der Mediator übersetzt das Ergebnis und verzweigt es
   nach Wissensnetz und anndata. Siehe
-  [ADR-0003](../docs/adr/0003-ui-gesteuerte-akquise.md). Der Store startet leer
+  ADR-0003. Der Store startet leer
   und wächst mit den Aufrufen: `POST /selection/preview` ruft ab, übersetzt
   und lädt (ohne Matrix), `POST /selection/generate` zusätzlich Rohdaten und
   `.h5ad`.
@@ -40,7 +40,7 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   PySide6-Desktopanwendung unter `/frontend` ("DataBridge Explorer"), eigenes
   Fenster statt Browser-Tab, Host-Prozess in der Conda-Env `F+E`, **kein**
   Compose-Service. Siehe
-  [ADR-0004](../docs/adr/0004-frontend-pyside6.md) und den Abschnitt
+  ADR-0004 und den Abschnitt
   "Umgesetzt seit letztem Stand (2026-09-26)". MP-Lite (Bokeh,
   `wissensnetz/prototype/mp_lite/`) bleibt unangetastet als
   Oviedo-Vergleichsmassstab und startet nur noch mit
@@ -48,6 +48,39 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - **Orchestrierung:** Docker Compose; Python-Service intern über
   Conda/Mamba (`mediator/environment.yml`) für wissenschaftliche Pakete
   (anndata, scanpy, rdflib).
+
+## Architekturentscheidungen (ADR-0001 bis ADR-0004)
+
+Die früheren Einzeldateien unter `/docs/adr` wurden entfernt. Die Kurzfassung
+steht hier; der volle Wortlaut bleibt in der Git-Historie abrufbar, zum
+Beispiel mit `git show <commit>:docs/adr/0003-ui-gesteuerte-akquise.md`. Die
+Kürzel ADR-0001 bis ADR-0004 werden im Code und in den READMEs weiter benutzt
+und meinen die folgenden Entscheidungen.
+
+- **ADR-0001 (angenommen 2026-08-09): Wrapper als Python-Paket, nicht als
+  eigener Container.** Jede Quelle liegt als Unterpaket unter `wrappers/` und
+  wird beim Bau des Mediator-Containers installiert. Ein eigener Service je
+  Wrapper wurde verworfen, weil er Netz- und Betriebsaufwand kostet, ohne dass
+  Bedarf an unabhängiger Skalierung besteht. Die Trennung bleibt auf
+  Code-Ebene.
+- **ADR-0002 (angenommen 2026-08-15): RDF-Triple-Store statt Property-Graph.**
+  Apache Jena Fuseki/TDB2 mit OWL und SPARQL, Kanten-Metadaten über RDF-star.
+  Ausschlaggebend war die Interoperabilität mit den Fachontologien (Gene
+  Ontology, NCIt, Disease Ontology, HPO), die nativ als OWL/OBO vorliegen.
+  Property-Graph und ein hybrides Modell wurden verworfen.
+- **ADR-0003 (angenommen 2026-09-17): UI-gesteuerte Akquise mit einem
+  gemeinsamen Abrufschritt.** Die Auswahl in der Oberfläche ist der Auftrag.
+  Der Store startet leer und wächst mit den Aufrufen, statt global vorgeladen
+  zu werden. Ein Abruf, zwei Serialisierungen: Tripel und `.h5ad` stammen aus
+  derselben Stichprobe. Das löst das frühere Muster "erst laden, dann filtern"
+  ab, samt seiner Folgefehler (HTTP 414 bei großen Filterlisten, zwei
+  auseinanderlaufende Stichproben).
+- **ADR-0004 (angenommen 2026-09-17): PySide6 als Frontend-Technologie.**
+  Eigenes Fenster statt Browser-Tab, eigener Prozess in der Conda-Umgebung
+  `F+E` statt Compose-Service, und die Anzeige liest über das Paket
+  `wissensnetz` statt über zusätzliche Endpunkte im Mediator. Verworfen wurden
+  Bokeh, C#/WPF, Streamlit und React. Abweichung von Punkt 4: das Layout wird
+  im Code gebaut, nicht mit Qt Designer.
 
 ## Offene Punkte
 
@@ -76,14 +109,14 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   ganzen Fall-Subgraphen würde Attribute löschen, die eine frühere,
   reichhaltigere Auswahl beigetragen hat (Auswahl A mit gender+tumor_stage,
   danach B mit nur gender, würde tumor_stage verlieren).
-- **ADR-0003 fehlt der Absatz zu dieser Ersetzungssemantik** unter "Zu
-  tragen"; er ist in `wissensnetz/Tasks Archiv/HANDOFF_pablo_P4_ersetzen.md`
-  zugesagt.
-- **ADR-0004 Punkt 4 stimmt nicht mehr.** Dort steht Qt Designer mit
-  `.ui`-Dateien; gebaut ist das Layout im Code. Die Abweichung ist in
-  `frontend/README.md` dokumentiert, die ADR selbst aber unverändert.
-  Da `main_window.py` inzwischen über 1.600 Zeilen hat, ist das keine
-  Übergangslösung mehr, sondern die Entscheidung.
+- **Die Ersetzungssemantik ist nirgends festgehalten.** Sie war für ADR-0003
+  zugesagt (`wissensnetz/Tasks Archiv/HANDOFF_pablo_P4_ersetzen.md`). Da die
+  ADR-Dateien entfernt wurden, gehört der Absatz jetzt hierher, sobald P4
+  umgesetzt ist.
+- **Qt Designer ist vom Tisch.** ADR-0004 Punkt 4 sah `.ui`-Dateien vor,
+  gebaut ist das Layout im Code. Da `main_window.py` über 1.600 Zeilen hat,
+  ist das keine Übergangslösung mehr, sondern die Entscheidung. Dokumentiert
+  in `frontend/README.md` und in der Kurzfassung unten.
 - **Erzeugte `.h5ad` liegen im Git.** `Export Anndata/` belegt rund 62 MB der
   etwa 74 MB verfolgten Dateien (vier Dateien), und `.gitignore` deckt den
   Ordner nicht ab. Solange nichts gepusht ist, reicht `git rm -r --cached`
@@ -129,7 +162,7 @@ tatsächlich ist es inzwischen eine gebaute und benutzte Anwendung mit rund
 
 ### Die Oberfläche: DataBridge Explorer (PySide6)
 
-- **Technologieentscheidung** in [ADR-0004](../docs/adr/0004-frontend-pyside6.md):
+- **Technologieentscheidung** in ADR-0004:
   PySide6 statt Bokeh, C#/WPF, Streamlit oder React. Gründe: eigenes Fenster
   ohne Browser, eine Sprache im ganzen Projekt, und die Anzeige kann die
   Lesefunktionen des Pakets `wissensnetz` direkt aufrufen, statt für jede
@@ -641,6 +674,8 @@ ehrlicher Meldung und Größenhinweis; Pablo hat ungenutzte Endpunkte entfernt
 
 ## Verweise
 
-- Architekturentscheidungen: `/docs/adr`
+- Architekturentscheidungen: Abschnitt "Architekturentscheidungen" in
+  dieser Datei (die früheren Dateien unter `/docs/adr` wurden entfernt und
+  stehen nur noch in der Git-Historie)
 - Literaturrecherche (Ontologien, RDF vs. Property Graph): `/recherche`
 - Organisatorisches: `/Orga`

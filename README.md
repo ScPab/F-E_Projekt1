@@ -1,135 +1,136 @@
-# DataBridge (F-E_Projekt1)
+# DataBridge
 
-DataBridge ist eine Systemarchitektur zur automatisierten Datenintegration
-für Visualisierungswerkzeuge im Bereich Onkologie/Genetik. Testfall: Zugriff
-auf TCGA-Daten über die GDC Developer API. Die Architektur folgt dem
-Mediator-Wrapper-Muster; Zielformat der Datenausgabe ist anndata (`.h5ad`).
+DataBridge beschafft Forschungsdaten aus öffentlichen Repositorien automatisch,
+beschreibt sie semantisch und bereitet sie für Visualisierungswerkzeuge auf.
+Anwendungsfall ist die Onkologie und Genetik, Testfall sind TCGA-Daten über die
+GDC Developer API.
 
-Dies ist das **Grundgerüst** (Boilerplate) der Architektur – ohne fertige
-Datenintegrationslogik. Diese folgt in späteren Schritten.
+Studienprojekt FuE-Projekt-1 im SS 2026 an der Hochschule Karlsruhe, in
+Kooperation mit der Universität Oviedo (Projekt-Code `26ss_CB_DataBridge`).
+Die Aufgabenstellung liegt unter `Orga/`.
 
-## Struktur
+## Die Idee in fünf Sätzen
 
-- `mediator/` – Zentraler Mediator-Service (Python/FastAPI), nimmt Anfragen
-  entgegen und delegiert an Wrapper-Module. Dependency-Management via
-  Conda/Mamba (`environment.yml`), u. a. für anndata/scanpy.
-- `wrappers/` – Wrapper-Module je Datenquelle (Mediator-Wrapper-Muster):
-  `gdc` (GDC Developer API / TCGA), `geo` (Gene Expression Omnibus), `ena`
-  (European Nucleotide Archive), `cbioportal`. Liegen als Python-Packages im
-  Mediator-Container, siehe
-  [ADR-0001](docs/adr/0001-wrapper-als-python-package.md).
-- `graph-db/` – Graph-Speicherung: Apache Jena Fuseki/TDB2 (RDF-Triple-Store
-  mit OWL, RDF-star für Kanten-Metadaten), Entscheidung getroffen, siehe
-  [ADR-0002](docs/adr/0002-graph-db-wahl-offen.md).
-- `wissensnetz/` – Semantische Schicht (Ontologie, Mapping-Konzept GDC→RDF/OWL).
-  Basis-Ontologie unter `wissensnetz/ontology/`, Mapping-Code im Mediator
-  unter `mediator/app/semantic/`, siehe
-  [`wissensnetz/ontology/README.md`](wissensnetz/ontology/README.md) und
-  [`docs/adding_new_sources.md`](docs/adding_new_sources.md).
-- `frontend/` – Leerer Platzhalter-Ordner; Visualisierungsschicht noch
-  nicht entschieden, aktuell kein Compose-Service.
-- `docs/adr/` – Architecture Decision Records (inkl. Template unter
-  `docs/adr/template.md`).
-- `memory/` – Projekteigenes, fortlaufend aktualisiertes Gedächtnis
-  (aktueller Kontext, offene Punkte), siehe `memory/README.md`.
-- `Orga/` – Ablage für organisatorische Themen und Absprachen.
-- `recherche/` – Fachliche Grundlage und Konzept. Führend ist
-  [`recherche/DataBridge_Stand_und_Ausrichtung.md`](recherche/DataBridge_Stand_und_Ausrichtung.md):
-  Teil A beschreibt den Stand der Umsetzung je Komponente mit Code-Belegen,
-  Teil B die geplante Scope-basierte Ausrichtung, Teil C ordnet die früheren
-  Einzeldokumente zu. Die zugehörigen Abbildungen liegen als
-  `Konzept_*.png` bzw. `Konzept_Wissensnetz-Navigation.drawio` daneben.
-  Die früheren Einzeldokumente (Literaturrecherche, Mapping- und
-  Rückkanal-Konzept, Gesamtüberblick) liegen unter `recherche/_archiv/`.
+Datenbestände wie TCGA sind zu groß, um sie vollständig zu laden und danach zu
+filtern. Deshalb steht am Anfang eine Auswahl: der Forscher stellt in der
+Oberfläche zusammen, was ihn interessiert, und genau diese Auswahl ist der
+Auftrag an das System. Der Mediator holt dazu die Daten über den passenden
+Wrapper, übersetzt sie und verzweigt das Ergebnis in zwei Richtungen: die
+Bedeutung geht als RDF/OWL in das Wissensnetz, die Messwerte gehen als
+anndata-Datei (`.h5ad`) an die Visualisierung. Der Graph startet leer und wächst
+mit den Aufrufen, statt einmal global vorgeladen zu werden. Umgekehrt können
+Erkenntnisse aus der Visualisierung als Rückkanal wieder im Graphen landen.
 
-## Starten
+## Wie die Teile zusammenspielen
 
-1. `.env.example` nach `.env` kopieren und bei Bedarf anpassen.
-2. Container bauen und starten:
-
-   ```bash
-   docker compose up --build
-   ```
-
-3. Health-Check des Mediators prüfen:
-
-   ```bash
-   curl http://localhost:8000/health
-   # -> {"status": "ok"}
-   ```
-
-Der Graph-DB-Platzhalter (Jena Fuseki) ist danach unter
-`http://localhost:3030` erreichbar.
-
-### Beispielaufrufe: GDC-Wrapper über den Mediator
-
-Testfall: `TCGA-BRCA`, `RNA-Seq`, `files.access = open`.
-
-```bash
-# Metadaten-Suche (Metadaten-Tier, paginiert über size/from)
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{
-        "endpoint": "files",
-        "project_id": "TCGA-BRCA",
-        "experimental_strategy": "RNA-Seq",
-        "fields": ["file_name", "file_id", "access"],
-        "size": 5
-      }'
-
-# Verfügbare Felder eines Endpunkts (Schema-Introspektion via _mapping)
-curl http://localhost:8000/schema/files
-
-# Manifest für gdc-client erzeugen (Bulk-Tier)
-curl -X POST http://localhost:8000/manifest \
-  -H "Content-Type: application/json" \
-  -d '{
-        "project_id": "TCGA-BRCA",
-        "experimental_strategy": "RNA-Seq",
-        "size": 10
-      }'
+```
+  Explorer (frontend/)          Auswahl zusammenstellen, Ergebnis ansehen
+          |  HTTP
+          v
+  Mediator (mediator/)          Auftrag annehmen, übersetzen, verzweigen
+          |              \
+          |  Wrapper       \  anndata (.h5ad)
+          v                 \
+  Quellen (wrappers/)         ---> Visualisierung
+  gdc, geo, ena, cbioportal
+          |  RDF/OWL
+          v
+  Wissensnetz (wissensnetz/)    Ontologie, Anreicherung, Rückkanal
+          |  SPARQL
+          v
+  Triple-Store (Fuseki)         Container aus docker-compose.yml
 ```
 
-Details zur Wrapper-Implementierung (Filter-Aufbau, Cache-Tiers,
-`gdc-client`-Anbindung): [`wrappers/gdc/README.md`](wrappers/gdc/README.md).
+Der Mediator und der Triple-Store laufen als Container, die Oberfläche läuft als
+normales Programm auf dem Rechner. Die Komponenten sprechen nur über HTTP und
+SPARQL miteinander, nicht über gemeinsame Dateien oder Importe.
 
-### Beispielaufrufe: semantische Schicht (GDC → RDF/OWL)
+## Schnellstart
 
-Testfall: TCGA-BRCA-Cases → RDF/OWL-Tripel (Turtle), Kern-Ausschnitt
-case/project/demographic/diagnosis. Konzept:
-[`recherche/DataBridge_Stand_und_Ausrichtung.md`](recherche/DataBridge_Stand_und_Ausrichtung.md)
-(Teil A.2; das ursprüngliche Mapping-Konzept liegt unter `recherche/_archiv/`);
-Ontologie: [`wissensnetz/ontology/`](wissensnetz/ontology/).
+Vorausgesetzt werden Docker Desktop, Miniconda mit der Umgebung `F+E` und das
+Repository unter `C:\Dev\F+E\F-E_Projekt1`.
 
-```bash
-# Basis-Ontologie (TBox) zur Inspektion
-curl http://localhost:8000/ontology
-
-# GDC-Cases live abrufen und nach RDF/OWL transformieren (nur Turtle-Text)
-curl -X POST http://localhost:8000/transform \
-  -H "Content-Type: application/json" \
-  -d '{"source": "gdc", "project_id": "TCGA-BRCA", "size": 5}'
-
-# Dasselbe, aber zusätzlich direkt in graph-db (Fuseki) schreiben
-curl -X POST http://localhost:8000/transform \
-  -H "Content-Type: application/json" \
-  -d '{"source": "gdc", "project_id": "TCGA-BRCA", "size": 5, "load": true}'
+```powershell
+conda activate F+E
+cd C:\Dev\F+E\F-E_Projekt1
+.\start_all.ps1
 ```
 
-Mit `"load": true` schreibt der Mediator das erzeugte Turtle direkt per Graph
-Store Protocol in `graph-db` (optional `"graph": "<IRI>"` für einen Named
-Graph) — die Antwort enthält dann zusätzlich `"loaded": true`. Ohne `load`
-bleibt `/transform` wie bisher eine reine Text-Senke (kein Seiteneffekt);
-das Laden erfolgt dann extern, z. B. über
-[`scripts/load_gdc.py`](scripts/load_gdc.py) oder `wissensnetz load`.
+Das Skript prüft die Abhängigkeiten, startet Docker, Fuseki und den Mediator,
+initialisiert das Wissensnetz, lädt einen Demo-Scope und öffnet den DataBridge
+Explorer. Danach beendet es sich, die Dienste laufen weiter.
 
-Ein vollständiges, lokal ausführbares Beispiel mit TCGA-BRCA-Beispieldaten
-(ohne laufenden Service) liegt unter
-[`mediator/scripts/example_gdc_to_rdf.py`](mediator/scripts/example_gdc_to_rdf.py).
+Erreichbar sind anschließend:
 
-Seit Kurzem unterstützt `/transform` neben `"gdc"` auch `"geo"`, `"ena"` und
-`"cbioportal"` (je eigenes Mapping-Modul, teils dieselben `db:`-Klassen wie
-GDC wiederverwendet, z. B. für cBioPortal-Klinikdaten). Vollständige
-Label-Tabellen je Quelle + Wiederverwendungsprinzip + bekannte Grenzen:
-[`mediator/app/semantic/README.md`](mediator/app/semantic/README.md).
-Neue Quellen anbinden: [`docs/adding_new_sources.md`](docs/adding_new_sources.md).
+| Dienst | Adresse | Hinweis |
+| --- | --- | --- |
+| Mediator (FastAPI) | http://localhost:8000 | `/health`, interaktive API unter `/docs` |
+| Triple-Store (Fuseki) | http://localhost:3030 | Login `admin` / `admin` |
+| DataBridge Explorer | eigenes Fenster | PySide6, kein Browser-Tab |
+
+Beenden mit `.\stop_all.ps1`. Alle Befehle im Einzelnen, auch die Wege ohne
+Startskript, stehen in [`RUNBOOK.md`](RUNBOOK.md).
+
+Zwei Stolpersteine, die oft Zeit kosten:
+
+- Ohne aktive Conda-Umgebung `F+E` zeigt `python` auf einen anderen Interpreter,
+  und die Pakete fehlen. Kennt PowerShell `conda` nicht, hilft einmalig
+  `conda init powershell` und ein neues Terminal.
+- PySide6 muss aus conda kommen, nicht aus pip, sonst scheitert der Import von
+  `QtCore`. Die Begründung steht in [`frontend/README.md`](frontend/README.md).
+
+## Der Projektordner im Überblick
+
+| Ordner | Was darin liegt |
+| --- | --- |
+| `frontend/` | DataBridge Explorer, die Auswahl-Oberfläche in PySide6. Läuft als Programm auf dem Rechner, nicht im Container. |
+| `mediator/` | Der zentrale Dienst (FastAPI). Nimmt Aufträge an, ruft die Wrapper, übersetzt nach RDF/OWL und baut die `.h5ad`-Dateien. Läuft im Container. |
+| `wrappers/` | Je ein Modul pro Datenquelle: `gdc`, `geo`, `ena`, `cbioportal`. Python-Pakete, die im Mediator-Container mitlaufen. |
+| `wissensnetz/` | Die semantische Schicht: Ontologie, Zugriff auf den Store, Anreicherung per SPARQL, Rückkanal und das Kommandozeilenwerkzeug `wissensnetz`. Unter `prototype/mp_lite/` liegt der Bokeh-Prototyp als Vergleichsmaßstab. |
+| `scripts/` | Hilfsskripte zum Laden und Prüfen: `load_gdc.py`, `run_selection.py`, `graph_view.py`, `check_h5ad.py`. |
+| `docs/` | Diagramme (drawio) zu Architektur, Ablauf und Skriptkette sowie `adding_new_sources.md`, die Anleitung zum Anbinden einer neuen Quelle. |
+| `memory/` | Das fortlaufende Projektgedächtnis. `context.md` ist der ausführlichste Stand und nennt die Begründungen hinter den Entscheidungen. |
+| `recherche/` | Konzeptbilder zur Navigation im Wissensnetz, ältere Konzept- und Rechercheunterlagen unter `_archiv/`. |
+| `Orga/` | Aufgabenstellung der Hochschule und Anträge. |
+| `Export Anndata/` | Abgelegte `.h5ad`-Dateien aus Testläufen. |
+| `morphing-projections-demo-and-dataset-preparation-master/` | Die Original-Demo aus Oviedo als Referenz und Herkunftsnachweis. Kein Teil der Laufzeit, es importiert nichts daraus. |
+
+Der Triple-Store hat keinen eigenen Ordner mehr, er steht als Dienst `graph-db`
+in `docker-compose.yml` und legt seine Daten in einem Docker-Volume ab.
+
+Wichtige Dateien im Projekt-Root:
+
+| Datei | Zweck |
+| --- | --- |
+| `start_all.ps1`, `stop_all.ps1` | Alles starten beziehungsweise alles stoppen. |
+| `docker-compose.yml` | Mediator und Triple-Store als Container. |
+| `requirements.txt` | Pakete für die Conda-Umgebung `F+E` auf dem Rechner. |
+| `.env.example` | Vorlage für `.env`, einmal kopieren und anpassen. |
+| `RUNBOOK.md` | Alle Befehle im Detail, dazu Troubleshooting. |
+| `How to Use.pdf`, `Instructions.pptx` | Bedienanleitung des Teams für Nutzer. |
+| `Installationsguide_DE-EN-ES.pdf` | Installationsanleitung in drei Sprachen. |
+| `graph_view.html` | Erzeugte Diagnoseansicht des Graphen, entsteht mit `start_all.ps1 -WithGraphView`. |
+
+## Wer macht was
+
+| Komponente | Zuständig |
+| --- | --- |
+| `wrappers/` | Julian Lanfermann |
+| `mediator/` | Pablo Scherer |
+| `wissensnetz/`, `frontend/`, Startskripte | Marcel Thiel |
+
+Die Grenze ist bewusst strikt: jeder ändert nur seine Komponente, die Kopplung
+läuft über HTTP und SPARQL. So bleiben die Teile unabhängig voneinander
+lauffähig.
+
+## Wo es weitergeht
+
+| Frage | Datei |
+| --- | --- |
+| Wie starte ich etwas Bestimmtes? | [`RUNBOOK.md`](RUNBOOK.md) |
+| Was ist der aktuelle Stand und warum? | [`memory/context.md`](memory/context.md) |
+| Wie funktioniert die Oberfläche? | [`frontend/README.md`](frontend/README.md) |
+| Wie ist das Wissensnetz aufgebaut? | [`wissensnetz/README.md`](wissensnetz/README.md), [`wissensnetz/ontology/README.md`](wissensnetz/ontology/README.md) |
+| Wie übersetzt der Mediator nach RDF? | [`mediator/app/semantic/README.md`](mediator/app/semantic/README.md) |
+| Wie funktioniert ein einzelner Wrapper? | `wrappers/<quelle>/README.md`, zum Beispiel [`wrappers/gdc/README.md`](wrappers/gdc/README.md) |
+| Wie binde ich eine neue Quelle an? | [`docs/adding_new_sources.md`](docs/adding_new_sources.md) |
