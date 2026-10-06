@@ -149,11 +149,38 @@ function Stop-All {
 Info "==================  DataBridge - Start  =================="
 Info "Projekt-Root: $PSScriptRoot"
 
+# --- 0) Umgebung pruefen ----------------------------------------------------
+# Das Skript setzt die Conda-Env "F+E" voraus (siehe .NOTES). Ist sie nicht aktiv,
+# zeigt "python" auf einen anderen Interpreter und unten fehlen die Pakete.
+if ($Env:CONDA_DEFAULT_ENV -ne "F+E") {
+    $aktiv = if ($Env:CONDA_DEFAULT_ENV) { $Env:CONDA_DEFAULT_ENV } else { "keine" }
+    Fail "Conda-Env 'F+E' ist nicht aktiv (aktiv: $aktiv)."
+    Info "   Abhilfe:  conda activate F+E"
+    Info "   Kennt PowerShell 'conda' nicht, dann einmalig conda init powershell"
+    Info "   ausfuehren; conda.exe liegt unter $Env:USERPROFILE\miniconda3\Scripts"
+    Info "   und danach das Terminal neu oeffnen. Weiter geht es trotzdem, der naechste"
+    Info "   Schritt zeigt, ob die Pakete vorhanden sind."
+}
+
 # --- 1) Abhaengigkeiten -----------------------------------------------------
 if (-not $SkipInstall) {
     $need = $false
     if (-not (Get-Command wissensnetz -ErrorAction SilentlyContinue)) { $need = $true }
-    python -c "import bokeh, pyvis, requests, rdflib, pyqtgraph" *> $null
+    # Diese Importpruefung DARF fehlschlagen, genau daraus leitet sich ab, dass
+    # installiert werden muss. In Windows PowerShell 5.1 macht
+    # $ErrorActionPreference = "Stop" aus der Stderr-Ausgabe eines nativen
+    # Programms jedoch einen abbrechenden NativeCommandError, den auch
+    # "*> $null" nicht unterdrueckt. Deshalb hier bewusst auf "Continue".
+    $eapBackup = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = 0
+    try {
+        & python -c "import bokeh, pyvis, requests, rdflib, pyqtgraph" 2>&1 | Out-Null
+    } catch {
+        $global:LASTEXITCODE = 1
+    } finally {
+        $ErrorActionPreference = $eapBackup
+    }
     if ($LASTEXITCODE -ne 0) { $need = $true }
     if ($need) {
         Step "Installiere/aktualisiere Abhaengigkeiten (pip install -r requirements.txt) ..."

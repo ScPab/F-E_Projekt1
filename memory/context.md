@@ -1,6 +1,6 @@
 # Projektkontext DataBridge
 
-Stand: 2026-09-19
+Stand: 2026-09-26
 
 ## Ziel
 
@@ -29,8 +29,22 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
   `wissensnetz/Mapping-Konzept_GDC-zu-RDF-OWL` (konkretes GDC→RDF-Mapping).
   Ontologie unter `wissensnetz/ontology/`, Mapping-Code unter
   `mediator/app/semantic/`.
-- **Frontend/Visualisierung:** noch nicht entschieden, aktuell nur leerer
-  Platzhalter-Ordner `/frontend`, kein Compose-Service.
+- **Auftragsrichtung:** die Auswahl in der Oberfläche IST der Auftrag; sie
+  stößt die Kette an, der Mediator übersetzt das Ergebnis und verzweigt es
+  nach Wissensnetz und anndata. Siehe
+  [ADR-0003](../docs/adr/0003-ui-gesteuerte-akquise.md). Der Store startet leer
+  und wächst mit den Aufrufen: `POST /selection/preview` ruft ab, übersetzt
+  und lädt (ohne Matrix), `POST /selection/generate` zusätzlich Rohdaten und
+  `.h5ad`.
+- **Frontend/Visualisierung:** entschieden, gebaut und in Benutzung.
+  PySide6-Desktopanwendung unter `/frontend` ("DataBridge Explorer"), eigenes
+  Fenster statt Browser-Tab, Host-Prozess in der Conda-Env `F+E`, **kein**
+  Compose-Service. Siehe
+  [ADR-0004](../docs/adr/0004-frontend-pyside6.md) und den Abschnitt
+  "Umgesetzt seit letztem Stand (2026-09-26)". MP-Lite (Bokeh,
+  `wissensnetz/prototype/mp_lite/`) bleibt unangetastet als
+  Oviedo-Vergleichsmassstab und startet nur noch mit
+  `start_all.ps1 -WithMpLite`.
 - **Orchestrierung:** Docker Compose; Python-Service intern über
   Conda/Mamba (`mediator/environment.yml`) für wissenschaftliche Pakete
   (anndata, scanpy, rdflib).
@@ -54,25 +68,203 @@ Fokus: Flexibilität gegenüber sich entwickelnden Datenstrukturen/Ontologien.
 - Kein `owl:sameAs`-Abgleich zwischen GDC- und cBioPortal-`db:Case`-
   Instanzen derselben Person (unterschiedliche IDs: `case_id` vs.
   `patientId`) — offener nächster Schritt für echte Cross-Source-Queries.
-- Mediator muss die 7 neuen klinischen GDC-Felder + `sample_type` auf die
-  bereits deklarierten `db:`-Properties mappen (`TRANSFORM_CASE_FIELDS` in
-  `mediator/app/main.py`, `cases_to_graph` in
-  `mediator/app/semantic/mapping.py`); danach `cases_brca_sample.ttl`
-  neu ziehen. Siehe `wissensnetz/prototype/mp_lite/HANDOFF.md` Teil 1/2.
-- Team-Entscheidung Expressionsdaten (Graph vs. h5ad-Seitenkanal) für die
-  Morphing-Slider `genes`/`miRNA`/Einzelmarker — siehe HANDOFF.md Teil 3.
-- Wahl der Frontend-/Visualisierungstechnologie.
+- **P4, die Ersetzungslogik, ist der älteste offene Punkt.**
+  `_load_selection_knowledge` in `mediator/app/main.py` hängt beim Laden nur
+  an, es gibt kein `DELETE WHERE` je Fall (bewusste, im Docstring
+  dokumentierte Schuld). Gehört Marcel, weil es Store-Semantik ist. Wichtig:
+  **nicht "je Fall ersetzen", sondern Upsert je Property** -- ein Ersetzen des
+  ganzen Fall-Subgraphen würde Attribute löschen, die eine frühere,
+  reichhaltigere Auswahl beigetragen hat (Auswahl A mit gender+tumor_stage,
+  danach B mit nur gender, würde tumor_stage verlieren).
+- **ADR-0003 fehlt der Absatz zu dieser Ersetzungssemantik** unter "Zu
+  tragen"; er ist in `wissensnetz/Tasks Archiv/HANDOFF_pablo_P4_ersetzen.md`
+  zugesagt.
+- **ADR-0004 Punkt 4 stimmt nicht mehr.** Dort steht Qt Designer mit
+  `.ui`-Dateien; gebaut ist das Layout im Code. Die Abweichung ist in
+  `frontend/README.md` dokumentiert, die ADR selbst aber unverändert.
+  Da `main_window.py` inzwischen über 1.600 Zeilen hat, ist das keine
+  Übergangslösung mehr, sondern die Entscheidung.
+- **Erzeugte `.h5ad` liegen im Git.** `Export Anndata/` belegt rund 62 MB der
+  etwa 74 MB verfolgten Dateien (vier Dateien), und `.gitignore` deckt den
+  Ordner nicht ab. Solange nichts gepusht ist, reicht `git rm -r --cached`
+  plus ein `.gitignore`-Eintrag; danach bleiben die Blobs in der Historie.
+- **Der Rückkanal fehlt in der Oberfläche.** `write_feedback` und
+  `list_findings` sind in MP-Lite fertig, im Explorer nicht angebunden. Erst
+  damit wäre der Kreis aus dem Konzept geschlossen: Auswahl in der Karte,
+  Hypothese, Named Graph.
+- **Die Werteebene unter den Attributen** fehlt in der Suchauftrag-Ansicht
+  (bewusst: nur bis zum Attribut). Solange sie fehlt, fällt ein doppelter
+  Wert an derselben Property nicht auf, weil über `COUNT(DISTINCT ?case)`
+  gezählt wird; P4 bleibt also unsichtbar.
+- **Zweite Achse über NCIt.** `db:primaryDiagnosis` zeigt auf NCIt, und
+  `enrichment.subclasses()` kann die `rdfs:subClassOf`-Hierarchie bereits
+  lesen. Das ist der natürliche nächste Schritt der Netzansicht, setzt aber
+  eine brauchbare Alignment-Tabelle voraus.
 - Ontologie-/Schema-Design des Wissensnetzes über den jetzigen Kern-Ausschnitt
   hinaus (weitere GDC-Nodes, Wiederverwendung von GO/SO neben NCIt/DO).
-- Alignment-Tabellen (`wissensnetz/ontology/alignment/`) sind noch leer —
-  Befüllung mit verifizierten NCIt-/DO-Codes ist offener nächster Schritt
-  (Wissensnetz-Teilbereich, Marcel).
+- **Alignment-Tabelle: drei Einträge, einer davon falsch.**
+  `wissensnetz/ontology/alignment/ncit_primary_diagnosis.json` bildet
+  `Infiltrating duct carcinoma, NOS` auf C4194 ab, einen brustspezifischen
+  Begriff, obwohl der Wert auch in PAAD-Fällen vorkommt. Das verstößt gegen
+  Regel B der eigenen Kandidatenliste (`.../KANDIDATEN.md`: kein Organ
+  hinzuerfinden). Die NCIt-Spalte dort ist ansonsten noch leer; 261 distinkte
+  `primary_diagnosis`-Werte über 11.428 TCGA-Fälle sind erhoben.
+  **Warnung aus der Erhebung:** GDC-Facets auf
+  `cases.diagnoses.primary_diagnosis` lieferten still ungefilterte Zahlen
+  (identisch zu den vollen Projektgrößen); verlässlich sind nur Abfragen je
+  Projekt über `cases.project.project_id`.
 - Cache-Tiers 2 (materialisierte anndata-Objekte) und 3 (transiente
   Rohdaten) haben nur ein Datei-Grundgerüst (`wrappers/gdc/cache.py`); echte
   Nutzung folgt erst mit der anndata-Transformation bzw. dem
   `gdc-client`-Bulk-Download.
 - Global-as-View reicht für die aktuell einzige Quelle (GDC); bei weiteren
   Quellen ggf. Local-as-View-Formalisierung prüfen (siehe Mapping-Konzept).
+
+## Umgesetzt seit letztem Stand (2026-09-26)
+
+Dieser Eintrag holt den **gesamten Oberflächenteil** nach, der bisher in dieser
+Datei fehlte: `/frontend` war hier zuletzt als leerer Platzhalter beschrieben,
+tatsächlich ist es inzwischen eine gebaute und benutzte Anwendung mit rund
+7.300 Zeilen.
+
+### Die Oberfläche: DataBridge Explorer (PySide6)
+
+- **Technologieentscheidung** in [ADR-0004](../docs/adr/0004-frontend-pyside6.md):
+  PySide6 statt Bokeh, C#/WPF, Streamlit oder React. Gründe: eigenes Fenster
+  ohne Browser, eine Sprache im ganzen Projekt, und die Anzeige kann die
+  Lesefunktionen des Pakets `wissensnetz` direkt aufrufen, statt für jede
+  Ansicht einen Endpunkt im Mediator zu brauchen.
+- **Aufbau und eine durchgehaltene Regel:** Module ohne Qt-Import sind ohne
+  Bildschirm testbar, deshalb liegt die Logik dort und nicht in den Widgets.
+  Qt-frei sind `mediator_client.py` (HTTP), `store_reader.py` (die drei
+  SPARQL-Abfragen), `morph.py` (Encodings und Positionen) und `ablauf.py`
+  (welche Station was belegt). Qt-seitig: `main_window.py`, `netz_view.py`,
+  `projektion_view.py`, `architektur_view.py`, `searchable_select.py`,
+  `theme.py`, `worker.py`.
+- **Zweite Regel:** außerhalb von `theme.py` steht kein Farbwert im Code.
+- **Fenster:** dunkle Kopfzeile, links die Anzeigefläche, rechts das
+  Auswahlpanel (360 px), darunter `Vorschau`, `Generieren`,
+  `Als .h5ad speichern`, ganz unten die Statusleiste mit einem dauerhaften
+  Feld für den Store-Stand.
+- **Vier Ansichten, zwei Umschalter.** Oben `Suchauftrag` und `Projektion`,
+  unten `Architektur` und `Textausgabe`. Die obere Ansicht hieß bis zum
+  2026-09-26 `Wissensnetz` und wurde in `Suchauftrag` umbenannt, weil sie seit
+  der Umstellung "Netz zeigt nur noch die Auswahl aus dem Panel" nicht mehr den
+  Store-Inhalt zeigt, sondern den aktuellen Auftrag. **Die Bezeichner im Code
+  heißen weiterhin `netz_view.py`, `NetzPanel`, `_knopf_netz`**; umbenannt
+  wurden nur die Anzeigetexte, weil das eigentliche Wissensnetz als Ansicht
+  später zurückkommen soll.
+- **Auswahlpanel:** fünf einzeilige Felder (Krebs, Var, Obj, Datenquelle,
+  Proben). Jedes klappt eine Karte auf; Kohorte und `Obj` haben ein Suchfeld.
+  Kohorten sind **mehrfach** wählbar (Vergleich mehrerer Kohorten in einer
+  Karte). Gesucht wird bei den Kohorten nur über das offizielle Studienkürzel.
+  Nicht angebundene Werte stehen sichtbar, aber deaktiviert in der Liste und
+  tragen ihren Grund als Hinweistext.
+- **Grenze des Panels:** genau die elf Attribute aus `KNOWN_ATTRIBUTES`
+  (`mediator/app/semantic/mapping.py`). Felder aus den GDC-Knoten Exposure,
+  Treatment, Family History, Follow Up und Pathology Detail dürfen **nicht**
+  ergänzt werden, weil `resolve_attribute()` bei einem Namen ohne Punkt
+  `diagnoses.<name>` annimmt und sie damit still falsch auflöst. Der Grund
+  steht als `_hinweis` in `frontend/config/panel.json`.
+
+### Suchauftrag-Ansicht: der Store als gezeichnetes Netz
+
+- Drei Reihen (Wurzel, Kohorten, Attribute der aufgeklappten Kohorte), gezeichnet
+  in einem `QGraphicsView`, kein Browser und kein pyvis.
+- Die Zahlen kommen aus **drei SPARQL-Abfragen** in `store_reader.py`. Die
+  Attributabfrage kennt die Attributliste bewusst **nicht** (sie läuft über
+  `?entity ?p ?v` mit `isLiteral(?v)`), damit eine vom Mediator dynamisch
+  angelegte Property von allein erscheint. Wer dort eine Property-Liste
+  einbaut, zerstört genau diese Eigenschaft.
+- **Wachstum wird über zwei Abzüge ermittelt**, einen vor und einen nach dem
+  Aufruf, verglichen im Speicher: neu (grün), gewachsen (blau, mit `+N`),
+  unverändert. Das ist kein Umweg, sondern notwendig: **der Store weiß nicht,
+  welcher Fall aus welchem Aufruf kam**, weil der Mediator alles in den
+  Default-Graph lädt und `wissensnetz.selection.write_selection` nie aufruft.
+  Es gibt kein Manifest und keinen Named Graph, `cases_for_selection` liefert
+  deshalb nichts.
+- Leerer Store und nicht erreichbarer Store sind zwei getrennte Zustände mit
+  eigenen Meldungen. Ein nicht erreichbarer Store blockiert die Oberfläche
+  nicht, weil Aufträge an den Mediator gehen und nicht an Fuseki.
+
+### Projektionsansicht: Morphing Projections nativ
+
+- Oviedos Technik (`morphing-projections-demo-and-dataset-preparation-master/`)
+  als echtes Qt-Widget mit **pyqtgraph**, nicht als eingebettete Bokeh-App.
+- **Die Mathematik wurde nicht neu geschrieben.** `encodings.py` und
+  `h5ad_source.py` aus `wissensnetz/prototype/mp_lite/` sind reines numpy und
+  anndata und werden wiederverwendet. **Sie dürfen nicht per `import` geholt
+  werden**: `wissensnetz/prototype/` ist kein Paket, und `import encodings`
+  träfe Pythons stdlib-Paket für Codecs. Sie werden deshalb über
+  `importlib.util.spec_from_file_location` per Dateipfad geladen, genau wie
+  `mp_lite/app.py` es tut.
+- Position = Σ aᵢ·E[i] mit a = softmax(10·Regler). Oviedos 15 Regler in fester
+  Reihenfolge; nicht encodierbare Variablen bleiben sichtbar, aber deaktiviert
+  und nennen den Grund im Tooltip.
+- **Kein erfundenes Layout.** Fehlt `obsm['X_tsne_genes']`, gibt es keine Karte,
+  sondern den Klartext, was fehlt und wie man es erzeugt. MP-Lite darf als
+  Prototyp auf synthetische Basis-Views zurückfallen, der Explorer nicht.
+- Klick auf eine Probe holt den Kontext über `enrichment.case_context()` aus
+  dem Store, im eigenen Prozess. Ein Fall, der nicht im Store liegt, wird als
+  solcher benannt und ist kein Fehler.
+
+### GDC-Feld `gender` existiert nicht mehr
+
+Wichtigster Sachbefund dieses Zeitraums, live gegen `/files/_mapping` und
+`/cases/_mapping` geprüft: GDC hat `demographic.gender` in
+`demographic.sex_at_birth` umbenannt. Der alte Name existiert in der API nicht
+mehr, und **GDC ignoriert unbekannte Felder stillschweigend**, weshalb die
+Spalte lange unbemerkt leer blieb. Durch den ganzen Stack gezogen:
+
+- TBox: `db:sexAtBirth` neu, `db:gender` bleibt als `owl:deprecated` stehen,
+  weil Daten aus früheren Läufen sie tragen.
+- `enrichment` liest beide Properties.
+- Mediator: `KNOWN_ATTRIBUTES` führt `sex_at_birth`; der alte UI-Name `gender`
+  wird über `LEGACY_ATTRIBUTE_ALIASES` weiter angenommen.
+- MP-Lite, `check_h5ad`, Beispiel-ABox und alle Tests nachgezogen.
+
+**Lehre daraus, die im Code festgehalten ist:** eine halb stimmende
+Rückübersetzung zwischen Panel-Namen und Store-Property ist gefährlicher als
+gar keine. Die Netzansicht zeigt deshalb den Property-Namen aus dem Store und
+nur dann zusätzlich den Panel-Namen, wenn dieser mechanisch in camelCase genau
+dem lokalen Namen entspricht. `has_metastasis` (liegt als
+`db:metastasisAtDiagnosis` im Store) und `primary_diagnosis` (als
+`db:primaryDiagnosisLabel`) bekommen bewusst keine zweite Zeile.
+
+### Drei Anforderungen an den Mediator, alle erledigt
+
+Aus `wissensnetz/HANDOFF_pablo_offene_punkte.md` (ersetzt zwei frühere
+Handoffs), von Pablo umgesetzt und frontendseitig nachgezogen:
+
+- **P1, Defekt:** ein langer Auftrag blockierte den ganzen Dienst.
+- **P2:** Fortschritt während eines Auftrags melden. Die Architekturansicht
+  zeigt die laufende Station jetzt live statt erst aus der Antwort.
+- **P3:** den Auftrag ins `.h5ad` schreiben. Die Oberfläche kann den Auftrag
+  aus einer fertigen `.h5ad` wiederherstellen, statt ihn aus dem Dateinamen zu
+  raten.
+
+Ebenfalls in diesem Zeitraum: Zeitgrenze für `Generieren` auf 30 Minuten mit
+ehrlicher Meldung und Größenhinweis; Pablo hat ungenutzte Endpunkte entfernt
+(`mediator/docs/CLEANUP_LOG_unused_endpoints.md`).
+
+### Kleinkram, der Wissen trägt
+
+- **Umlaute in den Anzeigetexten** (2026-09-26). Ersetzt wurde nur in
+  Zeichenketten-Token ohne Dreifachquotes, gegen eine feste Wortliste mit
+  Wortgrenzen. Drei Fallen, die dabei auffielen und weiter gelten:
+  Variablennamen in f-Strings (`{faelle}` darf nicht zu `{fälle}` werden),
+  die Zustandsschlüssel `LAEUFT`/`UEBERSPRUNGEN`/`UNVERAENDERT`, die keine
+  Anzeigetexte sind, und echte "ue" in `Quelle`, `neue`, `Zuerst`.
+  **Kommentare und Docstrings sind im Frontend weiterhin durchgehend ASCII.**
+- **Windows-11-Falle, dokumentiert in `frontend/README.md`:** Top-Level-Fenster
+  füllen keinen Hintergrund, weshalb `PopupCard.paintEvent` die Fläche selbst
+  malt. Wer dort etwas ändert, prüft es mit einer Bildschirmaufnahme, nicht mit
+  `widget.grab()`, das den Fensterhintergrund nicht mitmalt.
+- **`pyside6` nicht über pip installieren**, sondern
+  `conda install -c conda-forge pyside6`: das PyPI-Wheel ist gegen ein neueres
+  ICU gebaut als das conda-Paket in der Env `F+E`, der Import scheitert dann
+  mit "DLL load failed". `pyqtgraph` dagegen ist reines Python, dort ist pip
+  unbedenklich. Beides steht als Kommentar in `requirements.txt`.
 
 ## Umgesetzt seit letztem Stand (2026-09-19)
 
